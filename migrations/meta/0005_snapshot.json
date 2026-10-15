@@ -1,5 +1,5 @@
 {
-  "id": "e6ad3370-8ab2-409e-873f-1cd97945043a",
+  "id": "69ecf7da-0217-4e85-8aa7-5c961352cfd6",
   "prevId": "de5f2ea4-6601-476d-a4ed-59bf067edf34",
   "version": "7",
   "dialect": "postgresql",
@@ -5430,15 +5430,9 @@
         }
       },
       "indexes": {
-        "hostel_allocations_year_student_uq": {
-          "name": "hostel_allocations_year_student_uq",
+        "hostel_allocations_student_uq": {
+          "name": "hostel_allocations_student_uq",
           "columns": [
-            {
-              "expression": "academic_year_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "student_id",
               "isExpression": false,

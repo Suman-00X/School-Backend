@@ -68,7 +68,7 @@ ALTER TABLE "hostels" ADD CONSTRAINT "hostels_tenant_id_tenants_id_fk" FOREIGN K
 ALTER TABLE "hostels" ADD CONSTRAINT "hostels_warden_user_id_users_id_fk" FOREIGN KEY ("warden_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "hostel_rooms" ADD CONSTRAINT "hostel_rooms_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "hostel_rooms" ADD CONSTRAINT "hostel_rooms_hostel_id_hostels_id_fk" FOREIGN KEY ("hostel_id") REFERENCES "public"."hostels"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE UNIQUE INDEX "hostel_allocations_year_student_uq" ON "hostel_allocations" USING btree ("academic_year_id","student_id") WHERE "hostel_allocations"."is_active" = true AND "hostel_allocations"."status" = 'ACTIVE';--> statement-breakpoint
+CREATE UNIQUE INDEX "hostel_allocations_student_uq" ON "hostel_allocations" USING btree ("student_id") WHERE "hostel_allocations"."is_active" = true AND "hostel_allocations"."status" = 'ACTIVE';--> statement-breakpoint
 CREATE UNIQUE INDEX "hostel_allocations_room_bed_uq" ON "hostel_allocations" USING btree ("room_id","bed_number") WHERE "hostel_allocations"."is_active" = true AND "hostel_allocations"."status" = 'ACTIVE';--> statement-breakpoint
 CREATE INDEX "hostel_allocations_tenant_year_idx" ON "hostel_allocations" USING btree ("tenant_id","academic_year_id","hostel_id");--> statement-breakpoint
 CREATE INDEX "hostel_allocations_student_idx" ON "hostel_allocations" USING btree ("student_id");--> statement-breakpoint

@@ -41,8 +41,9 @@ export const hostelAllocations = pgTable(
   },
   t => [
     /* One bed per student per year, and one student per bed */
-    uniqueIndex("hostel_allocations_year_student_uq")
-      .on(t.academicYearId, t.studentId)
+    /* One bed per student at a time, across years (beds are physical) */
+    uniqueIndex("hostel_allocations_student_uq")
+      .on(t.studentId)
       .where(sql`${t.isActive} = true AND ${t.status} = 'ACTIVE'`),
     uniqueIndex("hostel_allocations_room_bed_uq")
       .on(t.roomId, t.bedNumber)
