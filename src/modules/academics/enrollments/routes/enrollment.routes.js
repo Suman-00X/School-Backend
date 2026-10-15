@@ -15,5 +15,6 @@ router.patch("/:enrollmentId", authorize(can.update), validate(rules.update), co
 
 /* A promotion creates the next year's enrollment; both years are in the body */
 router.post("/promotions", authorize(can.promote), validate(rules.promote), controller.promote);
+router.post("/promotions/bulk", authorize(can.promote), validate(rules.promoteSection), controller.promoteSection);
 
 export default router;

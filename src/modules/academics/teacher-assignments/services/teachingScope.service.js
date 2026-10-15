@@ -2,7 +2,7 @@ import { ROLES } from "../../../../common/auth/roles.js";
 import { forbidden } from "../../../../common/http/errors.js";
 import { teacherService } from "../../../users/teachers/index.js";
 import { sectionService } from "../../sections/index.js";
-import { teacherAssignmentService } from "../../teacher-assignments/index.js";
+import { teacherAssignmentService } from "./teacherAssignment.service.js";
 
 /* Record-level access for teachers. Other roles that passed authorize() are
    not restricted by section. A teacher may act on a section when they are its

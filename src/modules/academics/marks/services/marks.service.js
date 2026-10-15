@@ -6,7 +6,7 @@ import { enrollmentService } from "../../enrollments/index.js";
 import { examPaperService, examService } from "../../exams/index.js";
 import { examPapers } from "../../exams/models/examPaper.schema.js";
 import { gradingService } from "../../grading/index.js";
-import { teachingScope } from "../../shared/services/teachingScope.service.js";
+import { teachingScope } from "../../teacher-assignments/index.js";
 import { marks } from "../models/marks.schema.js";
 import { marksRepository } from "../repositories/marks.repository.js";
 

@@ -44,6 +44,13 @@ export const studentParentService = {
     return studentParentRepository.create(ctx.tenantId, { studentId, parentId, relation, isPrimaryContact });
   },
 
+  /* For other modules: active links of a parent (their children) */
+  childrenOf: (ctx, parentId) =>
+    studentParentRepository.findMany(ctx.tenantId, { conditions: [eq(studentParents.parentId, parentId)] }),
+
+  isLinked: (ctx, studentId, parentId) =>
+    studentParentRepository.exists(ctx.tenantId, linkConditions(studentId, parentId)),
+
   unlink: async (ctx, studentId, parentId) => {
     const link = await studentParentRepository.findOne(ctx.tenantId, linkConditions(studentId, parentId));
     if (!link) throw notFound("Parent link");

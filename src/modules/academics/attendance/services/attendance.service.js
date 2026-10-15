@@ -9,7 +9,7 @@ import { calendarService } from "../../calendar/index.js";
 import { enrollmentService } from "../../enrollments/index.js";
 import { sectionService } from "../../sections/index.js";
 import { ATTENDANCE_STATUSES, ATTENDANCE_WEIGHT } from "../../shared/constants/academic.constants.js";
-import { teachingScope } from "../../shared/services/teachingScope.service.js";
+import { teachingScope } from "../../teacher-assignments/index.js";
 import { attendanceRecords, attendanceSessions } from "../models/attendance.schema.js";
 import { attendanceRecordRepository, attendanceSessionRepository } from "../repositories/attendance.repository.js";
 

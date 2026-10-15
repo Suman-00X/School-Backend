@@ -5,7 +5,7 @@ import { examPaperService, examService } from "../../exams/index.js";
 import { gradingService } from "../../grading/index.js";
 import { marksService } from "../../marks/index.js";
 import { sectionService } from "../../sections/index.js";
-import { teachingScope } from "../../shared/services/teachingScope.service.js";
+import { teachingScope } from "../../teacher-assignments/index.js";
 
 const round = (value, places = 2) => (value === null ? null : Math.round(value * 10 ** places) / 10 ** places);
 const average = values => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : null);

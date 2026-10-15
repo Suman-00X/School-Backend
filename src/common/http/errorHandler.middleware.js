@@ -58,7 +58,9 @@ const fromPostgres = error => {
   }
 };
 
-const toAppError = error => {
+/* Any error -> AppError (safe to show), or null when it is unexpected.
+   Also used outside HTTP, e.g. to report per-row errors from background jobs. */
+export const toAppError = error => {
   if (error instanceof AppError) return error;
 
   const fromDb = fromPostgres(error);
@@ -81,6 +83,9 @@ const toAppError = error => {
 
 /* Every error response has the shape
    { success: false, message, error: { code, details? } } */
+/* A message that is safe to show a user for any error (never SQL or internals) */
+export const safeErrorMessage = (error, fallback = "Unexpected error") => toAppError(error)?.message ?? fallback;
+
 export const errorHandler = (err, req, res, next) => {
   if (res.headersSent) return next(err);
 

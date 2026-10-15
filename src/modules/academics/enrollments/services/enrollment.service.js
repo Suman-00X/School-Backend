@@ -4,6 +4,7 @@ import { transaction } from "../../../../common/database/postgres.js";
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { studentService } from "../../../users/students/index.js";
 import { sectionService } from "../../sections/index.js";
+import { teachingScope } from "../../teacher-assignments/index.js";
 import { nextRollNumber } from "../../shared/utils/codes.util.js";
 import { studentEnrollments as enrollments } from "../models/enrollment.schema.js";
 import { enrollmentRepository } from "../repositories/enrollment.repository.js";
@@ -28,11 +29,13 @@ const isEnrolledInYear = (ctx, academicYearId, studentId, options) =>
 
 export const enrollmentService = {
   /* Year-scoped: students of one section */
-  list: (ctx, { page, limit, sectionId }) =>
-    base.list(ctx, { page, limit }, [
+  list: async (ctx, { page, limit, sectionId }) => {
+    await teachingScope.assertSection(ctx, sectionId);
+    return base.list(ctx, { page, limit }, [
       eq(enrollments.academicYearId, ctx.academicYearId),
       eq(enrollments.sectionId, sectionId)
-    ]),
+    ]);
+  },
 
   /* POST /enrollments: an existing student into a section of the resolved year */
   create: async (ctx, data) => {
@@ -114,6 +117,76 @@ export const enrollmentService = {
       await enrollmentRepository.update(ctx.tenantId, previous.id, { status: "LEFT" }, { dbc: tx });
       return enrollment;
     });
+  },
+
+  /* Year-end promotion of a whole section. Every active student is promoted to
+     toSectionId unless an override says REPEAT (into another section of the
+     target year) or LEAVE (enrollment closed, no new one). All in one transaction. */
+  promoteSection: async (ctx, { fromSectionId, toAcademicYearId, toSectionId, overrides = [] }) => {
+    const fromSection = await sectionService.findById(ctx, fromSectionId);
+    if (!fromSection) throw notFound("Section");
+    if (fromSection.academicYearId === toAcademicYearId) {
+      throw unprocessable("Students must be promoted into a different academic year");
+    }
+
+    const roster = await enrollmentService.findRoster(ctx, fromSectionId);
+    const actionOf = new Map(overrides.map(o => [o.studentId, o]));
+    const strangers = overrides.filter(o => !roster.some(e => e.studentId === o.studentId));
+    if (strangers.length) {
+      throw unprocessable(`${strangers.length} override(s) name students who are not active in the section`);
+    }
+
+    /* Resolve each target section once */
+    const placements = new Map();
+    const placementFor = async sectionId => {
+      if (!placements.has(sectionId))
+        placements.set(sectionId, await sectionService.getPlacement(ctx, toAcademicYearId, sectionId));
+      return placements.get(sectionId);
+    };
+    await placementFor(toSectionId);
+    for (const override of overrides) {
+      if (override.action === "REPEAT") await placementFor(override.toSectionId);
+    }
+
+    const summary = { promoted: 0, repeated: 0, left: 0, skipped: [] };
+    const created = [];
+
+    await transaction(async tx => {
+      for (const enrollment of roster) {
+        const override = actionOf.get(enrollment.studentId);
+        const action = override?.action ?? "PROMOTE";
+
+        if (action !== "LEAVE" && (await isEnrolledInYear(ctx, toAcademicYearId, enrollment.studentId, { dbc: tx }))) {
+          summary.skipped.push({
+            studentId: enrollment.studentId,
+            reason: "Already enrolled in the target academic year"
+          });
+          continue;
+        }
+
+        if (action !== "LEAVE") {
+          const target = action === "REPEAT" ? override.toSectionId : (override?.toSectionId ?? toSectionId);
+          created.push(
+            await enrollmentService.enroll(
+              ctx,
+              {
+                studentId: enrollment.studentId,
+                sectionId: target,
+                admissionType: action === "REPEAT" ? "REPEAT" : "PROMOTED"
+              },
+              { dbc: tx, placement: await placementFor(target) }
+            )
+          );
+        }
+        await enrollmentRepository.update(ctx.tenantId, enrollment.id, { status: "LEFT" }, { dbc: tx });
+
+        if (action === "PROMOTE") summary.promoted++;
+        else if (action === "REPEAT") summary.repeated++;
+        else summary.left++;
+      }
+    });
+
+    return { ...summary, enrollments: created };
   },
 
   /* For other submodules */

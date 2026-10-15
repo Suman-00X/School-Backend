@@ -15,6 +15,15 @@ export const enrollmentController = {
   create: async (req, res) =>
     created(res, await enrollmentService.create(req.context, req.body), "Student enrolled successfully"),
 
+  promoteSection: async (req, res) => {
+    const result = await enrollmentService.promoteSection(req.context, req.body);
+    return created(
+      res,
+      result,
+      `Section promoted: ${result.promoted} promoted, ${result.repeated} repeating, ${result.left} left, ${result.skipped.length} skipped`
+    );
+  },
+
   promote: async (req, res) =>
     created(res, await enrollmentService.promote(req.context, req.body), "Student promoted successfully")
 };

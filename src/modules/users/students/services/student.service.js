@@ -1,12 +1,14 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { ROLES } from "../../../../common/auth/roles.js";
 import { createCrudService } from "../../../../common/crud/crudService.js";
-import { transaction } from "../../../../common/database/postgres.js";
-import { unprocessable } from "../../../../common/http/errors.js";
+import { db, transaction } from "../../../../common/database/postgres.js";
+import { notFound, unprocessable } from "../../../../common/http/errors.js";
 import { accountService } from "../../accounts/index.js";
 import { parentService } from "../../parents/index.js";
 import { sectionService } from "../../../academics/sections/index.js";
 import { enrollmentService } from "../../../academics/enrollments/index.js";
+import { studentEnrollments } from "../../../academics/enrollments/models/enrollment.schema.js";
+import { teachingScope } from "../../../academics/teacher-assignments/index.js";
 import { USER_SUMMARY_COLUMNS, toUserSummary } from "../../shared/constants/user.constants.js";
 import { nextStudentCode } from "../../shared/utils/codes.util.js";
 import { students } from "../models/student.schema.js";
@@ -18,9 +20,39 @@ const base = createCrudService(studentRepository, {
   with: { user: { columns: USER_SUMMARY_COLUMNS } }
 });
 
+/* Teachers only see students currently enrolled in sections they teach */
+const scopeCondition = async ctx => {
+  const sectionIds = await teachingScope.sectionIds(ctx);
+  if (sectionIds === null) return undefined;
+  if (!sectionIds.length) return sql`false`;
+  return inArray(
+    students.id,
+    db
+      .select({ id: studentEnrollments.studentId })
+      .from(studentEnrollments)
+      .where(
+        and(
+          eq(studentEnrollments.tenantId, ctx.tenantId),
+          eq(studentEnrollments.isActive, true),
+          eq(studentEnrollments.status, "ACTIVE"),
+          inArray(studentEnrollments.sectionId, sectionIds)
+        )
+      )
+  );
+};
+
 export const studentService = {
-  list: base.list,
-  getById: base.getById,
+  list: async (ctx, query) => base.list(ctx, query, [await scopeCondition(ctx)].filter(Boolean)),
+
+  getById: async (ctx, studentId) => {
+    const scope = await scopeCondition(ctx);
+    const student = await studentRepository.findOne(ctx.tenantId, [eq(students.id, studentId), scope].filter(Boolean), {
+      with: { user: { columns: USER_SUMMARY_COLUMNS } }
+    });
+    if (!student) throw notFound("Student");
+    return student;
+  },
+
   update: base.update,
 
   /* Admission: student account + profile, parents (new or existing) and
@@ -66,5 +98,18 @@ export const studentService = {
   },
 
   /* For other modules */
-  exists: (ctx, studentId) => studentRepository.exists(ctx.tenantId, [eq(students.id, studentId)])
+  exists: (ctx, studentId) => studentRepository.exists(ctx.tenantId, [eq(students.id, studentId)]),
+
+  findByUserId: (ctx, userId) =>
+    studentRepository.findOne(ctx.tenantId, [eq(students.userId, userId)], {
+      with: { user: { columns: USER_SUMMARY_COLUMNS } }
+    }),
+
+  findManyByIds: (ctx, studentIds) =>
+    studentIds.length
+      ? studentRepository.findMany(ctx.tenantId, {
+          conditions: [inArray(students.id, studentIds)],
+          with: { user: { columns: USER_SUMMARY_COLUMNS } }
+        })
+      : []
 };

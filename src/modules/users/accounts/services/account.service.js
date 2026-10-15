@@ -22,6 +22,10 @@ export const accountService = {
     return user;
   },
 
+  /* For other modules: an active account by email (case-insensitive), or null */
+  findByEmail: (ctx, email) =>
+    userRepository.findOne(ctx.tenantId, [eq(users.email, String(email).trim().toLowerCase())]),
+
   /* For other users/* submodules: create the account behind a new person.
      Pass { dbc: tx } to join the caller's transaction. */
   createAccount: (ctx, person, role, options) => userRepository.create(ctx.tenantId, { ...person, role }, options)
