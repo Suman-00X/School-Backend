@@ -7,3 +7,4 @@ import "./modules/finance/invoices/jobs/lateFee.job.js";
 import "./modules/communication/notifications/jobs/deliver.job.js";
 import "./modules/communication/announcements/jobs/publish.job.js";
 import "./modules/communication/subscribers/index.js";
+import "./modules/library/loans/jobs/overdueReminder.job.js";

@@ -40,3 +40,9 @@ export * from "./modules/finance/payments/models/payment.schema.js";
 export * from "./modules/hostel/hostels/models/hostel.schema.js";
 export * from "./modules/hostel/rooms/models/hostelRoom.schema.js";
 export * from "./modules/hostel/allocations/models/hostelAllocation.schema.js";
+
+/* library */
+export * from "./modules/library/policy/models/libraryPolicy.schema.js";
+export * from "./modules/library/books/models/book.schema.js";
+export * from "./modules/library/copies/models/copy.schema.js";
+export * from "./modules/library/loans/models/loan.schema.js";
