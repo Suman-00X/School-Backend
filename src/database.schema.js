@@ -46,3 +46,8 @@ export * from "./modules/library/policy/models/libraryPolicy.schema.js";
 export * from "./modules/library/books/models/book.schema.js";
 export * from "./modules/library/copies/models/copy.schema.js";
 export * from "./modules/library/loans/models/loan.schema.js";
+
+/* hr */
+export * from "./modules/hr/leaves/models/leave.schema.js";
+export * from "./modules/hr/staff-attendance/models/staffAttendance.schema.js";
+export * from "./modules/hr/payroll/models/payroll.schema.js";
