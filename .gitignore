@@ -14,9 +14,9 @@ node_modules/
 *.log
 
 # Local file storage (STORAGE_DRIVER=local)
-storage/
-coverage/
+/storage/
+/coverage/
 
 # Claude Code agent worktrees
 .claude/
-backups/
+/backups/
