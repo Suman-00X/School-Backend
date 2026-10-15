@@ -9,6 +9,7 @@ import financeModule from "./modules/finance/index.js";
 import communicationModule from "./modules/communication/index.js";
 import reportsModule from "./modules/reports/index.js";
 import filesModule from "./modules/files/index.js";
+import hostelModule from "./modules/hostel/index.js";
 import { paymentWebhookRoutes } from "./modules/finance/payments/index.js";
 
 /* API v1, mounted at /api/v1. Every route needs a valid token,
@@ -29,5 +30,6 @@ v1.use("/finance", financeModule);
 v1.use("/communication", communicationModule);
 v1.use("/reports", reportsModule);
 v1.use("/files", filesModule);
+v1.use("/hostel", hostelModule);
 
 export default v1;

@@ -35,3 +35,8 @@ export * from "./modules/finance/fee-structures/models/feeStructure.schema.js";
 export * from "./modules/finance/concessions/models/concession.schema.js";
 export * from "./modules/finance/invoices/models/invoice.schema.js";
 export * from "./modules/finance/payments/models/payment.schema.js";
+
+/* hostel */
+export * from "./modules/hostel/hostels/models/hostel.schema.js";
+export * from "./modules/hostel/rooms/models/hostelRoom.schema.js";
+export * from "./modules/hostel/allocations/models/hostelAllocation.schema.js";

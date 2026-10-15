@@ -36,6 +36,13 @@
       "when": 1792107512685,
       "tag": "0004_academic_year_archiving",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792108274222,
+      "tag": "0005_hostel",
+      "breakpoints": true
     }
   ]
 }
