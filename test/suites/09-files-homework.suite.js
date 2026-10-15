@@ -52,6 +52,15 @@ describe("files", () => {
     assert.equal(pdfAsPhoto.status, 400);
     assert.match(pdfAsPhoto.body.message, /A photo cannot be application\/pdf/);
 
+    const disguised = await upload("/api/v1/files", {
+      bytes: Buffer.from("<html><script>alert(1)</script></html>"),
+      type: "image/png",
+      name: "cat.png",
+      fields: { ownerType: "STUDENT", ownerId: world.s3.id, category: "PHOTO" }
+    });
+    assert.equal(disguised.status, 400);
+    assert.equal(disguised.body.message, "The content of cat.png is not a valid image/png file");
+
     const stranger = await upload("/api/v1/files", {
       bytes: PDF,
       type: "application/pdf",

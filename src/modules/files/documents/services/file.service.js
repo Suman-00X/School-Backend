@@ -3,6 +3,7 @@ import { badRequest, notFound } from "../../../../common/http/errors.js";
 import { storage } from "../../../../common/storage/storage.js";
 import { CATEGORY_RULES, DOWNLOAD_URL_SECONDS } from "../../shared/constants/file.constants.js";
 import { storedFileRepository } from "../repositories/storedFile.repository.js";
+import { matchesDeclaredType } from "../../shared/utils/fileSignature.util.js";
 
 /* "Report card (final).PDF" -> "report-card-final.pdf" */
 const safeName = name => {
@@ -40,6 +41,9 @@ export const fileService = {
     }
     if (file.size > rule.maxBytes) {
       throw badRequest(`A ${category.toLowerCase()} can be at most ${Math.round(rule.maxBytes / 1024 / 1024)} MB`);
+    }
+    if (!matchesDeclaredType(file.buffer, file.mimetype)) {
+      throw badRequest(`The content of ${file.originalname ?? "the file"} is not a valid ${file.mimetype} file`);
     }
 
     const name = safeName(file.originalname ?? "file");
