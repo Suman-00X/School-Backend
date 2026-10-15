@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { parentService } from "../../parents/index.js";
 import { USER_SUMMARY_COLUMNS } from "../../shared/constants/user.constants.js";
@@ -47,6 +47,12 @@ export const studentParentService = {
   /* For other modules: active links of a parent (their children) */
   childrenOf: (ctx, parentId) =>
     studentParentRepository.findMany(ctx.tenantId, { conditions: [eq(studentParents.parentId, parentId)] }),
+
+  /* Active links of many students (their parents) */
+  linksForStudents: (ctx, studentIds) =>
+    studentIds.length
+      ? studentParentRepository.findMany(ctx.tenantId, { conditions: [inArray(studentParents.studentId, studentIds)] })
+      : [],
 
   isLinked: (ctx, studentId, parentId) =>
     studentParentRepository.exists(ctx.tenantId, linkConditions(studentId, parentId)),

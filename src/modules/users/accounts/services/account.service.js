@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { createCrudService } from "../../../../common/crud/crudService.js";
 import { notFound, unprocessable } from "../../../../common/http/errors.js";
 import { users } from "../models/user.schema.js";
@@ -21,6 +21,13 @@ export const accountService = {
     if (!user) throw notFound("User");
     return user;
   },
+
+  /* For other modules: active accounts by id (contact details for messaging) */
+  findManyByIds: (ctx, userIds) =>
+    userIds.length ? userRepository.findMany(ctx.tenantId, { conditions: [inArray(users.id, userIds)] }) : [],
+
+  /* Active accounts with any of these roles */
+  findByRoles: (ctx, roles) => userRepository.findMany(ctx.tenantId, { conditions: [inArray(users.role, roles)] }),
 
   /* For other modules: an active account by email (case-insensitive), or null */
   findByEmail: (ctx, email) =>

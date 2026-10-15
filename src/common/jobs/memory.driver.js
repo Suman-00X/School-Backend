@@ -6,13 +6,17 @@ export const createMemoryDriver = () => {
   let definitions = new Map();
   let log = console;
   let running = 0;
-  const pending = new Set();
+  /* token -> time the job becomes due */
+  const pending = new Map();
   const timers = new Set();
   const seenIds = new Set();
   let idleWaiters = [];
 
+  /* Idle = nothing running and nothing due now (jobs delayed into the future do not count) */
+  const isIdle = () => running === 0 && ![...pending.values()].some(dueAt => dueAt <= Date.now() + 1000);
+
   const settleIfIdle = () => {
-    if (running === 0 && pending.size === 0) {
+    if (isIdle()) {
       idleWaiters.forEach(resolve => resolve());
       idleWaiters = [];
     }
@@ -36,7 +40,7 @@ export const createMemoryDriver = () => {
 
   const schedule = (name, data, attempt, definition, delayMs = 0) => {
     const token = {};
-    pending.add(token);
+    pending.set(token, Date.now() + delayMs);
     const timer = setTimeout(() => {
       timers.delete(timer);
       pending.delete(token);
@@ -75,7 +79,7 @@ export const createMemoryDriver = () => {
 
     drain: () =>
       new Promise(resolve => {
-        if (running === 0 && pending.size === 0) return resolve();
+        if (isIdle()) return resolve();
         idleWaiters.push(resolve);
       }),
 

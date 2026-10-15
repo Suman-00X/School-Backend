@@ -287,13 +287,13 @@ describe("grading, report cards and results", () => {
 
   it("publishes and withdraws results", async () => {
     assert.equal(
-      (await post(`${A}/exams/${world.exam.id}/result-publication`, {})).message,
+      (await post(`${A}/exams/${world.exam.id}/result-publication`, {}, {}, 200)).message,
       "Exam results published successfully"
     );
     await post(`${A}/exams/${world.exam.id}/result-publication`, {}, {}, 409);
     await del(`${A}/exams/${world.exam.id}/result-publication`);
     await del(`${A}/exams/${world.exam.id}/result-publication`, {}, 404);
-    await post(`${A}/exams/${world.exam.id}/result-publication`, {});
+    await post(`${A}/exams/${world.exam.id}/result-publication`, {}, {}, 200);
   });
 
   it("schedules papers without clashes and protects recorded marks", async () => {

@@ -15,6 +15,13 @@
       "when": 1792104468355,
       "tag": "0001_core_academics",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792105537625,
+      "tag": "0002_finance",
+      "breakpoints": true
     }
   ]
 }

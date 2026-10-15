@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { createCrudService } from "../../../../common/crud/crudService.js";
 import { transaction } from "../../../../common/database/postgres.js";
 import { accountService } from "../../accounts/index.js";
@@ -21,6 +21,9 @@ export const createProfileService = ({ repository, entity, codeField, nextCode }
     /* The profile behind a user account, or null */
     findByUserId: (ctx, userId) =>
       repository.findOne(ctx.tenantId, [eq(repository.table.userId, userId)], { with: withUser }),
+
+    findManyByIds: (ctx, ids) =>
+      ids.length ? repository.findMany(ctx.tenantId, { conditions: [inArray(repository.table.id, ids)] }) : [],
 
     /* Pass { dbc: tx } to run inside the caller's transaction */
     createWithAccount: (ctx, { role, user, profile = {} }, { dbc } = {}) => {

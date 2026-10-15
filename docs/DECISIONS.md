@@ -114,3 +114,82 @@ If `teacherId` is omitted, the teacher assigned to that subject in the section i
 
 ### 🟢 D-15: Migrations are incremental from now on
 `0000_init` was regenerated while nothing was deployed. Every change since then is a new numbered migration (`0001_core_academics`, …). Never edit an applied migration.
+
+---
+
+## Phase 4: fees and communication
+
+### 🟡 D-16: Money representation
+- **Database:** `numeric(12,2)`.
+- **API:** plain numbers with 2 decimals (`5400.5`).
+- **Arithmetic:** integer paise in `common/money`, so 0.1 + 0.2 issues never happen.
+- **Currency:** each school's `tenants.currency` (default INR).
+
+Stripe-style integer minor units in the API would be stricter, but they're awkward for school admin screens. Changing later would be a breaking API change, so decide before launch.
+
+### 🟡 D-17: How installments split a fee
+Each installment takes `sharePercent` of every fee line, and the shares must add up to 100%. The **last** installment absorbs rounding, so installments always sum exactly to the annual amount.
+
+Alternative not built: explicit amounts per installment per head (more flexible, more data entry).
+
+### 🟡 D-18: Concession rules
+- `PERCENT` takes a percentage off each matching line.
+- `FIXED` takes **that amount off each matching line of each invoice**, not once per year.
+- Several concessions stack, but a line's discount never exceeds the line.
+- Concessions are applied when the invoice is issued. Granting one later doesn't change existing invoices: cancel and re-issue unpaid ones.
+
+### 🟡 D-19: Late fees
+Each structure has a late-fee rule: `NONE`, `FIXED`, or `PER_DAY` with a grace period and an optional cap.
+- A daily job (00:30 UTC) recomputes `lateFee`, and so `total`, on open overdue invoices. It is idempotent.
+- Paid invoices never get late fees.
+
+Not built: waiving a late fee for one student (today: cancel and re-issue).
+
+### 🔴 D-20: Online payments must be verified with real Razorpay before go-live
+I implemented Razorpay from its documented API without keys:
+- order creation;
+- checkout signature `HMAC(order_id|payment_id)`;
+- webhook signature `HMAC(raw body)`.
+
+Everything is tested end to end against the `mock` gateway, which follows the same contract. To go live:
+1. Set `PAYMENT_PROVIDER=razorpay` and `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET`.
+2. Point the Razorpay webhook (`payment.captured`) at `POST /api/v1/public/payments/webhook`.
+3. Test in Razorpay **test mode**.
+
+Also needs a decision:
+- **Refunds** are not implemented.
+- **Overpayment** is possible: if a counter payment and an online payment for the same invoice are in flight together, both are recorded (balance goes negative, i.e. a credit). You need a refund/credit policy.
+
+### 🟡 D-21: Online payment covers the full balance only
+A payment order is always for the invoice's full outstanding balance. Partial payments are possible only at the counter.
+
+### 🟡 D-22: Which events send which messages
+| Event | Channels |
+|---|---|
+| Student absent | in-app + SMS (parents) |
+| Results published | in-app + email |
+| Invoice issued | in-app + email |
+| Payment received | in-app + email + SMS |
+| Fee reminder | in-app + SMS |
+| Import finished | in-app (importer) |
+
+There are **no per-user or per-school preferences or opt-outs** yet. SMS costs money, and in India it needs DLT-registered templates, so per-school channel settings should come next. The `http` SMS driver posts generic JSON: put a small adapter in front of the chosen provider (MSG91, Gupshup, Twilio).
+
+### 🟡 D-23: Fee reminder schedule
+Reminders go out 3 days before the due date, on the due date, and every 7 days while overdue. The daily run is at 03:30 UTC (09:00 IST), the same time for every school; international schools would need per-time-zone runs.
+
+Duplicate sends are blocked with once-only claims (D-27).
+
+### 🟢 D-24: No push notifications yet
+FCM/APNs needs device tokens registered by the mobile app (out of scope). The notification model already has per-channel delivery state, so adding `PUSH` is a new channel driver plus a device-token table.
+
+### 🟢 D-25: Announcement audiences are resolved at send time
+The audience is a role list, optionally narrowed by class or section for students and parents. It becomes a snapshot of recipients when sending. The delivery report counts SENT/FAILED/SKIPPED per channel from the notifications.
+
+### 🟢 D-26: Status codes for "action" endpoints
+`POST /…/cancellation`, `/result-publication` and `/publication` change an existing resource, so they return **200** with the updated resource. Only real creation returns 201. CSV import returns **202 Accepted**.
+
+### 🟢 D-27: Exactly-once side effects
+The tests caught a race: publish, withdraw and re-publish in quick succession notified everyone twice, because two subscriber jobs checked "already sent?" at the same moment.
+
+Fix: `common/jobs/claims.js` `claimOnce(key)`, an atomic insert on a unique index in MongoDB with a 90-day expiry. Results notices, absence alerts and fee reminders all use it, so retries, duplicate events and parallel workers can't double-send.
