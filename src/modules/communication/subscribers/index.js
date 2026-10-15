@@ -3,3 +3,4 @@ import "./attendanceAlerts.subscriber.js";
 import "./results.subscriber.js";
 import "./fees.subscriber.js";
 import "./imports.subscriber.js";
+import "./homework.subscriber.js";

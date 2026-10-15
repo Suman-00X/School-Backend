@@ -3,8 +3,8 @@ import env from "../config/env.config.js";
 import { AppError, ERROR_CODES, badRequest } from "./errors.js";
 
 /* Single-file multipart upload kept in memory (req.file.buffer).
-   uploadFile("file", { allowed: ["text/csv"], maxBytes }) */
-export const uploadFile = (field, { allowed, maxBytes = env.storage.maxUploadBytes } = {}) => {
+   uploadFile("file", { allowed: ["text/csv"], maxBytes, optional }) */
+export const uploadFile = (field, { allowed, maxBytes = env.storage.maxUploadBytes, optional = false } = {}) => {
   const parser = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: maxBytes, files: 1 },
@@ -19,7 +19,7 @@ export const uploadFile = (field, { allowed, maxBytes = env.storage.maxUploadByt
   const middleware = (req, res, next) =>
     parser(req, res, error => {
       if (!error) {
-        if (!req.file) return next(badRequest(`A file is required in the "${field}" form field`));
+        if (!req.file && !optional) return next(badRequest(`A file is required in the "${field}" form field`));
         return next();
       }
       if (error instanceof AppError) return next(error);
@@ -37,10 +37,14 @@ export const uploadFile = (field, { allowed, maxBytes = env.storage.maxUploadByt
 
   middleware.__openapi = {
     requestBody: {
-      required: true,
+      required: !optional,
       content: {
         "multipart/form-data": {
-          schema: { type: "object", required: [field], properties: { [field]: { type: "string", format: "binary" } } }
+          schema: {
+            type: "object",
+            required: optional ? [] : [field],
+            properties: { [field]: { type: "string", format: "binary" } }
+          }
         }
       }
     }

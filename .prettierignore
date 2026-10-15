@@ -3,3 +3,4 @@ migrations/
 storage/
 package-lock.json
 *.md
+.claude/

@@ -13,6 +13,7 @@ import { attendanceRoutes } from "./attendance/index.js";
 import { periodRoutes, timetableRoutes } from "./timetable/index.js";
 import { gradingRoutes } from "./grading/index.js";
 import { reportCardRoutes } from "./report-cards/index.js";
+import { homeworkRoutes } from "./homework/index.js";
 
 /* Academics module, mounted at /api/v1/academics */
 const router = createRouter();
@@ -32,5 +33,6 @@ router.use("/periods", periodRoutes);
 router.use("/timetable", timetableRoutes);
 router.use("/grade-scales", gradingRoutes);
 router.use("/report-cards", reportCardRoutes);
+router.use("/homework", homeworkRoutes);
 
 export default router;

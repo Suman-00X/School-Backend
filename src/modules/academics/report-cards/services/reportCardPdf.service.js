@@ -1,3 +1,4 @@
+import { drawLetterhead, logoBytes } from "../../../../common/export/branding.js";
 import { renderPdf } from "../../../../common/export/exporters.js";
 import { notFound } from "../../../../common/http/errors.js";
 import { getTenant } from "../../../../common/tenancy/tenant.service.js";
@@ -25,8 +26,10 @@ export const reportCardPdfService = {
     ]);
     const person = student[0];
 
+    const logo = await logoBytes(tenant);
+
     const buffer = await renderPdf(doc => {
-      doc.fontSize(18).text(tenant?.name ?? "School", { align: "center" });
+      drawLetterhead(doc, tenant, logo);
       doc.moveDown(0.3).fontSize(13).text(`Report Card: ${report.exam.examName}`, { align: "center" });
       doc.moveDown();
 

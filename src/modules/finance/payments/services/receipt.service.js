@@ -1,3 +1,4 @@
+import { drawLetterhead, logoBytes } from "../../../../common/export/branding.js";
 import { renderPdf } from "../../../../common/export/exporters.js";
 import { unprocessable } from "../../../../common/http/errors.js";
 import { getTenant } from "../../../../common/tenancy/tenant.service.js";
@@ -14,9 +15,10 @@ export const receiptService = {
     const tenant = await getTenant(ctx.tenantId);
     const student = payment.student;
 
+    const logo = await logoBytes(tenant);
+
     const buffer = await renderPdf(doc => {
-      doc.fontSize(18).text(tenant?.name ?? "School", { align: "center" });
-      if (tenant?.address) doc.fontSize(9).fillColor("#555").text(tenant.address, { align: "center" });
+      drawLetterhead(doc, tenant, logo);
       doc.moveDown().fillColor("#000").fontSize(14).text("Fee Receipt", { align: "center" });
       doc.moveDown();
 

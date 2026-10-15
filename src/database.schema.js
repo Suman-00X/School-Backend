@@ -27,6 +27,7 @@ export * from "./modules/academics/calendar/models/calendarEvent.schema.js";
 export * from "./modules/academics/attendance/models/attendance.schema.js";
 export * from "./modules/academics/timetable/models/period.schema.js";
 export * from "./modules/academics/timetable/models/timetableSlot.schema.js";
+export * from "./modules/academics/homework/models/homework.schema.js";
 
 /* finance */
 export * from "./modules/finance/fee-heads/models/feeHead.schema.js";

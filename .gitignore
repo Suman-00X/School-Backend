@@ -16,3 +16,6 @@ node_modules/
 # Local file storage (STORAGE_DRIVER=local)
 storage/
 coverage/
+
+# Claude Code agent worktrees
+.claude/

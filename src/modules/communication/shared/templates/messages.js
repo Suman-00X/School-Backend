@@ -37,6 +37,19 @@ export const messages = {
     sms: `${overdue ? "Overdue" : "Due"}: ${money(balance, currency)} for ${studentName} (${invoiceNumber}), due ${dueDate}.`
   }),
 
+  homeworkAssigned: ({ subjectName, title, dueDate }) => ({
+    title: `New ${subjectName} homework: ${title}`,
+    body: `${title} is due on ${dueDate}. Open the app to see the details and attachments.`
+  }),
+
+  homeworkGraded: ({ title, status, marksAwarded, maxMarks }) => ({
+    title: status === "RETURNED" ? `Homework returned: ${title}` : `Homework graded: ${title}`,
+    body:
+      status === "RETURNED"
+        ? `Your teacher returned "${title}" for changes. Please resubmit.`
+        : `"${title}" has been graded${marksAwarded !== null && marksAwarded !== undefined ? `: ${marksAwarded}/${maxMarks}` : ""}.`
+  }),
+
   importCompleted: ({ succeeded, failed }) => ({
     title: "Student import finished",
     body: `${succeeded} student(s) admitted, ${failed} row(s) need attention. Open the import to see the report.`
