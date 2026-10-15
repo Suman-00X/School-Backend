@@ -10,7 +10,7 @@ import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 
-export const migrationsFolder = path.resolve(import.meta.dirname, "../../src/database/postgres/migrations");
+export const migrationsFolder = path.resolve(import.meta.dirname, "../../migrations");
 
 const freePort = () =>
   new Promise((resolve, reject) => {

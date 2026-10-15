@@ -1,0 +1,29 @@
+import { eq } from "drizzle-orm";
+import { createCrudService } from "../../../../common/crud/crudService.js";
+import { notFound, unprocessable } from "../../../../common/http/errors.js";
+import { users } from "../models/user.schema.js";
+import { userRepository } from "../repositories/user.repository.js";
+
+const base = createCrudService(userRepository, { entity: "User" });
+
+export const accountService = {
+  list: (ctx, { page, limit, role, status }) =>
+    base.list(ctx, { page, limit }, [role && eq(users.role, role), status && eq(users.status, status)].filter(Boolean)),
+
+  getById: base.getById,
+
+  update: base.update,
+
+  deactivate: async (ctx, userId) => {
+    if (userId === ctx.userId) throw unprocessable("You cannot deactivate your own account");
+
+    const user = await userRepository.update(ctx.tenantId, userId, { isActive: false, status: "INACTIVE" });
+    if (!user) throw notFound("User");
+    return user;
+  },
+
+  /* For other users/* submodules: create the account behind a new person.
+     Pass { dbc: tx } to join the caller's transaction. */
+  createAccount: (ctx, person, role, options) =>
+    userRepository.create(ctx.tenantId, { ...person, role }, options)
+};

@@ -1,16 +1,14 @@
 import { defineConfig } from "drizzle-kit";
 
-/* `npm run db:generate` turns schema changes into a new SQL migration */
+/* `npm run db:generate` turns model changes into a new SQL migration */
 export default defineConfig({
   dialect: "postgresql",
   schema: [
-    "./src/database/postgres/schema/enums.js",
-    "./src/database/postgres/schema/tenancy.schema.js",
-    "./src/database/postgres/schema/people.schema.js",
-    "./src/database/postgres/schema/academics.schema.js",
-    "./src/database/postgres/schema/exams.schema.js"
+    "./src/common/database/platform.schema.js",
+    "./src/modules/*/shared/models/*.schema.js",
+    "./src/modules/*/*/models/*.schema.js"
   ],
-  out: "./src/database/postgres/migrations",
+  out: "./migrations",
   dbCredentials: { url: process.env.DATABASE_URL ?? "" },
   strict: true
 });

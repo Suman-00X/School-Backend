@@ -46,9 +46,23 @@ Effort estimates are rough and assume one developer.
 - ✅ Drizzle ORM with versioned SQL migrations (`db:generate`, `db:migrate`)
 - ✅ Real transactions for admission, promotion, teacher/parent creation and academic-year switching; bulk inserts are all-or-nothing
 - ✅ Database errors mapped to clean API errors (duplicate → 409; bad reference, bad UUID, broken rule → 400)
-- ✅ **Module-first folder structure:** `src/modules/<feature>/` (routes, controller, service, queries) plus shared `src/common/`. See [README](../README.md#project-structure)
+- ✅ **Modules and submodules:** `users` (accounts, staff, teachers, parents, students) and `academics` (academic years, classes, subjects, sections, section subjects, teacher assignments, enrollments, exams, marks). Each submodule has its own folders by file type and an `index.js` entry. See [README](../README.md#project-structure)
+- ✅ **Framework layer** in `src/common/` (no module code):
+  - authentication and role-based `authorize()` with per-module `definePermissions()`
+  - Zod `validate()` middleware
+  - `AppError` with a central error handler
+  - response helpers
+  - tenant-scoped `createRepository`, plus CRUD service and controller factories
+  - automatic audit trail and per-tenant sequences
+- ✅ **Privileged staff roles:** PRINCIPAL, ACCOUNTANT, STAFF (alongside ADMIN), with a `staff_members` profile table and a permission for every action
+- ✅ **REST API v1** (`/api/v1`):
+  - plural resources, PATCH for partial updates
+  - nested routes for owned records (student parents, exam papers)
+  - pagination `meta` on lists
+  - one success/error envelope with machine-readable error codes and readable messages
+  - documented in [API.md](API.md)
 - ✅ `npm run dev:memory`: real PostgreSQL 18 and in-memory MongoDB, no installs needed
-- ✅ Verified with a 94-check end-to-end run
+- ✅ Verified with a 144-check end-to-end run
 
 ---
 
@@ -57,15 +71,15 @@ Effort estimates are rough and assume one developer.
 - ⬜ **Login:** `POST /auth/login`, bcrypt password hashing, JWT with `tenantId`, refresh tokens, logout
 - ⬜ Change password, forgot/reset password, first-login invite for admitted students and parents
 - ⬜ **School onboarding:** create a tenant and its first admin
-- 🟡 **Field whitelisting:** protected fields (`id`, `tenantId`, `passwordHash`, timestamps) are already stripped. Still to do: per-route schemas
-- ⬜ **Input validation** with Zod on every route (types, required fields, formats)
-- ⬜ Helmet and rate limiting (stricter on login)
+- ✅ **Field whitelisting:** every route has a Zod schema, and unknown fields are dropped
+- ✅ **Input validation** with Zod on every route (types, required fields, formats, readable messages)
+- 🟡 Helmet and rate limiting: global limits are done; a stricter limit on login is still to do
 - ⬜ Delete/deactivate endpoints for every entity
 - ⬜ Seed script with a realistic demo school (years, classes, sections, staff, students)
 - ⬜ ESLint and Prettier
 - ⬜ Structured logging (pino or winston) with request IDs
-- ⬜ OpenAPI/Swagger docs
-- ⬜ **Tests:** Jest + Supertest against `inMemoryDatabases` (port the 94-check smoke run); GitHub Actions CI
+- 🟡 API docs: [API.md](API.md) is written by hand; still to do: generate OpenAPI/Swagger from the Zod schemas
+- ⬜ **Tests:** Jest + Supertest against `inMemoryDatabases` (port the 144-check smoke run); GitHub Actions CI
 - 🟡 Health check: `/health` exists; add database readiness checks
 
 **Done when:** an admin can log in, set up a school, and admit a student end to end with real credentials.
@@ -80,7 +94,7 @@ Effort estimates are rough and assume one developer.
 - ⬜ **Grade scales** per school; automatic grade from marks
 - ⬜ **Report cards:** results per exam and per year, totals, percentage, rank
 - ⬜ **Bulk promotion** of a whole section at year end (single-student promotion exists)
-- ⬜ **Role scoping:** teachers see only their sections; students only themselves; parents only their children
+- ⬜ **Record-level scoping:** teachers see only their assigned sections; students only themselves; parents only their children (role checks per action already exist)
 - ⬜ Bulk student admission (CSV import with per-row errors)
 
 ---

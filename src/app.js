@@ -1,30 +1,24 @@
 import express from "express";
-import cors from "cors";
 import morgan from "morgan";
-
-import routes from "./routes.js";
-
-import { errorMiddleware, notFoundMiddleware } from "./common/middlewares/error.middleware.js";
+import env from "./common/config/env.config.js";
+import { securityMiddlewares } from "./common/http/security.js";
+import { errorHandler, notFoundHandler } from "./common/http/errorHandler.middleware.js";
+import v1 from "./routes.js";
 
 const app = express();
 
-const corsOptions = {
-  origin: process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
-    : true
-};
-app.use(cors(corsOptions));
+app.use(securityMiddlewares());
 app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: true }));
-app.use(morgan("dev"));
+app.use(morgan(env.isProduction ? "combined" : "dev"));
 
+/* Public liveness check */
 app.get("/health", (req, res) => {
-  res.json({ success: true, message: "OK", timestamp: new Date().toISOString() });
+  res.json({ success: true, message: "Service is healthy", data: { timestamp: new Date().toISOString() } });
 });
 
-app.use("/api", routes);
+app.use("/api/v1", v1);
 
-app.use(notFoundMiddleware);
-app.use(errorMiddleware);
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 export default app;

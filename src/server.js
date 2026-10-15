@@ -1,12 +1,10 @@
 import app from "./app.js";
-import env from "./config/env.config.js";
-import { closePostgres, connectPostgres } from "./database/postgres/client.js";
-import { closeMongo, connectMongo } from "./database/mongo/client.js";
+import env from "./common/config/env.config.js";
+import { startDatabases, stopDatabases } from "./bootstrap.js";
 
 const startServer = async () => {
   try {
-    await connectPostgres();
-    await connectMongo();
+    await startDatabases();
 
     const server = app.listen(env.port, () => {
       console.log(`Server running on port ${env.port}`);
@@ -15,7 +13,7 @@ const startServer = async () => {
     const shutdown = signal => {
       console.log(`${signal} received, shutting down`);
       server.close(async () => {
-        await Promise.allSettled([closePostgres(), closeMongo()]);
+        await stopDatabases();
         process.exit(0);
       });
     };

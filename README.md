@@ -2,8 +2,9 @@
 
 Multi-tenant school management API: Express 5, **PostgreSQL** (Drizzle ORM) for relational data, **MongoDB** (Mongoose) for document data.
 
-- [Roadmap and status](docs/ROADMAP.md)
-- [Data model: what lives in PostgreSQL vs MongoDB](docs/DATA_MODEL.md)
+- [API reference (v1)](docs/API.md): endpoints, roles, response and error formats
+- [Data model](docs/DATA_MODEL.md): what lives in PostgreSQL vs MongoDB
+- [Roadmap](docs/ROADMAP.md): phases and status
 
 ## Run
 
@@ -14,7 +15,7 @@ npm install
 npm run dev:memory
 ```
 
-It seeds a demo school and admin, and prints a 12-hour admin token. Send it as `Authorization: Bearer <token>`.
+It seeds a demo school and admin, and prints a 12-hour admin token. Send it as `Authorization: Bearer <token>` to `http://localhost:3000/api/v1/...`.
 
 **Against real databases:**
 
@@ -24,71 +25,82 @@ npm run db:migrate       # create/upgrade PostgreSQL tables
 npm run dev              # or: npm start
 ```
 
-Requires PostgreSQL 13+ and MongoDB 6+. No replica set is needed; transactions run in PostgreSQL.
+Requires PostgreSQL 13+ and MongoDB 6+.
 
 > There is no login endpoint yet (roadmap Phase 2). Until then, tokens come from `dev:memory`.
 
 | Script | Does |
 |---|---|
-| `npm run db:generate -- --name <change>` | Writes a SQL migration from schema changes |
+| `npm run db:generate -- --name <change>` | Writes a SQL migration from model changes |
 | `npm run db:migrate` | Applies pending migrations |
-| `npm run db:studio` | Opens Drizzle Studio to browse PostgreSQL |
+| `npm run db:studio` | Browse PostgreSQL in Drizzle Studio |
 | `npm run mongo:sync-indexes` | Builds MongoDB indexes (production) |
 
 ## Project structure
 
-Code is organized **by module (feature) first**. Each module owns its routes, controllers, business logic and queries; code shared by several modules lives in `common/`.
-
 ```
 src/
-  server.js, app.js        start-up, Express app
-  routes.js                mounts every module's router under /api
-  config/                  env, role permissions
-  common/                  shared by all modules
-    middlewares/           auth, permissions, audit, errors
-    responses/             success/error response format, DB error mapping
-    services/              code generation (IDs, roll numbers), serial counters, audit log
-    utils/                 errors, pagination, input sanitizing, dates, validation
-    constants/
-  database/
-    postgres/              client, helpers, schema/ (tables), migrations/
-    mongo/                 client, models/
+  server.js              start-up and shutdown
+  app.js                 Express app: security, JSON, /health, /api/v1, errors
+  routes.js              API v1: authenticate + audit, then mounts each module
+  bootstrap.js           connects PostgreSQL and MongoDB
+  database.schema.js     registry of every module's tables (for the ORM)
+
+  common/                FRAMEWORK ONLY: no school/business logic
+    config/              environment
+    auth/                roles, authenticate (JWT), authorize + definePermissions
+    validation/          zod setup, validate() middleware, shared schema building blocks
+    http/                AppError + error factories, response helpers, error handler, security
+    database/            postgres/mongo clients, base columns, createRepository, platform tables
+    crud/                createCrudService, createCrudController
+    audit/               audit-trail middleware + MongoDB model
+    sequences/           per-tenant number sequences (for generated codes)
+    utils/
+
   modules/
-    users/  teachers/  parents/  students/
-    academic-years/  classes/  subjects/  sections/
-    section-subjects/  teacher-assignments/  enrollments/
-    exams/  marks/
+    users/
+      index.js           module entry: mounts the submodules' routers
+      shared/            code only the users module needs (constants, validators, services, utils, models)
+      accounts/  staff/  teachers/  parents/  students/
+    academics/
+      index.js
+      shared/            (constants, middlewares, utils)
+      academic-years/  classes/  subjects/  sections/  section-subjects/
+      teacher-assignments/  enrollments/  exams/  marks/
+
+migrations/              generated SQL migrations
+scripts/                 migrate, dev-memory, Mongo index sync
 ```
 
-Inside a module, files are named `<entity>.<layer>.js`:
+### Inside a submodule
 
-| File | Responsibility |
-|---|---|
-| `x.routes.js` | URL paths and middleware chain (permission, academic year, audit) |
-| `x.controller.js` | Read the request, call the service or queries, send the response. No SQL |
-| `x.service.js` | Multi-step business logic and transactions (optional) |
-| `x.queries.js` | Database access for that entity only |
-| `x.middleware.js` | Module-specific middleware (optional) |
+Every submodule has the same layout:
 
-**Rules**
-- A module may import another module's `queries` or `service`, never its controller.
-- Only `queries` files talk to the database. Pass `tx` (from `db.transaction`) as the last argument to run inside a transaction.
-- New feature → new folder in `modules/`, with its router added in `routes.js` and tables in `database/postgres/schema/`.
+```
+students/
+  index.js               public entry: exports the router and services other code may use
+  routes/                URL → authorize → validate → controller
+  controllers/           HTTP in/out only: calls a service, sends a response
+  services/              business rules and transactions
+  repositories/          database access (built on createRepository)
+  validators/            zod schemas for params, query and body
+  permissions/           which roles may do what (definePermissions)
+  models/                table definitions (Drizzle) or collections (Mongoose)
+```
 
-## API overview
+### Rules
 
-All routes are under `/api` and need a Bearer token. `GET /health` is public.
+1. **`common/` is framework only.** It never imports from `modules/`. Anything specific to one module lives in that module (its `shared/` folder if several submodules use it).
+2. **Every route has the same chain:** `authorize(permission)` → `validate(schema)` → (optional module middleware) → controller. Authentication, auditing, security headers, rate limiting and error handling are applied once, globally.
+3. **Controllers** never touch the database and never `try/catch`. They throw `AppError`s (`notFound`, `conflict`, `unprocessable`…), and the central error handler formats every error the same way.
+4. **Services** receive the request context (`ctx = { tenantId, userId, role, academicYearId? }`) first.
+5. **Repositories** are always tenant-scoped (`createRepository` adds `tenant_id` and `is_active` to every query). Pass `{ dbc: tx }` to join a transaction.
+6. **Cross-module imports** go through a submodule's `index.js`. The exceptions are `models/` (needed for foreign keys) and `shared/constants/`, which are leaf files and may be imported directly.
+7. **Enum values** live once in `shared/constants` and are used by both the table and the validator.
 
-| Area | Base path |
-|---|---|
-| Users, teachers, parents | `/api/users`, `/api/teachers`, `/api/parents` |
-| Students | `/api/students`, `POST /api/students/admission` |
-| Student–parent links | `/api/student-parent-map` |
-| Academic years, classes, subjects | `/api/academic/academic-years`, `/classes`, `/subjects` |
-| Sections and allocations | `/api/academic/sections`, `/class-section-subject-map`, `/teacher-section-subject-map`, `/student-section-map` |
-| Promotion | `POST /api/academic/student-section-map/promote` |
-| Exams and marks | `/api/academic/exams`, `/exam-section-subject-map`, `/marks` |
+### Adding a submodule (e.g. `academics/attendance`)
 
-Year-scoped routes (sections, allocations, exams, marks) act on the school's **current** academic year. To work on another year, send its ID in the `X-Academic-Year-Id` header.
-
-IDs are UUIDs. Related records are embedded by name, e.g. a section returns `classId` plus `class: { className, classOrder }`.
+1. Create `models/`, `repositories/`, `services/`, `controllers/`, `validators/`, `permissions/`, `routes/` and `index.js` (copy `academics/classes` as a template).
+2. Register the model in `src/database.schema.js` and run `npm run db:generate -- --name attendance`.
+3. Mount the router in `modules/academics/index.js`.
+4. Document the endpoints in `docs/API.md` and the tables in `docs/DATA_MODEL.md`.

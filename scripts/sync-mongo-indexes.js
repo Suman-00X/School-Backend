@@ -1,8 +1,8 @@
 /* Builds every MongoDB schema index and drops indexes no longer declared
    in a schema. Run after deploys that change Mongo indexes. */
 import mongoose from "mongoose";
-import { closeMongo, connectMongo } from "../src/database/mongo/client.js";
-import "../src/database/mongo/models/auditLog.model.js";
+import { closeMongo, connectMongo } from "../src/common/database/mongo.js";
+import "../src/common/audit/auditLog.model.js";
 
 await connectMongo();
 
