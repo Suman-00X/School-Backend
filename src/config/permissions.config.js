@@ -1,4 +1,4 @@
-import { ACTIONS, ENTITIES } from "../constants/permissions.constants.js";
+import { ACTIONS, ENTITIES } from "../common/constants/permissions.constants.js";
 
 const ADMIN = "ADMIN";
 const TEACHER = "TEACHER";

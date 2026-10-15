@@ -2,9 +2,9 @@ import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 
-import routes from "./routes/index.js";
+import routes from "./routes.js";
 
-import { errorMiddleware, notFoundMiddleware } from "./middlewares/error.middleware.js";
+import { errorMiddleware, notFoundMiddleware } from "./common/middlewares/error.middleware.js";
 
 const app = express();
 

@@ -1,35 +1,32 @@
-/* Dev only: run the API against a throwaway in-memory MongoDB replica set,
-   seeded with one school and an admin user, and print a token for that admin.
+/* Dev only: run the API against throwaway PostgreSQL + MongoDB, seeded with
+   one school and an admin user, and print a token for that admin.
    Nothing persists after the process exits. Not for production use. */
-import { MongoMemoryReplSet } from "mongodb-memory-server";
 import jwt from "jsonwebtoken";
+import { startInMemoryDatabases } from "./lib/inMemoryDatabases.js";
 
-const replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
+const databases = await startInMemoryDatabases();
 
-process.env.MONGO_URI = replSet.getUri("school_dev");
+process.env.DATABASE_URL = databases.databaseUrl;
+process.env.MONGO_URI = databases.mongoUri;
 process.env.JWT_SECRET ||= "dev-only-secret";
 process.env.NODE_ENV ||= "development";
 
-const { default: mongoose } = await import("mongoose");
-const { default: connectDb } = await import("../src/config/db.config.js");
-const { Tenant, User } = await import("../src/models/index.js");
+const { db, connectPostgres, closePostgres } = await import("../src/database/postgres/client.js");
+const { connectMongo, closeMongo } = await import("../src/database/mongo/client.js");
+const { tenants, users } = await import("../src/database/postgres/schema/index.js");
 const { default: app } = await import("../src/app.js");
 
-await connectDb();
-await mongoose.syncIndexes();
+await connectPostgres();
+await connectMongo();
 
-const tenant = await Tenant.create({ name: "Demo School", code: "DEMO" });
-const admin = await User.create({
-  firstName: "Demo",
-  lastName: "Admin",
-  email: "admin@demo.school",
-  passwordHash: "login-arrives-in-phase-1",
-  role: "ADMIN",
-  tenantId: tenant._id
-});
+const [tenant] = await db.insert(tenants).values({ name: "Demo School", code: "DEMO" }).returning();
+const [admin] = await db
+  .insert(users)
+  .values({ tenantId: tenant.id, firstName: "Demo", lastName: "Admin", email: "admin@demo.school", role: "ADMIN" })
+  .returning();
 
 const token = jwt.sign(
-  { userId: admin._id, tenantId: tenant._id, role: "ADMIN" },
+  { userId: admin.id, tenantId: tenant.id, role: "ADMIN" },
   process.env.JWT_SECRET,
   { expiresIn: "12h" }
 );
@@ -37,14 +34,14 @@ const token = jwt.sign(
 const port = Number(process.env.PORT) || 3000;
 const server = app.listen(port, () => {
   console.log(`\nIn-memory dev server on http://localhost:${port}`);
-  console.log(`Tenant: ${tenant.name} (${tenant._id})`);
+  console.log(`Tenant: ${tenant.name} (${tenant.id})`);
   console.log(`Admin token (12h):\n${token}\n`);
 });
 
 const shutdown = async () => {
   server.close();
-  await mongoose.disconnect();
-  await replSet.stop();
+  await Promise.allSettled([closePostgres(), closeMongo()]);
+  await databases.stop();
   process.exit(0);
 };
 process.on("SIGINT", shutdown);
