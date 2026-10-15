@@ -46,12 +46,16 @@ If one job type grows heavy (e.g. bulk SMS), it can get its own queue later with
 
 Swagger UI loads from unpkg (pinned version). If CDNs are not allowed, vendor `swagger-ui-dist`.
 
-### 🟡 D-05: Error tracking is not wired in
-Sentry (`@sentry/node` v11) pulls in a large OpenTelemetry tree. I left it out.
+### 🟡 D-05: Error tracking: one hook, Sentry optional
+Every unexpected error goes through one function, `reportError()` in `common/observability`:
+- HTTP 500s
+- jobs that fail their **last** attempt (failed attempts that will be retried are only counted)
 
-Errors are logged as structured JSON (pino) with a `requestId`. That `requestId` is also returned in every error response, so support can find the log line.
+Each error is logged with its `requestId` and counted in `/metrics`.
 
-If you want Sentry, add the package and initialise it in `server.js`. `SENTRY_DSN` is already read from the environment.
+Sentry (`@sentry/node`) pulls in a large OpenTelemetry tree, so it is **not** a dependency. It is enabled when you set `SENTRY_DSN` and run `npm install @sentry/node`. Personal data is never sent.
+
+The Sentry path itself is untested (no DSN here). Try it once on staging.
 
 ### 🟢 D-06: `uuid` pinned via npm `overrides`
 `exceljs` depends on an old `uuid` with a moderate advisory. The advisory doesn't affect how `exceljs` uses it, but I pinned `uuid@^11` anyway, and verified that `exceljs` still works.
@@ -219,9 +223,116 @@ That's fine for a school of a few thousand students. For very large schools, swi
 Both use the same status weights (D-07).
 
 ### 🟡 D-31: Report card PDF is a clean default layout
-It has the school name, student details, a marks table, totals, grade, result, rank and class average. There's no logo or per-school branding yet. Logo upload exists from Phase 6 (`tenants.logoKey`), but the PDF doesn't use it.
+It has the school name, student details, a marks table, totals, grade, result, rank and class average.
+
+**Update (Phase 6):** the school logo (`PUT /administration/settings/logo`) now appears on report cards and fee receipts, with the school's address and contact line in a shared letterhead (`common/export/branding.js`).
 
 Schools usually want their own report-card format. Treat the template as a per-school setting before launch.
 
 ### 🟢 D-32: Audit log viewer
 `GET /administration/audit-logs` is **ADMIN only**. Filters: user, record, method, date range, and permission, given either exactly or as a prefix such as `finance.`.
+
+---
+
+## Phase 6: additional modules
+
+### 🟡 D-33: How files are stored and who can reach them
+- **Bytes:** in the storage driver (local disk or S3).
+- **Metadata:** in MongoDB (`stored_files`): owner, category, type, size, uploader.
+- **Downloads:** always through 15-minute signed links. Storage keys are never returned.
+- **Owners:** files belong to an owner: school, student, staff member, homework, submission, announcement, or general.
+  - `/api/v1/files` is for the office (ADMIN, PRINCIPAL, STAFF upload and delete; every staff role reads): student documents, staff documents, general files.
+  - Homework files are reached **only** through homework endpoints, so homework access rules apply. The school logo goes only through settings.
+- **Deleting a file removes its bytes immediately.**
+
+If you need retention (for example, admission documents kept for N years), switch to soft delete plus a purge job.
+
+### 🟢 D-34: Allowed file types and sizes
+| Category | Types | Max |
+|---|---|---|
+| LOGO | JPEG, PNG, WebP | 2 MB |
+| PHOTO | JPEG, PNG, WebP | 5 MB |
+| DOCUMENT, ATTACHMENT | PDF, Word, Excel, PowerPoint (old and new), text, CSV, images | 10 MB |
+
+The declared type must also match the file's signature (magic bytes). For example, HTML renamed to `.png` is rejected. Downloads are sent as attachments with `nosniff`. There is no virus scanning; add ClamAV or S3 malware scanning before accepting files from parents at scale.
+
+### 🟡 D-35: Homework rules
+- **Who sets it:** a teacher sets homework only for a section and subject they teach (the same scope as marks, D-11). ADMIN and PRINCIPAL can set any homework.
+- **Due date:**
+  - It cannot be in the past.
+  - Late submission is **off by default**; teachers can switch it on per homework. Late work is marked `LATE`.
+- **Submitting:**
+  - Only the **student** submits. Parents can view but not submit.
+  - A submission is text and/or one file.
+  - The student can resubmit until it is graded. **Returned** work (`RETURNED`, "redo this") opens it again.
+- **Marks** are optional (`maxMarks`). Awarded marks cannot exceed the maximum.
+- **Deleting:** homework with submissions cannot be deleted.
+- **Notifications:** new homework goes to the section's students and their parents. Graded or returned work goes to the student and their parents. Both are in-app only, to keep SMS costs down.
+
+### 🟢 D-36: The logo uses `PUT`
+`PUT /administration/settings/logo` (multipart) replaces the school's one logo. This is the one place the API uses `PUT`. It is correct REST for replacing a singleton, and it is idempotent. `GET /administration/settings` returns a signed `logoUrl`.
+
+### 🔴 D-37: PDFs cannot print non-Latin names yet
+Report cards and receipts use PDF's built-in Helvetica. Names in Devanagari, Tamil, Bengali, Arabic and other scripts will print as blanks or boxes.
+
+**Fix:** bundle Noto Sans plus the Noto fonts for the scripts you need (1–5 MB each), and register them in `common/export`.
+
+**Your call:** which regions or languages you are launching in. See OPERATIONS.md › languages.
+
+---
+
+## Phase 7: production readiness
+
+### 🟡 D-38: Archived academic years are read-only, enforced in the database
+- **Archive:** `POST /academics/academic-years/:id/archival`, ADMIN only. The year must have ended and must not be current. `DELETE …/archival` restores it.
+- **Enforcement:** triggers on every academic table reject writes to an archived year with a 409 ("Academic year 2025-26 is archived and read-only"). That covers sections, enrollments, exams, marks, attendance, timetable, calendar and homework, so jobs, imports and future modules cannot bypass it. A middleware also rejects writes early when the year comes from the `X-Academic-Year-Id` header.
+- **Fees are not frozen:** arrears from an old year must stay payable.
+
+The alternative was "archive = move rows to cold storage". It isn't needed at school-sized data volumes; indexes keep old years cheap.
+
+### 🟢 D-39: Database rules can return user-facing errors
+A trigger can raise SQLSTATE `ZA` + HTTP status (for example `ZA409`). The error handler then returns that status with the trigger's message. No other database message ever reaches a user (D-27).
+
+### 🟢 D-40: What is cached
+- **Cached:** the school profile (already) and the current academic year, read on nearly every academic request. Each is cached for 5 minutes and dropped on every change.
+- **Not cached:** lists of classes, subjects and so on. They are small indexed queries, and stale lists cause subtle bugs.
+- The in-process cache now stores JSON like Redis does, so dev and production behave the same.
+- With more than one API instance, Redis is required (D-02); otherwise one instance could serve a stale year for up to 5 minutes.
+
+### 🟢 D-41: Metrics without a dependency
+`GET /metrics` serves Prometheus metrics: HTTP by route template, jobs, PostgreSQL pool, memory and event loop. It is a 100-line built-in registry instead of `prom-client`.
+- It is **off** unless `METRICS_TOKEN` is set.
+- Starter alerts are in `ops/prometheus/alerts.yml`.
+
+### 🟡 D-42: Deployment is container-first; registry and host not chosen
+- **Built:** a Dockerfile (Node 24, non-root, tini, healthcheck) and `docker-compose.yml` with api, worker, a one-off migrate service, PostgreSQL 18, MongoDB 8 and Redis 8.
+- **CI:** GitHub Actions runs format, lint, a migration drift check, the e2e suite on Node 22 and 24, and an image build.
+- **Untested here:** Docker is not installed on this machine, so the image and compose file have **not** been built. CI will build the image on the first push.
+- **Your call:** the image registry and host (ECS, Cloud Run, Kubernetes, Fly, or a VM), and whether to auto-deploy to staging. Pushing images needs those secrets.
+
+The engines field is now Node ≥ 22, because Node 20 reached end of life in April 2026.
+
+### 🟡 D-43: Schools are onboarded by an operator CLI
+`npm run school:create -- --name … --code … --admin-email …` creates the school and its first admin, and prints a one-hour token.
+
+Self-service sign-up and invitations belong to Phase 2 (D-01).
+
+### 🔴 D-44: Backup targets and the first restore drill
+- **Proposed targets:**
+  - Recovery point objective (RPO, maximum data loss) of 15 minutes or less, using managed point-in-time recovery.
+  - Recovery time objective (RTO, maximum downtime) of 2 hours or less.
+  - Nightly portable dumps kept for 14 days.
+- **Scripts:** `npm run backup` and `npm run restore` (checksummed, with a confirmation prompt).
+  - Their flow was tested with stand-in tools only. This machine has no PostgreSQL 18 client or MongoDB tools.
+  - **Run one real restore drill on staging before launch** (steps in OPERATIONS.md).
+- Confirm the targets match what you promise schools.
+
+### 🔴 D-45: Row-level security is designed, not built
+Tenant isolation today is one layer: every repository query filters `tenant_id`, and there is a cross-tenant test.
+
+PostgreSQL row-level security would be a second layer, but it changes the request lifecycle: one transaction and one connection per request. The design and cost (3–5 days) are in OPERATIONS.md.
+
+**Recommendation:** build it right after Phase 2, before the first real school's data goes in.
+
+### 🟡 D-46: API messages stay English; clients localise by error code
+Every error has a stable `error.code` and field-level details. Localising server messages is only worth it for notification templates (SMS and email to parents). The plan is in OPERATIONS.md › languages.
