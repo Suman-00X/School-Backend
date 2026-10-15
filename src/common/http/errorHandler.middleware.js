@@ -1,4 +1,5 @@
 import { logger } from "../logging/logger.js";
+import { reportError } from "../observability/errorReporter.js";
 import { AppError, ERROR_CODES } from "./errors.js";
 
 /* PostgreSQL column -> API field name (class_order -> classOrder) */
@@ -106,6 +107,7 @@ export const errorHandler = (err, req, res, next) => {
 
   if (!appError) {
     (req.log ?? logger).error({ err }, "Unhandled error");
+    reportError(err, { source: "http", requestId, route: req.routePattern, tenantId: req.context?.tenantId });
     return res.status(500).json({
       success: false,
       message: "Something went wrong. Please try again later.",

@@ -40,7 +40,8 @@ export const startHarness = async () => {
     PAYMENT_PROVIDER: "mock",
     STORAGE_DRIVER: "local",
     STORAGE_LOCAL_DIR: storageDir,
-    RATE_LIMIT_MAX: "100000"
+    RATE_LIMIT_MAX: "100000",
+    METRICS_TOKEN: "test-metrics-token"
   });
   delete process.env.REDIS_URL;
 

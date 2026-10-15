@@ -1,5 +1,7 @@
 import env from "../config/env.config.js";
 import { logger } from "../logging/logger.js";
+import { reportError } from "../observability/errorReporter.js";
+import { counter, histogram } from "../observability/metrics.js";
 import { createMemoryDriver } from "./memory.driver.js";
 
 /* Background jobs.
@@ -15,9 +17,29 @@ const definitions = new Map();
 const schedules = new Map();
 let driver = null;
 
+const jobRuns = counter("jobs_total", "Job attempts by outcome", ["job", "outcome"]);
+const jobDuration = histogram("job_duration_seconds", "Job attempt duration", ["job"]);
+
+/* Every attempt is measured; a job that fails its last attempt is reported */
+const instrument = (name, handler, attempts) => async (data, info) => {
+  const start = process.hrtime.bigint();
+  try {
+    const result = await handler(data, info);
+    jobRuns.inc({ job: name, outcome: "completed" });
+    return result;
+  } catch (error) {
+    const final = info.attempt >= attempts;
+    jobRuns.inc({ job: name, outcome: final ? "failed" : "retried" });
+    if (final) reportError(error, { source: "job", job: name, tenantId: data?.tenantId });
+    throw error;
+  } finally {
+    jobDuration.observe({ job: name }, Number(process.hrtime.bigint() - start) / 1e9);
+  }
+};
+
 export const defineJob = (name, handler, { attempts = 3, backoffMs = 5000 } = {}) => {
   if (definitions.has(name)) throw new Error(`Job "${name}" is already defined`);
-  definitions.set(name, { handler, attempts, backoffMs });
+  definitions.set(name, { handler: instrument(name, handler, attempts), attempts, backoffMs });
   return { name, enqueue: (data, options) => enqueue(name, data, options) };
 };
 

@@ -158,3 +158,29 @@ describe("year archiving", () => {
     await request("DELETE", `${A}/academic-years/${world.y0.id}/archival`).then(r => assert.equal(r.status, 409));
   });
 });
+
+describe("operations", () => {
+  it("exposes Prometheus metrics by route template, behind a token", async () => {
+    assert.equal((await request("GET", "/metrics", { as: null })).status, 404);
+    assert.equal(
+      (await request("GET", "/metrics", { as: null, headers: { authorization: "Bearer wrong" } })).status,
+      404
+    );
+
+    const res = await request("GET", "/metrics", { as: null, headers: { authorization: "Bearer test-metrics-token" } });
+    assert.equal(res.status, 200);
+    const text = res.buffer.toString();
+    assert.match(text, /# TYPE school_http_requests_total counter/);
+    assert.match(
+      text,
+      /school_http_requests_total\{method="POST",route="\/api\/v1\/academics\/sections",status="201"\} \d+/
+    );
+    assert.match(
+      text,
+      /school_http_request_duration_seconds_bucket\{method="GET",route="\/api\/v1\/academics\/academic-years\/:academicYearId",le="0\.1"\} \d+/
+    );
+    assert.match(text, /school_jobs_total\{job="communication\.deliver",outcome="completed"\} \d+/);
+    assert.match(text, /school_pg_pool_connections\{state="total"\} \d+/);
+    assert.doesNotMatch(text, /route="\/api\/v1\/academics\/sections\/[0-9a-f]{8}-/, "never raw ids");
+  });
+});

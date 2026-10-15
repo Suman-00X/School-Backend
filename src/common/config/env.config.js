@@ -70,5 +70,7 @@ export default {
     razorpayWebhookSecret: str("RAZORPAY_WEBHOOK_SECRET")
   },
 
-  sentryDsn: str("SENTRY_DSN")
+  sentryDsn: str("SENTRY_DSN"),
+  /* GET /metrics needs "Authorization: Bearer <token>"; unset: the endpoint is off */
+  metricsToken: str("METRICS_TOKEN")
 };

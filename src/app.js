@@ -1,7 +1,11 @@
 import express from "express";
 import { sql } from "drizzle-orm";
 import mongoose from "mongoose";
+import { timingSafeEqual } from "node:crypto";
+import env from "./common/config/env.config.js";
 import { db } from "./common/database/postgres.js";
+import { httpMetrics } from "./common/observability/httpMetrics.middleware.js";
+import { renderMetrics } from "./common/observability/metrics.js";
 import { requestLogger } from "./common/logging/requestLogger.middleware.js";
 import { securityMiddlewares } from "./common/http/security.js";
 import { errorHandler, notFoundHandler } from "./common/http/errorHandler.middleware.js";
@@ -15,6 +19,17 @@ app.disable("x-powered-by");
 app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS ?? 0));
 
 app.use(requestLogger);
+app.use(httpMetrics);
+
+/* Prometheus scrape endpoint: before rate limiting, off unless METRICS_TOKEN is set */
+const sameSecret = (given, expected) =>
+  given.length === expected.length && timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+app.get("/metrics", (req, res, next) => {
+  const token = req.get("authorization")?.replace(/^Bearer /, "") ?? "";
+  if (!env.metricsToken || !sameSecret(token, env.metricsToken)) return next();
+  res.type("text/plain; version=0.0.4").send(renderMetrics());
+});
+
 app.use(securityMiddlewares());
 
 /* Raw bodies are kept for routes that verify signatures (payment webhooks) */

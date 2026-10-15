@@ -2,6 +2,7 @@ import { closeMongo, connectMongo } from "./common/database/mongo.js";
 import { closePostgres, connectPostgres, initPostgres } from "./common/database/postgres.js";
 import { closeCache, initCache } from "./common/cache/cache.js";
 import { startJobs, stopJobs } from "./common/jobs/queue.js";
+import { flushErrorReporting, initErrorReporting } from "./common/observability/errorReporter.js";
 import * as schema from "./database.schema.js";
 import "./jobs.js";
 
@@ -9,6 +10,7 @@ import "./jobs.js";
    runJobs: process background jobs in this process. With Redis, only the
    worker does; without Redis the API runs them in-process. */
 export const startInfrastructure = async ({ runJobs = !process.env.REDIS_URL } = {}) => {
+  await initErrorReporting();
   initPostgres(schema);
   await connectPostgres();
   await connectMongo();
@@ -18,7 +20,7 @@ export const startInfrastructure = async ({ runJobs = !process.env.REDIS_URL } =
 
 export const stopInfrastructure = async () => {
   await stopJobs();
-  await Promise.allSettled([closePostgres(), closeMongo(), closeCache()]);
+  await Promise.allSettled([closePostgres(), closeMongo(), closeCache(), flushErrorReporting()]);
 };
 
 /* Backwards-compatible names used by scripts */
