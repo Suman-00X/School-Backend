@@ -1,0 +1,18 @@
+# Routes missing (important)
+
+You currently cannot promote students.
+
+Add this route:
+
+```
+POST /student-section-map/promote
+```
+
+Controller:
+
+```
+studentSectionController.promoteStudents
+```
+
+Purpose:
+Create next academic year mappings in bulk.

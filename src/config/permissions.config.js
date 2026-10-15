@@ -1,0 +1,62 @@
+import { ACTIONS, ENTITIES } from "../constants/permissions.constants.js";
+
+export const PERMISSIONS = {
+  [ENTITIES.USER]: {
+    [ACTIONS.CREATE]: ["ADMIN"],
+    [ACTIONS.READ]: ["ADMIN"],
+    [ACTIONS.UPDATE]: ["ADMIN"],
+    [ACTIONS.DELETE]: ["ADMIN"]
+  },
+
+  [ENTITIES.TEACHER]: {
+    [ACTIONS.CREATE]: ["ADMIN"],
+    [ACTIONS.READ]: ["ADMIN"],
+    [ACTIONS.UPDATE]: ["ADMIN"]
+  },
+
+  [ENTITIES.PARENT]: {
+    [ACTIONS.CREATE]: ["ADMIN"],
+    [ACTIONS.READ]: ["ADMIN"],
+    [ACTIONS.UPDATE]: ["ADMIN"]
+  },
+
+  [ENTITIES.STUDENT]: {
+    [ACTIONS.CREATE]: ["ADMIN"],
+    [ACTIONS.READ]: ["ADMIN", "TEACHER"],
+    [ACTIONS.UPDATE]: ["ADMIN"],
+    [ACTIONS.BULK]: ["ADMIN"]
+  },
+
+  [ENTITIES.ACADEMIC_YEAR]: {
+    [ACTIONS.CREATE]: ["ADMIN"],
+    [ACTIONS.READ]: ["ADMIN"],
+    [ACTIONS.UPDATE]: ["ADMIN"]
+  },
+
+  [ENTITIES.CLASS]: {
+    [ACTIONS.CREATE]: ["ADMIN"],
+    [ACTIONS.READ]: ["ADMIN"],
+    [ACTIONS.UPDATE]: ["ADMIN"],
+    [ACTIONS.BULK]: ["ADMIN"]
+  },
+
+  [ENTITIES.SECTION]: {
+    [ACTIONS.CREATE]: ["ADMIN"],
+    [ACTIONS.READ]: ["ADMIN"],
+    [ACTIONS.UPDATE]: ["ADMIN"],
+    [ACTIONS.BULK]: ["ADMIN"]
+  },
+
+  [ENTITIES.SUBJECT]: {
+    [ACTIONS.CREATE]: ["ADMIN"],
+    [ACTIONS.READ]: ["ADMIN"],
+    [ACTIONS.UPDATE]: ["ADMIN"],
+    [ACTIONS.BULK]: ["ADMIN"]
+  },
+
+  [ENTITIES.MARKS]: {
+    [ACTIONS.CREATE]: ["TEACHER"],
+    [ACTIONS.READ]: ["ADMIN", "TEACHER"],
+    [ACTIONS.BULK]: ["TEACHER"]
+  }
+};

@@ -1,0 +1,14 @@
+# Ignore the dependency directory
+node_modules/
+
+# Ignore environment variables and sensitive keys
+.env
+.env.local
+.env.*
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+*.log
