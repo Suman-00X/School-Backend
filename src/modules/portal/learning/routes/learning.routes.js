@@ -24,6 +24,13 @@ router.get(
   controller.reportCards
 );
 
+router.get(
+  "/students/:studentId/report-cards/pdf",
+  authorize(can.students),
+  validate(rules.reportCardPdf),
+  controller.reportCardPdf
+);
+
 router.get("/calendar", authorize(can.calendar), validate(rules.calendar), inYear, controller.calendar);
 
 router.get("/teaching/timetable", authorize(can.teaching), controller.teacherTimetable);

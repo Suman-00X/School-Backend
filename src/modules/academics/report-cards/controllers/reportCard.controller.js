@@ -1,4 +1,6 @@
+import { sendFile } from "../../../../common/export/exporters.js";
 import { ok } from "../../../../common/http/responses.js";
+import { reportCardPdfService } from "../services/reportCardPdf.service.js";
 import { reportCardService } from "../services/reportCard.service.js";
 
 export const reportCardController = {
@@ -14,5 +16,11 @@ export const reportCardController = {
       res,
       await reportCardService.forStudent(req.context, req.params.studentId, req.query),
       "Report card retrieved successfully"
-    )
+    ),
+  pdf: async (req, res) => {
+    const { buffer, fileName } = await reportCardPdfService.render(req.context, req.params.studentId, {
+      examId: req.query.examId
+    });
+    return sendFile(res, { buffer, fileName, format: "pdf" });
+  }
 };

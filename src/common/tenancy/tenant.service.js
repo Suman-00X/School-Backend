@@ -16,5 +16,22 @@ export const getTenant = tenantId =>
 
 export const invalidateTenant = tenantId => cache.del(key(tenantId));
 
+/* Update the school's profile and drop the cached copy */
+export const updateTenant = async (tenantId, changes) => {
+  const [tenant] = await db.update(tenants).set(changes).where(eq(tenants.id, tenantId)).returning();
+  await invalidateTenant(tenantId);
+  return tenant ?? null;
+};
+
 /* Today's date in the school's time zone */
 export const tenantToday = async tenantId => todayIn((await getTenant(tenantId))?.timezone ?? "UTC");
+
+/* Valid IANA time zone? */
+export const isTimeZone = value => {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+};

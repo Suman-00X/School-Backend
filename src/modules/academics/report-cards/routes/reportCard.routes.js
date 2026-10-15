@@ -10,5 +10,6 @@ const router = createRouter();
 
 router.get("/sections/:sectionId", authorize(can.read), validate(rules.section), controller.section);
 router.get("/students/:studentId", authorize(can.read), validate(rules.student), controller.student);
+router.get("/students/:studentId/pdf", authorize(can.read), validate(rules.pdf), controller.pdf);
 
 export default router;

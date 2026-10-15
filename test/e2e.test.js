@@ -13,5 +13,6 @@ await import("./suites/04-exams-marks.suite.js");
 await import("./suites/05-core-academics.suite.js");
 await import("./suites/06-portal-imports.suite.js");
 await import("./suites/07-finance-communication.suite.js");
+await import("./suites/08-reports-administration.suite.js");
 /* keep last */
 await import("./suites/99-year-end.suite.js");

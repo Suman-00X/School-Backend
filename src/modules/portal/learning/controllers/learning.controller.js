@@ -1,3 +1,4 @@
+import { sendFile } from "../../../../common/export/exporters.js";
 import { ok, paginated } from "../../../../common/http/responses.js";
 import { learningService } from "../services/learning.service.js";
 
@@ -20,6 +21,11 @@ export const learningController = {
       await learningService.reportCards(req.context, req.params.studentId, req.query),
       "Report cards retrieved successfully"
     ),
+
+  reportCardPdf: async (req, res) => {
+    const { buffer, fileName } = await learningService.reportCardPdf(req.context, req.params.studentId, req.query);
+    return sendFile(res, { buffer, fileName, format: "pdf" });
+  },
 
   calendar: async (req, res) =>
     paginated(res, await learningService.calendar(req.context, req.query), "Calendar retrieved successfully"),

@@ -193,3 +193,35 @@ The audience is a role list, optionally narrowed by class or section for student
 The tests caught a race: publish, withdraw and re-publish in quick succession notified everyone twice, because two subscriber jobs checked "already sent?" at the same moment.
 
 Fix: `common/jobs/claims.js` `claimOnce(key)`, an atomic insert on a unique index in MongoDB with a 90-day expiry. Results notices, absence alerts and fee reminders all use it, so retries, duplicate events and parallel workers can't double-send.
+
+---
+
+## Phase 5: reports and analytics
+
+### 🟡 D-28: Reports read other modules' tables directly
+`reports/*/repositories` run aggregate SQL straight over academics, finance and users tables. It's a *read model* and a deliberate exception to "other modules only through their `index.js`", because one SQL `GROUP BY` beats loading thousands of rows through services.
+
+**Cost:** renaming a column in another module means updating the report SQL, and the test suite catches it.
+
+At scale, point these queries at a read replica or materialized views.
+
+### 🟡 D-29: Exports are synchronous
+Files are built in the request.
+- Attendance grids are capped at 62 days.
+- Roster, collections and defaulters exports are not capped.
+
+That's fine for a school of a few thousand students. For very large schools, switch to "export job → stored file → signed download link". The storage layer and signed URLs needed for that already exist.
+
+### 🟢 D-30: Two attendance percentages, measured differently
+- **Per student** (academics, portal): attended ÷ *working days* in the range. Days nobody marked count against nothing, but they're reported as `unmarked`.
+- **Dashboards** (per section, daily trend): attended ÷ *registers taken*. This reflects how attendance actually went where it was recorded.
+
+Both use the same status weights (D-07).
+
+### 🟡 D-31: Report card PDF is a clean default layout
+It has the school name, student details, a marks table, totals, grade, result, rank and class average. There's no logo or per-school branding yet. Logo upload exists from Phase 6 (`tenants.logoKey`), but the PDF doesn't use it.
+
+Schools usually want their own report-card format. Treat the template as a per-school setting before launch.
+
+### 🟢 D-32: Audit log viewer
+`GET /administration/audit-logs` is **ADMIN only**. Filters: user, record, method, date range, and permission, given either exactly or as a prefix such as `finance.`.

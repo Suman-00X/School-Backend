@@ -8,6 +8,7 @@ export const learningValidators = {
   student: { params },
   attendance: { params, query: z.object({ from: date().optional(), to: date().optional() }) },
   reportCards: { params, query: z.object({ examId: id().optional(), academicYearId: id().optional() }) },
+  reportCardPdf: { params, query: z.object({ examId: id() }) },
   calendar: {
     query: listQuery({
       from: date().optional(),
