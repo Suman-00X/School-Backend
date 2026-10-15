@@ -5,7 +5,10 @@ import { authMiddleware } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
-router.use("/users", authMiddleware, userRoutes);
-router.use("/academic", authMiddleware, academicRoutes);
+router.use(authMiddleware);
+
+/* /api/users, /api/teachers, /api/parents, /api/students, /api/student-parent-map */
+router.use("/", userRoutes);
+router.use("/academic", academicRoutes);
 
 export default router;

@@ -1,6 +1,6 @@
 import * as userQueries from "../../queries/user.queries.js";
-import { successResponse } from "../../responses/success.response.js";
-import { errorResponse } from "../../responses/error.response.js";
+import { successResponse, errorResponse } from "../../responses/index.js";
+import { notFound } from "../../utils/appError.util.js";
 
 export const createStudent = async (req, res, next) => {
   try {
@@ -8,7 +8,8 @@ export const createStudent = async (req, res, next) => {
       req.user.tenantId,
       req.body
     );
-    return successResponse(res, student, "Student created successfully");
+    res.locals.entityId = student._id;
+    return successResponse(res, student, "Student created successfully", 201);
   } catch (error) {
     return errorResponse(res, error, next);
   }
@@ -29,6 +30,7 @@ export const getStudentById = async (req, res, next) => {
       req.user.tenantId,
       req.params.studentId
     );
+    if (!data) throw notFound("Student");
     return successResponse(res, data);
   } catch (error) {
     return errorResponse(res, error, next);
@@ -42,6 +44,7 @@ export const updateStudent = async (req, res, next) => {
       req.params.studentId,
       req.body
     );
+    if (!data) throw notFound("Student");
     res.locals.entityId = data._id;
     return successResponse(res, data, "Student updated");
   } catch (error) {

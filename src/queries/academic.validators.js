@@ -2,8 +2,6 @@ import Section from "../models/academic-db/Section.js";
 import StudentSectionMap from "../models/academic-db/StudentSectionMap.js";
 import TeacherSectionSubjectMap from "../models/academic-db/TeacherSectionSubjectMap.js";
 import ClassSectionSubjectMap from "../models/academic-db/ClassSectionSubjectMap.js";
-import Exam from "../models/academic-db/exam-db/Exam.js";
-import ExamSectionSubjectMap from "../models/academic-db/exam-db/ExamSectionSubjectMap.js";
 
 /* ======================================================
    STUDENT ADMISSION
@@ -18,7 +16,7 @@ export const isStudentAlreadyAdmitted = async (tenantId, academicYearId, student
   });
 };
 
-export const isSectionInAcademicYear = async (tenantId, sectionId, academicYearId) => {
+export const isSectionInAcademicYear = async (tenantId, academicYearId, sectionId) => {
   return Section.exists({
     _id: sectionId,
     tenantId,
@@ -41,7 +39,7 @@ export const isRollNumberTaken = async (tenantId, academicYearId, sectionId, rol
    CLASS - SECTION - SUBJECT
 ====================================================== */
 
-export const isSubjectAlreadyMappedToSection = async (
+export const isSubjectMappedToSection = async (
   tenantId,
   academicYearId,
   sectionId,
@@ -60,51 +58,18 @@ export const isSubjectAlreadyMappedToSection = async (
    TEACHER ALLOCATION
 ====================================================== */
 
-export const isTeacherAlreadyAssigned = async (
+/* One teacher per subject per section per year */
+export const isSubjectTeacherAssigned = async (
   tenantId,
   academicYearId,
-  teacherId,
   sectionId,
   subjectId
 ) => {
   return TeacherSectionSubjectMap.exists({
     tenantId,
     academicYearId,
-    teacherId,
     sectionId,
     subjectId,
-    isActive: true
-  });
-};
-
-export const isSubjectMappedToSection = async (
-  tenantId,
-  academicYearId,
-  sectionId,
-  subjectId
-) => {
-  return ClassSectionSubjectMap.exists({
-    tenantId,
-    academicYearId,
-    sectionId,
-    subjectId,
-    isActive: true
-  });
-};
-
-/* ======================================================
-   EXAM
-====================================================== */
-
-export const doesExamBelongToAcademicYear = async (
-  tenantId,
-  examId,
-  academicYearId
-) => {
-  return Exam.exists({
-    _id: examId,
-    tenantId,
-    academicYearId,
     isActive: true
   });
 };
@@ -112,14 +77,6 @@ export const doesExamBelongToAcademicYear = async (
 /* ======================================================
    MARKS
 ====================================================== */
-
-export const doesExamStructureExist = async (tenantId, examSectionSubjectId) => {
-  return ExamSectionSubjectMap.exists({
-    _id: examSectionSubjectId,
-    tenantId,
-    isActive: true
-  });
-};
 
 export const isStudentInSection = async (
   tenantId,

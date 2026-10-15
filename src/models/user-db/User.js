@@ -54,4 +54,12 @@ userSchema.index(
   { tenantId: 1, role: 1 }
 );
 
+/* Never send password hashes to clients */
+userSchema.set("toJSON", {
+  transform: (_doc, ret) => {
+    delete ret.passwordHash;
+    return ret;
+  }
+});
+
 export default mongoose.model("User", userSchema);

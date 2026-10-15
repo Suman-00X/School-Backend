@@ -42,7 +42,7 @@ router.get("/students/:studentId", permissionMiddleware("STUDENT", "READ"), stud
 router.put("/students/:studentId", permissionMiddleware("STUDENT", "UPDATE"), auditMiddleware("STUDENT", "UPDATE"), studentProfileController.updateStudent);
 
 /* Student admission */
-router.post("/students/bulk", permissionMiddleware("STUDENT", "CREATE"), auditMiddleware("STUDENT_ADMISSION", "CREATE"), studentAdmissionController.addStudent);
+router.post("/students/admission", permissionMiddleware("STUDENT", "CREATE"), auditMiddleware("STUDENT_ADMISSION", "CREATE"), studentAdmissionController.addStudent);
 
 /* Student–Parent mapping */
 router.post("/student-parent-map", permissionMiddleware("STUDENT_PARENT", "CREATE"), auditMiddleware("STUDENT_PARENT", "CREATE"), studentParentController.mapStudentParent);

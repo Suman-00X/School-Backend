@@ -8,7 +8,7 @@ export const getNextSerial = async ({
   const counter = await SerialCounter.findOneAndUpdate(
     { tenantId, scope },
     { $inc: { seq: 1 } },
-    { new: true, upsert: true, session }
+    { returnDocument: "after", upsert: true, session }
   );
 
   return counter.seq;

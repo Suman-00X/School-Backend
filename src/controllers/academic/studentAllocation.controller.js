@@ -1,30 +1,68 @@
+import Student from "../../models/user-db/Student.js";
 import * as academicQueries from "../../queries/academic.queries.js";
-import { successResponse, errorResponse } from "../../responses/index.js";
 import * as academicValidator from "../../queries/academic.validators.js";
+import { getSectionContext } from "../../services/academicContext.service.js";
+import { generateStudentRollNumber } from "../../services/idFormat.service.js";
+import { successResponse, errorResponse } from "../../responses/index.js";
+import { badRequest, conflict, notFound } from "../../utils/appError.util.js";
 
-/* Map student to section (promotion / transfer / new admission) */
+/* Map an existing student to a section of the resolved academic year */
 export const mapStudentToSection = async (req, res, next) => {
   try {
-    const exists = await academicValidator.isStudentAlreadyAdmitted(
-      req.user.tenantId,
-      req.body.academicYearId,
-      req.body.studentId
-    );
-    if (exists) throw new Error("Student already mapped for this academic year");
+    const tenantId = req.user.tenantId;
+    const academicYearId = req.academicYearId;
+    const { studentId, sectionId, admissionType = "NEW", description } = req.body;
 
-    const data = await academicQueries.mapStudentToSection(
-      req.user.tenantId,
-      req.academicYearId,
-      req.body
+    const student = await Student.exists({ _id: studentId, tenantId, isActive: true });
+    if (!student) throw badRequest("Invalid student");
+
+    const { section, yearYY, classSequence } = await getSectionContext(
+      tenantId,
+      academicYearId,
+      sectionId
     );
+
+    const exists = await academicValidator.isStudentAlreadyAdmitted(
+      tenantId,
+      academicYearId,
+      studentId
+    );
+    if (exists) throw conflict("Student already mapped for this academic year");
+
+    const rollNumber =
+      req.body.rollNumber ??
+      (await generateStudentRollNumber({
+        tenantId,
+        academicYearYY: yearYY,
+        classSequence,
+        sectionName: section.sectionName
+      }));
+
+    const rollTaken = await academicValidator.isRollNumberTaken(
+      tenantId,
+      academicYearId,
+      sectionId,
+      rollNumber
+    );
+    if (rollTaken) throw conflict("Roll number already exists in section");
+
+    const data = await academicQueries.mapStudentToSection(tenantId, {
+      studentId,
+      academicYearId,
+      sectionId,
+      rollNumber,
+      admissionType,
+      description,
+      status: "ACTIVE"
+    });
     res.locals.entityId = data._id;
-    return successResponse(res, data, "Student mapped to section");
+    return successResponse(res, data, "Student mapped to section", 201);
   } catch (e) {
     return errorResponse(res, e, next);
   }
 };
 
-/* Get students of section (ONLY CURRENT YEAR) */
+/* Get students of section in the resolved academic year */
 export const getStudentsBySection = async (req, res, next) => {
   try {
     return successResponse(
@@ -40,15 +78,34 @@ export const getStudentsBySection = async (req, res, next) => {
   }
 };
 
-/* Update mapping (change section / status) */
+/* Update mapping (change section / roll number / status) */
 export const updateStudentSectionMap = async (req, res, next) => {
   try {
-    const data = await academicQueries.updateStudentSectionMap(
-      req.user.tenantId,
-      req.academicYearId,
-      req.params.mapId,
-      req.body
+    const tenantId = req.user.tenantId;
+    const academicYearId = req.academicYearId;
+    const { sectionId, rollNumber, status, admissionType, description } = req.body;
+
+    if (sectionId) {
+      const validSection = await academicValidator.isSectionInAcademicYear(
+        tenantId,
+        academicYearId,
+        sectionId
+      );
+      if (!validSection) throw badRequest("Section does not belong to academic year");
+    }
+
+    const update = Object.fromEntries(
+      Object.entries({ sectionId, rollNumber, status, admissionType, description })
+        .filter(([, value]) => value !== undefined)
     );
+
+    const data = await academicQueries.updateStudentSectionMap(
+      tenantId,
+      academicYearId,
+      req.params.mapId,
+      update
+    );
+    if (!data) throw notFound("Student section mapping");
     res.locals.entityId = data._id;
     return successResponse(res, data, "Student section updated");
   } catch (e) {

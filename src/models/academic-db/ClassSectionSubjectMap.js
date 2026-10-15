@@ -44,13 +44,13 @@ const classSectionSubjectMapSchema = new mongoose.Schema(
 /* Subject once per section per year */
 classSectionSubjectMapSchema.index(
   { tenantId: 1, academicYearId: 1, sectionId: 1, subjectId: 1 },
-  { unique: true }
+  { unique: true, partialFilterExpression: { isActive: true } }
 );
 
 /* Display code must be unique in a section (MA10A etc) */
 classSectionSubjectMapSchema.index(
   { tenantId: 1, academicYearId: 1, sectionId: 1, displayCode: 1 },
-  { unique: true }
+  { unique: true, partialFilterExpression: { isActive: true } }
 );
 
 /* Fetch timetable of a section */

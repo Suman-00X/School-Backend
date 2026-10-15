@@ -4,6 +4,9 @@ import Student from "../models/user-db/Student.js";
 import Parent from "../models/user-db/Parent.js";
 import StudentParentMap from "../models/user-db/StudentParentMap.js";
 import { getPagination } from "../utils/pagination.util.js";
+import { sanitizeUpdate } from "../utils/sanitize.util.js";
+
+const UPDATE_OPTIONS = { returnDocument: "after", runValidators: true };
 
 /* ===================== USERS ===================== */
 
@@ -38,16 +41,16 @@ export const getUserById = async (tenantId, userId) => {
 export const updateUser = async (tenantId, userId, payload) => {
   return User.findOneAndUpdate(
     { _id: userId, tenantId, isActive: true },
-    payload,
-    { new: true }
+    sanitizeUpdate(payload),
+    { ...UPDATE_OPTIONS, projection: { passwordHash: 0 } }
   ).lean();
 };
 
 export const deactivateUser = async (tenantId, userId) => {
   return User.findOneAndUpdate(
     { _id: userId, tenantId, isActive: true },
-    { isActive: false },
-    { new: true }
+    { isActive: false, status: "INACTIVE" },
+    { returnDocument: "after", projection: { passwordHash: 0 } }
   ).lean();
 };
 
@@ -91,8 +94,8 @@ export const getTeacherById = async (tenantId, teacherId) => {
 export const updateTeacher = async (tenantId, teacherId, payload) => {
   return Teacher.findOneAndUpdate(
     { _id: teacherId, tenantId, isActive: true },
-    payload,
-    { new: true }
+    sanitizeUpdate(payload, ["userId"]),
+    UPDATE_OPTIONS
   ).lean();
 };
 
@@ -136,8 +139,8 @@ export const getStudentById = async (tenantId, studentId) => {
 export const updateStudent = async (tenantId, studentId, payload) => {
   return Student.findOneAndUpdate(
     { _id: studentId, tenantId, isActive: true },
-    payload,
-    { new: true }
+    sanitizeUpdate(payload, ["userId"]),
+    UPDATE_OPTIONS
   ).lean();
 };
 
@@ -181,8 +184,8 @@ export const getParentById = async (tenantId, parentId) => {
 export const updateParent = async (tenantId, parentId, payload) => {
   return Parent.findOneAndUpdate(
     { _id: parentId, tenantId, isActive: true },
-    payload,
-    { new: true }
+    sanitizeUpdate(payload, ["userId"]),
+    UPDATE_OPTIONS
   ).lean();
 };
 
@@ -216,6 +219,6 @@ export const removeStudentParentMap = async (tenantId, mapId) => {
   return StudentParentMap.findOneAndUpdate(
     { _id: mapId, tenantId, isActive: true },
     { isActive: false },
-    { new: true }
+    { returnDocument: "after" }
   ).lean();
 };

@@ -44,13 +44,13 @@ const teacherSectionSubjectMapSchema = new mongoose.Schema(
 /* Teacher teaches a subject only once in a section per year */
 teacherSectionSubjectMapSchema.index(
   { tenantId: 1, academicYearId: 1, teacherId: 1, sectionId: 1, subjectId: 1 },
-  { unique: true }
+  { unique: true, partialFilterExpression: { isActive: true } }
 );
 
 /* Prevent multiple teachers teaching same subject in same section (optional but recommended) */
 teacherSectionSubjectMapSchema.index(
   { tenantId: 1, academicYearId: 1, sectionId: 1, subjectId: 1 },
-  { unique: true }
+  { unique: true, partialFilterExpression: { isActive: true } }
 );
 
 /* Teacher timetable lookup */

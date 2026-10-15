@@ -9,11 +9,29 @@ import Exam from "../models/academic-db/exam-db/Exam.js";
 import ExamSectionSubjectMap from "../models/academic-db/exam-db/ExamSectionSubjectMap.js";
 import Marks from "../models/academic-db/exam-db/Marks.js";
 import { getPagination } from "../utils/pagination.util.js";
+import { sanitizeUpdate } from "../utils/sanitize.util.js";
+
+const UPDATE_OPTIONS = { returnDocument: "after", runValidators: true };
 
 /* ================= Academic Years ================= */
 
+/* Only one academic year per tenant can be current */
+const setCurrentAcademicYear = async (tenantId, academicYearId) => {
+  await AcademicYear.updateMany(
+    { tenantId, isCurrent: true, _id: { $ne: academicYearId } },
+    { isCurrent: false }
+  );
+  return AcademicYear.findOneAndUpdate(
+    { _id: academicYearId, tenantId },
+    { isCurrent: true },
+    { returnDocument: "after" }
+  ).lean();
+};
+
 export const createAcademicYear = async (tenantId, payload) => {
-  return AcademicYear.create({ ...payload, tenantId });
+  const { isCurrent, ...rest } = payload;
+  const academicYear = await AcademicYear.create({ ...rest, tenantId, isCurrent: false });
+  return isCurrent ? setCurrentAcademicYear(tenantId, academicYear._id) : academicYear;
 };
 
 export const getAcademicYears = async (tenantId, query = {}) => {
@@ -30,11 +48,18 @@ export const getAcademicYearById = async (tenantId, academicYearId) => {
 };
 
 export const updateAcademicYear = async (tenantId, academicYearId, payload) => {
-  return AcademicYear.findOneAndUpdate(
+  const { isCurrent, ...rest } = sanitizeUpdate(payload);
+
+  const academicYear = await AcademicYear.findOneAndUpdate(
     { _id: academicYearId, tenantId, isActive: true },
-    payload,
-    { new: true }
+    isCurrent === false ? { ...rest, isCurrent: false } : rest,
+    UPDATE_OPTIONS
   ).lean();
+
+  if (academicYear && isCurrent === true) {
+    return setCurrentAcademicYear(tenantId, academicYear._id);
+  }
+  return academicYear;
 };
 
 /* ================= Classes ================= */
@@ -59,20 +84,20 @@ export const getClassById = async (tenantId, classId) => {
 export const updateClass = async (tenantId, classId, payload) => {
   return Class.findOneAndUpdate(
     { _id: classId, tenantId, isActive: true },
-    payload,
-    { new: true }
+    sanitizeUpdate(payload),
+    UPDATE_OPTIONS
   ).lean();
 };
 
 /* ================= Sections ================= */
 
-export const createSection = async (tenantId, payload) => {
-  return Section.create({ ...payload, tenantId });
+export const createSection = async (tenantId, academicYearId, payload) => {
+  return Section.create({ ...payload, tenantId, academicYearId });
 };
 
-export const getSections = async (tenantId, query = {}) => {
+export const getSections = async (tenantId, academicYearId, query = {}) => {
   const { skip, limit } = getPagination(query);
-  return Section.find({ tenantId, isActive: true })
+  return Section.find({ tenantId, academicYearId, isActive: true })
     .populate("classId", "className classOrder")
     .populate("classTeacherId", "employeeCode")
     .skip(skip)
@@ -99,20 +124,10 @@ export const getSectionsByClass = async (tenantId, academicYearId, classId) => {
 export const updateSection = async (tenantId, sectionId, payload) => {
   return Section.findOneAndUpdate(
     { _id: sectionId, tenantId, isActive: true },
-    payload,
-    { new: true }
+    sanitizeUpdate(payload, ["academicYearId"]),
+    UPDATE_OPTIONS
   ).lean();
 };
-
-export const validateSectionBelongsToYear = async (tenantId, academicYearId, sectionId) => {
-  return Section.exists({
-    _id: sectionId,
-    tenantId,
-    academicYearId,
-    isActive: true
-  });
-};
-
 
 /* ================= Subjects ================= */
 
@@ -135,16 +150,15 @@ export const getSubjectById = async (tenantId, subjectId) => {
 export const updateSubject = async (tenantId, subjectId, payload) => {
   return Subject.findOneAndUpdate(
     { _id: subjectId, tenantId, isActive: true },
-    payload,
-    { new: true }
+    sanitizeUpdate(payload),
+    UPDATE_OPTIONS
   ).lean();
 };
 
-
 /* ================= Class–Section–Subject ================= */
 
-export const createClassSectionSubjectMap = async (tenantId, payload) => {
-  return ClassSectionSubjectMap.create({ ...payload, tenantId });
+export const createClassSectionSubjectMap = async (tenantId, academicYearId, payload) => {
+  return ClassSectionSubjectMap.create({ ...payload, tenantId, academicYearId });
 };
 
 export const getSubjectsBySection = async (tenantId, academicYearId, sectionId) => {
@@ -158,12 +172,11 @@ export const getSubjectsBySection = async (tenantId, academicYearId, sectionId) 
     .lean();
 };
 
-
 export const removeClassSectionSubjectMap = async (tenantId, mapId) => {
   return ClassSectionSubjectMap.findOneAndUpdate(
     { _id: mapId, tenantId, isActive: true },
     { isActive: false },
-    { new: true }
+    { returnDocument: "after" }
   ).lean();
 };
 
@@ -191,11 +204,11 @@ export const getStudentsBySection = async (tenantId, academicYearId, sectionId) 
     .lean();
 };
 
-export const updateStudentSectionMap = async (tenantId, mapId, payload) => {
+export const updateStudentSectionMap = async (tenantId, academicYearId, mapId, payload) => {
   return StudentSectionMap.findOneAndUpdate(
-    { _id: mapId, tenantId, isActive: true },
+    { _id: mapId, tenantId, academicYearId, isActive: true },
     payload,
-    { new: true }
+    UPDATE_OPTIONS
   ).lean();
 };
 
@@ -217,22 +230,10 @@ export const closePreviousAdmission = async (tenantId, mapId, session) => {
   );
 };
 
-export const generateNextRollNumber = async (tenantId, academicYearId, sectionId, session) => {
-  const last = await StudentSectionMap.findOne({
-    tenantId,
-    academicYearId,
-    sectionId
-  })
-    .sort({ createdAt: -1 })
-    .session(session);
-
-  return last ? String(Number(last.rollNumber) + 1).padStart(2, "0") : "01";
-};
-
 /* ================= Teacher–Section–Subject ================= */
 
-export const mapTeacherSectionSubject = async (tenantId, payload) => {
-  return TeacherSectionSubjectMap.create({ ...payload, tenantId });
+export const mapTeacherSectionSubject = async (tenantId, academicYearId, payload) => {
+  return TeacherSectionSubjectMap.create({ ...payload, tenantId, academicYearId });
 };
 
 export const getTeachersBySection = async (tenantId, academicYearId, sectionId) => {
@@ -254,14 +255,14 @@ export const removeTeacherSectionSubjectMap = async (tenantId, mapId) => {
   return TeacherSectionSubjectMap.findOneAndUpdate(
     { _id: mapId, tenantId, isActive: true },
     { isActive: false },
-    { new: true }
+    { returnDocument: "after" }
   ).lean();
 };
 
 /* ================= Exams ================= */
 
-export const createExam = async (tenantId, payload) => {
-  return Exam.create({ ...payload, tenantId });
+export const createExam = async (tenantId, academicYearId, payload) => {
+  return Exam.create({ ...payload, tenantId, academicYearId });
 };
 
 export const getExams = async (tenantId, academicYearId, query = {}) => {
@@ -272,6 +273,7 @@ export const getExams = async (tenantId, academicYearId, query = {}) => {
     academicYearId,
     isActive: true
   })
+    .sort({ startDate: 1 })
     .skip(skip)
     .limit(limit)
     .lean();
@@ -284,18 +286,18 @@ export const getExamById = async (tenantId, examId) => {
 export const updateExam = async (tenantId, examId, payload) => {
   return Exam.findOneAndUpdate(
     { _id: examId, tenantId, isActive: true },
-    payload,
-    { new: true }
+    sanitizeUpdate(payload, ["academicYearId"]),
+    UPDATE_OPTIONS
   ).lean();
 };
 
 /* ================= Exam Structure ================= */
 
-export const createExamSectionSubjectMap = async (tenantId, payload) => {
-  return ExamSectionSubjectMap.create({ ...payload, tenantId });
+export const createExamSectionSubjectMap = async (tenantId, academicYearId, payload) => {
+  return ExamSectionSubjectMap.create({ ...payload, tenantId, academicYearId });
 };
 
-export const getExamStructure = async (tenantId, academicYearId, examId) => {
+export const getExamStructure = async (tenantId, examId) => {
   return ExamSectionSubjectMap.find({
     tenantId,
     examId,
@@ -306,30 +308,39 @@ export const getExamStructure = async (tenantId, academicYearId, examId) => {
     .lean();
 };
 
+export const getExamStructureEntry = async (tenantId, examSectionSubjectId) => {
+  return ExamSectionSubjectMap.findOne({
+    _id: examSectionSubjectId,
+    tenantId,
+    isActive: true
+  }).lean();
+};
+
 /* ================= Marks ================= */
 
-export const upsertMarks = async (tenantId, payload) => {
-  const { studentId, examSectionSubjectId } = payload;
+export const upsertMarks = async (tenantId, entry) => {
+  const { studentId, examSectionSubjectId } = entry;
 
   return Marks.findOneAndUpdate(
     { tenantId, studentId, examSectionSubjectId },
-    { $set: { ...payload, tenantId, isActive: true } },
-    { upsert: true, new: true }
+    { $set: { ...entry, tenantId, isActive: true } },
+    { upsert: true, returnDocument: "after" }
   ).lean();
 };
 
 export const getMarksByStudent = async (tenantId, academicYearId, studentId) => {
   return Marks.find({
     tenantId,
+    academicYearId,
     studentId,
     isActive: true
   })
     .populate({
       path: "examSectionSubjectId",
-      match: { academicYearId },
+      select: "examId subjectId maxMarks passMarks displayCode",
       populate: [
         { path: "subjectId", select: "subjectName subjectCode" },
-        { path: "examId", select: "examName academicYearId" }
+        { path: "examId", select: "examName examType" }
       ]
     })
     .lean();
@@ -351,22 +362,22 @@ export const createSubjectsBulk = async (tenantId, subjects = []) => {
   );
 };
 
-export const createSectionsBulk = async (tenantId, sections = []) => {
+export const createSectionsBulk = async (tenantId, academicYearId, sections = []) => {
   return Section.insertMany(
-    sections.map(s => ({ ...s, tenantId })),
+    sections.map(s => ({ ...s, tenantId, academicYearId })),
     { ordered: false }
   );
 };
 
-export const createExamsBulk = async (tenantId, exams = []) => {
+export const createExamsBulk = async (tenantId, academicYearId, exams = []) => {
   return Exam.insertMany(
-    exams.map(e => ({ ...e, tenantId })),
+    exams.map(e => ({ ...e, tenantId, academicYearId })),
     { ordered: false }
   );
 };
 
-export const upsertMarksBulk = async (tenantId, marks, session) => {
-  const ops = marks.map(m => ({
+export const upsertMarksBulk = async (tenantId, entries, session) => {
+  const ops = entries.map(m => ({
     updateOne: {
       filter: {
         tenantId,

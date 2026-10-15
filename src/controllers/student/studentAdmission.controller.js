@@ -1,10 +1,9 @@
 import mongoose from "mongoose";
-import AcademicYear from "../../models/academic-db/AcademicYear.js";
-import Section from "../../models/academic-db/Section.js";
 
 import * as userQueries from "../../queries/user.queries.js";
 import * as academicQueries from "../../queries/academic.queries.js";
 import * as academicValidator from "../../queries/academic.validators.js";
+import { getSectionContext } from "../../services/academicContext.service.js";
 
 import {
   generateStudentId,
@@ -12,78 +11,55 @@ import {
   generateStudentRollNumber
 } from "../../services/idFormat.service.js";
 
-import { successResponse } from "../../responses/success.response.js";
-import { errorResponse } from "../../responses/error.response.js";
+import { successResponse, errorResponse } from "../../responses/index.js";
+import { badRequest, conflict } from "../../utils/appError.util.js";
 
+/* New admission: creates the student's user + profile, parents, and the
+   section mapping for the given academic year, all in one transaction */
 export const addStudent = async (req, res, next) => {
   const session = await mongoose.startSession();
 
   try {
-    session.startTransaction();
-
     const tenantId = req.user.tenantId;
     const { student, parents = [], admission } = req.body;
 
-      /* 0. Validate section belongs to academic year */
-    const valid = await academicValidator.isSectionInAcademicYear(
+    if (!student?.user || !student?.profile) throw badRequest("student.user and student.profile are required");
+    if (!admission?.academicYearId || !admission?.sectionId) {
+      throw badRequest("admission.academicYearId and admission.sectionId are required");
+    }
+
+    /* 1. Validate academic year + section, and derive codes from them */
+    const { academicYear, section, yearYY, classSequence } = await getSectionContext(
       tenantId,
       admission.academicYearId,
       admission.sectionId
     );
-    if (!valid) throw new Error("Section does not belong to academic year");
 
-    /* 1. Validate academic year */
-    const academicYear = await AcademicYear.findOne({
-      _id: admission.academicYearId,
-      tenantId,
-      isActive: true
-    });
+    session.startTransaction();
 
-    if (!academicYear) throw new Error("Invalid academic year");
-
-    /* 2. Validate section belongs to academic year */
-    const section = await Section.findOne({
-      _id: admission.sectionId,
-      tenantId,
-      academicYearId: admission.academicYearId,
-      isActive: true
-    });
-
-    if (!section) throw new Error("Section does not belong to academic year");
-
-    /* 3. Prevent duplicate admission */
-    const alreadyAdmitted = await academicValidator.isStudentAlreadyAdmitted(
-      tenantId,
-      admission.academicYearId,
-      student?.profile?.studentId
-    );
-    if (alreadyAdmitted) throw new Error("Student already admitted in this academic year");
-
-    /* 4. Create student user */
+    /* 2. Create student user */
     const studentUser = await userQueries.createUser(
       tenantId,
       { ...student.user, role: "STUDENT" },
       session
     );
 
-    const yearYY = academicYear.startDate.getFullYear().toString().slice(-2);
-
-    /* 5. Generate student code */
+    /* 3. Generate student code */
     const studentCode = await generateStudentId({
       tenantId,
       admissionYearYY: yearYY,
-      classSequence: admission.classSequence,
+      classSequence,
       session
     });
 
-    /* 6. Create student profile */
+    /* 4. Create student profile */
     const studentRecord = await userQueries.createStudent(
       tenantId,
       { ...student.profile, userId: studentUser._id, studentCode },
       session
     );
 
-    /* 7. Create parents */
+    /* 5. Create parents */
     for (const parent of parents) {
       const parentUser = await userQueries.createUser(
         tenantId,
@@ -99,7 +75,7 @@ export const addStudent = async (req, res, next) => {
 
       const parentRecord = await userQueries.createParent(
         tenantId,
-        { userId: parentUser._id, parentCode },
+        { ...parent.profile, userId: parentUser._id, parentCode },
         session
       );
 
@@ -115,26 +91,16 @@ export const addStudent = async (req, res, next) => {
       );
     }
 
-    /* 8. Generate roll number */
+    /* 6. Generate roll number */
     const rollNumber = await generateStudentRollNumber({
       tenantId,
       academicYearYY: yearYY,
-      classSequence: admission.classSequence,
+      classSequence,
       sectionName: section.sectionName,
       session
     });
 
-    /* 9. Prevent duplicate roll number */
-    const rollExists = await academicValidator.isRollNumberTaken(
-      tenantId,
-      admission.academicYearId,
-      section._id,
-      rollNumber
-    );
-
-    if (rollExists) throw new Error("Roll number already exists in section");
-
-    /* 10. Admission */
+    /* 7. Admission */
     const admissionRecord = await academicQueries.mapStudentToSection(
       tenantId,
       {
@@ -142,7 +108,7 @@ export const addStudent = async (req, res, next) => {
         academicYearId: academicYear._id,
         sectionId: section._id,
         rollNumber,
-        admissionType: admission.admissionType,
+        admissionType: admission.admissionType ?? "NEW",
         status: "ACTIVE"
       },
       session
@@ -159,18 +125,18 @@ export const addStudent = async (req, res, next) => {
       201
     );
   } catch (error) {
-    await session.abortTransaction();
+    if (session.inTransaction()) await session.abortTransaction();
     return errorResponse(res, error, next);
   } finally {
     session.endSession();
   }
 };
 
+/* Move a student from their section in one academic year to a section in another */
 export const promoteStudent = async (req, res, next) => {
   const session = await mongoose.startSession();
 
   try {
-    session.startTransaction();
     const tenantId = req.user.tenantId;
 
     const {
@@ -181,35 +147,43 @@ export const promoteStudent = async (req, res, next) => {
       admissionType = "PROMOTED"
     } = req.body;
 
+    if (!studentId || !fromAcademicYearId || !toAcademicYearId || !toSectionId) {
+      throw badRequest("studentId, fromAcademicYearId, toAcademicYearId and toSectionId are required");
+    }
+    if (String(fromAcademicYearId) === String(toAcademicYearId)) {
+      throw badRequest("Target academic year must differ from the current one");
+    }
+
     /* 1. section must belong to new academic year */
-    const validSection = await academicValidator.isSectionInAcademicYear(
+    const { section, yearYY, classSequence } = await getSectionContext(
       tenantId,
       toAcademicYearId,
       toSectionId
     );
-    if (!validSection) throw new Error("Section not in target academic year");
 
-    /* 2. student must exist in previous academic year */
+    /* 2. prevent double promotion */
+    const already = await academicValidator.isStudentAlreadyAdmitted(
+      tenantId,
+      toAcademicYearId,
+      studentId
+    );
+    if (already) throw conflict("Student already promoted");
+
+    /* 3. student must exist in previous academic year */
     const previous = await academicQueries.getStudentAdmission(
       tenantId,
       studentId,
       fromAcademicYearId
     );
-    if (!previous) throw new Error("Student not found in previous academic year");
+    if (!previous) throw badRequest("Student not found in previous academic year");
 
-    /* 3. prevent double promotion */
-    const already = await academicQueries.isStudentAlreadyAdmitted(
-      tenantId,
-      toAcademicYearId,
-      studentId
-    );
-    if (already) throw new Error("Student already promoted");
+    session.startTransaction();
 
     /* 4. generate roll number */
     const rollNumber = await generateStudentRollNumber({
       tenantId,
-      academicYearYY: targetYearYY,
-      classSequence: targetClassSequence,
+      academicYearYY: yearYY,
+      classSequence,
       sectionName: section.sectionName,
       session
     });
@@ -238,10 +212,10 @@ export const promoteStudent = async (req, res, next) => {
     await session.commitTransaction();
 
     res.locals.entityId = admission._id;
-    return successResponse(res, admission, "Student promoted successfully");
+    return successResponse(res, admission, "Student promoted successfully", 201);
 
   } catch (err) {
-    await session.abortTransaction();
+    if (session.inTransaction()) await session.abortTransaction();
     return errorResponse(res, err, next);
   } finally {
     session.endSession();

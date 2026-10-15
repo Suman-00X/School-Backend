@@ -39,7 +39,7 @@ studentParentMapSchema.index(
 
 studentParentMapSchema.index(
   { tenantId: 1, studentId: 1, parentId: 1 },
-  { unique: true }
+  { unique: true, partialFilterExpression: { isActive: true } }
 );
 
 export default mongoose.model("StudentParentMap", studentParentMapSchema);

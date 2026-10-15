@@ -1,8 +1,8 @@
 import mongoose from "mongoose";
 import * as userQueries from "../../queries/user.queries.js";
 import { generateTeacherId } from "../../services/idFormat.service.js";
-import { successResponse } from "../../responses/success.response.js";
-import { errorResponse } from "../../responses/error.response.js";
+import { successResponse, errorResponse } from "../../responses/index.js";
+import { notFound } from "../../utils/appError.util.js";
 
 export const createTeacher = async (req, res, next) => {
   const session = await mongoose.startSession();
@@ -35,9 +35,9 @@ export const createTeacher = async (req, res, next) => {
 
     await session.commitTransaction();
     res.locals.entityId = teacher._id;
-    return successResponse(res, teacher, "Teacher created successfully");
+    return successResponse(res, teacher, "Teacher created successfully", 201);
   } catch (error) {
-    await session.abortTransaction();
+    if (session.inTransaction()) await session.abortTransaction();
     return errorResponse(res, error, next);
   } finally {
     session.endSession();
@@ -59,6 +59,7 @@ export const getTeacherById = async (req, res, next) => {
       req.user.tenantId,
       req.params.teacherId
     );
+    if (!data) throw notFound("Teacher");
     return successResponse(res, data);
   } catch (error) {
     return errorResponse(res, error, next);
@@ -72,6 +73,7 @@ export const updateTeacher = async (req, res, next) => {
       req.params.teacherId,
       req.body
     );
+    if (!data) throw notFound("Teacher");
     res.locals.entityId = data._id;
     return successResponse(res, data, "Teacher updated");
   } catch (error) {

@@ -1,8 +1,8 @@
 import mongoose from "mongoose";
 import * as userQueries from "../../queries/user.queries.js";
 import { generateParentId } from "../../services/idFormat.service.js";
-import { successResponse } from "../../responses/success.response.js";
-import { errorResponse } from "../../responses/error.response.js";
+import { successResponse, errorResponse } from "../../responses/index.js";
+import { notFound } from "../../utils/appError.util.js";
 
 export const createParent = async (req, res, next) => {
   const session = await mongoose.startSession();
@@ -27,9 +27,9 @@ export const createParent = async (req, res, next) => {
 
     await session.commitTransaction();
     res.locals.entityId = parent._id;
-    return successResponse(res, parent, "Parent created");
+    return successResponse(res, parent, "Parent created", 201);
   } catch (error) {
-    await session.abortTransaction();
+    if (session.inTransaction()) await session.abortTransaction();
     return errorResponse(res, error, next);
   } finally {
     session.endSession();
@@ -51,6 +51,7 @@ export const getParentById = async (req, res, next) => {
       req.user.tenantId,
       req.params.parentId
     );
+    if (!data) throw notFound("Parent");
     return successResponse(res, data);
   } catch (error) {
     return errorResponse(res, error, next);
@@ -64,6 +65,7 @@ export const updateParent = async (req, res, next) => {
       req.params.parentId,
       req.body
     );
+    if (!data) throw notFound("Parent");
     res.locals.entityId = data._id;
     return successResponse(res, data, "Parent updated");
   } catch (error) {
