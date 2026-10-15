@@ -1,0 +1,88 @@
+# Full stack on one machine: API + worker + PostgreSQL + MongoDB + Redis.
+#   cp .env.example .env   # set JWT_SECRET at least
+#   docker compose up -d --build
+#   docker compose run --rm api node scripts/create-school.js --name "Demo School" --code DEMO \
+#     --admin-email admin@demo.school --admin-first Demo --admin-last Admin
+# For production use managed databases instead of the three data services below.
+
+x-app: &app
+  build: .
+  image: school-backend:local
+  env_file: .env
+  environment:
+    NODE_ENV: production
+    DATABASE_URL: postgres://school:school@postgres:5432/school
+    MONGO_URI: mongodb://mongo:27017/school
+    REDIS_URL: redis://redis:6379
+    STORAGE_LOCAL_DIR: /app/storage
+  volumes:
+    - files:/app/storage
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: school
+      POSTGRES_PASSWORD: school
+      POSTGRES_DB: school
+    volumes:
+      - postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U school -d school"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:8
+    volumes:
+      - mongo:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # One-off: schema migrations and MongoDB indexes, then exits
+  migrate:
+    <<: *app
+    command: ["sh", "-c", "node scripts/migrate.js && node scripts/sync-mongo-indexes.js"]
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+      mongo: { condition: service_healthy }
+
+  api:
+    <<: *app
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+
+  worker:
+    <<: *app
+    command: ["node", "src/worker.js"]
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+
+volumes:
+  postgres:
+  mongo:
+  redis:
+  files:

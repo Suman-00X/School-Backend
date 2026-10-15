@@ -11,7 +11,10 @@ export default [
       globals: { ...globals.node }
     },
     rules: {
-      "no-unused-vars": ["error", { argsIgnorePattern: "^_|^next$|^req$|^res$", varsIgnorePattern: "^_", caughtErrors: "none" }],
+      "no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_|^next$|^req$|^res$", varsIgnorePattern: "^_", caughtErrors: "none" }
+      ],
       "no-console": "error",
       eqeqeq: ["error", "always"],
       "prefer-const": "error",
@@ -23,7 +26,14 @@ export default [
     /* The framework layer must not depend on modules */
     files: ["src/common/**/*.js"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [{ group: ["**/modules/**"], message: "src/common is framework-only and must not import module code" }] }]
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["**/modules/**"], message: "src/common is framework-only and must not import module code" }
+          ]
+        }
+      ]
     }
   },
   {

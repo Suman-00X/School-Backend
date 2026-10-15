@@ -19,3 +19,4 @@ coverage/
 
 # Claude Code agent worktrees
 .claude/
+backups/

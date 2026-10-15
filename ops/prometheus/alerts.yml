@@ -1,0 +1,47 @@
+# Prometheus alerting rules for the school backend (scrape GET /metrics with METRICS_TOKEN).
+groups:
+  - name: school-backend
+    rules:
+      - alert: SchoolApiDown
+        expr: up{job="school-api"} == 0
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "API instance {{ $labels.instance }} is not answering scrapes"
+
+      - alert: SchoolApiErrorRate
+        expr: |
+          sum(rate(school_http_requests_total{status=~"5.."}[5m]))
+            / sum(rate(school_http_requests_total[5m])) > 0.02
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: "More than 2% of API requests fail with 5xx"
+
+      - alert: SchoolApiSlow
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(school_http_request_duration_seconds_bucket[5m]))) > 1
+        for: 15m
+        labels: { severity: ticket }
+        annotations:
+          summary: "p95 API latency above 1 s"
+
+      - alert: SchoolJobsFailing
+        expr: sum by (job) (increase(school_jobs_total{outcome="failed"}[30m])) > 0
+        labels: { severity: ticket }
+        annotations:
+          summary: "Job {{ $labels.job }} failed its final attempt (notifications or fees may be affected)"
+
+      - alert: SchoolPostgresPoolSaturated
+        expr: school_pg_pool_connections{state="waiting"} > 0
+        for: 5m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Requests are waiting for a PostgreSQL connection; raise PG_POOL_MAX or add capacity"
+
+      - alert: SchoolEventLoopBlocked
+        expr: school_event_loop_delay_p99_seconds > 0.2
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Event loop delay p99 above 200 ms on {{ $labels.instance }}"
