@@ -6,7 +6,8 @@ const describe = iss => {
     case "invalid_type":
       return iss.input === undefined || iss.input === null ? "is required" : `must be a ${iss.expected}`;
     case "too_small":
-      if (iss.origin === "string") return iss.minimum === 1 ? "must not be empty" : `must be at least ${iss.minimum} characters`;
+      if (iss.origin === "string")
+        return iss.minimum === 1 ? "must not be empty" : `must be at least ${iss.minimum} characters`;
       if (iss.origin === "array") return `must contain at least ${iss.minimum} item(s)`;
       return `must be ${iss.inclusive ? "at least" : "greater than"} ${iss.minimum}`;
     case "too_big":

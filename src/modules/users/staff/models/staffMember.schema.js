@@ -9,7 +9,10 @@ export const staffMembers = pgTable(
   "staff_members",
   {
     ...baseColumns(),
-    userId: uuid("user_id").notNull().unique().references(() => users.id),
+    userId: uuid("user_id")
+      .notNull()
+      .unique()
+      .references(() => users.id),
     employeeCode: text("employee_code").notNull(),
     designation: text("designation"),
     department: text("department"),

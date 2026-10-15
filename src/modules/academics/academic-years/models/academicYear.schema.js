@@ -15,7 +15,9 @@ export const academicYears = pgTable(
   t => [
     uniqueIndex("academic_years_tenant_name_uq").on(t.tenantId, t.yearName),
     /* At most one current year per school */
-    uniqueIndex("academic_years_one_current_uq").on(t.tenantId).where(sql`${t.isCurrent} = true`),
+    uniqueIndex("academic_years_one_current_uq")
+      .on(t.tenantId)
+      .where(sql`${t.isCurrent} = true`),
     check("academic_years_dates_chk", sql`${t.endDate} > ${t.startDate}`)
   ]
 );

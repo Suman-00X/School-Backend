@@ -15,5 +15,8 @@ export const examService = {
   create: (ctx, data) => examRepository.create(ctx.tenantId, { ...data, academicYearId: ctx.academicYearId }),
 
   createMany: (ctx, items) =>
-    examRepository.createMany(ctx.tenantId, items.map(item => ({ ...item, academicYearId: ctx.academicYearId })))
+    examRepository.createMany(
+      ctx.tenantId,
+      items.map(item => ({ ...item, academicYearId: ctx.academicYearId }))
+    )
 };

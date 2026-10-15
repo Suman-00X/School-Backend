@@ -25,11 +25,9 @@ const [admin] = await db
   .values({ tenantId: tenant.id, firstName: "Demo", lastName: "Admin", email: "admin@demo.school", role: "ADMIN" })
   .returning();
 
-const token = jwt.sign(
-  { userId: admin.id, tenantId: tenant.id, role: "ADMIN" },
-  process.env.JWT_SECRET,
-  { expiresIn: "12h" }
-);
+const token = jwt.sign({ userId: admin.id, tenantId: tenant.id, role: "ADMIN" }, process.env.JWT_SECRET, {
+  expiresIn: "12h"
+});
 
 const port = Number(process.env.PORT) || 3000;
 const server = app.listen(port, () => {

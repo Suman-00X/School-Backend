@@ -1,28 +1,27 @@
 import app from "./app.js";
 import env from "./common/config/env.config.js";
-import { startDatabases, stopDatabases } from "./bootstrap.js";
+import { logger } from "./common/logging/logger.js";
+import { startInfrastructure, stopInfrastructure } from "./bootstrap.js";
 
-const startServer = async () => {
-  try {
-    await startDatabases();
+try {
+  await startInfrastructure();
 
-    const server = app.listen(env.port, () => {
-      console.log(`Server running on port ${env.port}`);
+  const server = app.listen(env.port, () => {
+    logger.info({ port: env.port }, "API listening");
+  });
+
+  const shutdown = signal => {
+    logger.info({ signal }, "Shutting down");
+    server.close(async () => {
+      await stopInfrastructure();
+      process.exit(0);
     });
-
-    const shutdown = signal => {
-      console.log(`${signal} received, shutting down`);
-      server.close(async () => {
-        await stopDatabases();
-        process.exit(0);
-      });
-    };
-    process.on("SIGINT", shutdown);
-    process.on("SIGTERM", shutdown);
-  } catch (error) {
-    console.error("Server startup failed", error);
-    process.exit(1);
-  }
-};
-
-startServer();
+    /* Force exit if connections do not drain in time */
+    setTimeout(() => process.exit(1), 15_000).unref();
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+} catch (error) {
+  logger.fatal({ err: error }, "Startup failed");
+  process.exit(1);
+}

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { createRouter } from "../../../../common/http/router.js";
 import { authorize } from "../../../../common/auth/authorize.middleware.js";
 import { validate } from "../../../../common/validation/validate.middleware.js";
 import { academicYearController as controller } from "../controllers/academicYear.controller.js";
@@ -6,7 +6,7 @@ import { ACADEMIC_YEAR_PERMISSIONS as can } from "../permissions/academicYear.pe
 import { academicYearValidators as rules } from "../validators/academicYear.validator.js";
 
 /* /api/v1/academics/academic-years */
-const router = Router();
+const router = createRouter();
 
 router.post("/", authorize(can.create), validate(rules.create), controller.create);
 router.get("/", authorize(can.read), validate(rules.list), controller.list);

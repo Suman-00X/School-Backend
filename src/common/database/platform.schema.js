@@ -13,18 +13,26 @@ export const tenants = pgTable("tenants", {
   description: text("description"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date())
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date())
 });
 
 /* Per-tenant counters behind generated codes (see sequences/) */
 export const serialCounters = pgTable(
   "serial_counters",
   {
-    tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
     scope: text("scope").notNull(),
     seq: integer("seq").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date())
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date())
   },
   t => [primaryKey({ columns: [t.tenantId, t.scope] })]
 );

@@ -24,6 +24,5 @@ export const accountService = {
 
   /* For other users/* submodules: create the account behind a new person.
      Pass { dbc: tx } to join the caller's transaction. */
-  createAccount: (ctx, person, role, options) =>
-    userRepository.create(ctx.tenantId, { ...person, role }, options)
+  createAccount: (ctx, person, role, options) => userRepository.create(ctx.tenantId, { ...person, role }, options)
 };

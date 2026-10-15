@@ -6,7 +6,10 @@ import { tenants } from "./platform.schema.js";
 
 export const primaryId = () => uuid("id").primaryKey().defaultRandom();
 
-export const tenantId = () => uuid("tenant_id").notNull().references(() => tenants.id);
+export const tenantId = () =>
+  uuid("tenant_id")
+    .notNull()
+    .references(() => tenants.id);
 
 export const isActive = () => boolean("is_active").notNull().default(true);
 

@@ -11,7 +11,9 @@ export const exams = pgTable(
   "exams",
   {
     ...baseColumns(),
-    academicYearId: uuid("academic_year_id").notNull().references(() => academicYears.id),
+    academicYearId: uuid("academic_year_id")
+      .notNull()
+      .references(() => academicYears.id),
     examName: text("exam_name").notNull(),
     examType: examType("exam_type"),
     startDate: date("start_date"),

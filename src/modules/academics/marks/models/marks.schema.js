@@ -11,9 +11,15 @@ export const marks = pgTable(
   "marks",
   {
     ...baseColumns(),
-    academicYearId: uuid("academic_year_id").notNull().references(() => academicYears.id),
-    studentId: uuid("student_id").notNull().references(() => students.id),
-    examPaperId: uuid("exam_paper_id").notNull().references(() => examPapers.id),
+    academicYearId: uuid("academic_year_id")
+      .notNull()
+      .references(() => academicYears.id),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id),
+    examPaperId: uuid("exam_paper_id")
+      .notNull()
+      .references(() => examPapers.id),
     marksObtained: score("marks_obtained"),
     grade: text("grade"),
     isAbsent: boolean("is_absent").notNull().default(false),

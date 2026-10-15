@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { createRouter } from "../../common/http/router.js";
 import { academicYearRoutes } from "./academic-years/index.js";
 import { classRoutes } from "./classes/index.js";
 import { subjectRoutes } from "./subjects/index.js";
@@ -10,7 +10,7 @@ import { examRoutes } from "./exams/index.js";
 import { marksRoutes } from "./marks/index.js";
 
 /* Academics module, mounted at /api/v1/academics */
-const router = Router();
+const router = createRouter();
 
 router.use("/academic-years", academicYearRoutes);
 router.use("/classes", classRoutes);

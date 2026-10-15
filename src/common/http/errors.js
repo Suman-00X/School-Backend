@@ -26,8 +26,7 @@ export const ERROR_CODES = Object.freeze({
 export const badRequest = message => new AppError(400, ERROR_CODES.BAD_REQUEST, message);
 
 /* Input failed schema validation */
-export const validationError = (message, details) =>
-  new AppError(400, ERROR_CODES.VALIDATION_ERROR, message, details);
+export const validationError = (message, details) => new AppError(400, ERROR_CODES.VALIDATION_ERROR, message, details);
 
 export const unauthorized = (message = "Authentication required") =>
   new AppError(401, ERROR_CODES.UNAUTHORIZED, message);
@@ -36,8 +35,7 @@ export const forbidden = (message = "You do not have permission to perform this 
   new AppError(403, ERROR_CODES.FORBIDDEN, message);
 
 /* notFound("Class") -> "Class not found" */
-export const notFound = (entity = "Resource") =>
-  new AppError(404, ERROR_CODES.NOT_FOUND, `${entity} not found`);
+export const notFound = (entity = "Resource") => new AppError(404, ERROR_CODES.NOT_FOUND, `${entity} not found`);
 
 export const conflict = message => new AppError(409, ERROR_CODES.CONFLICT, message);
 

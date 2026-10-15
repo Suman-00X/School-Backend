@@ -12,8 +12,12 @@ export const studentParents = pgTable(
   "student_parents",
   {
     ...baseColumns(),
-    studentId: uuid("student_id").notNull().references(() => students.id),
-    parentId: uuid("parent_id").notNull().references(() => parents.id),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id),
+    parentId: uuid("parent_id")
+      .notNull()
+      .references(() => parents.id),
     relation: parentRelation("relation").notNull(),
     isPrimaryContact: boolean("is_primary_contact").notNull().default(false)
   },

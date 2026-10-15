@@ -1,6 +1,7 @@
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import env from "../config/env.config.js";
+import { logger } from "../logging/logger.js";
 
 let pool = null;
 
@@ -18,7 +19,7 @@ export const initPostgres = schema => {
 export const connectPostgres = async () => {
   const client = await pool.connect();
   client.release();
-  console.log("PostgreSQL connected");
+  logger.info("PostgreSQL connected");
 };
 
 export const closePostgres = () => pool?.end();

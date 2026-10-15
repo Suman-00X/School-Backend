@@ -15,9 +15,15 @@ export const studentEnrollments = pgTable(
   "student_enrollments",
   {
     ...baseColumns(),
-    academicYearId: uuid("academic_year_id").notNull().references(() => academicYears.id),
-    studentId: uuid("student_id").notNull().references(() => students.id),
-    sectionId: uuid("section_id").notNull().references(() => sections.id),
+    academicYearId: uuid("academic_year_id")
+      .notNull()
+      .references(() => academicYears.id),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id),
+    sectionId: uuid("section_id")
+      .notNull()
+      .references(() => sections.id),
     rollNumber: text("roll_number").notNull(),
     admissionType: admissionType("admission_type"),
     status: enrollmentStatus("status").notNull().default("ACTIVE"),

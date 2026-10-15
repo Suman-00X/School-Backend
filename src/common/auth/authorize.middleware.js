@@ -24,7 +24,7 @@ export const authorize = permission => {
     throw new Error("authorize() expects a permission created with definePermissions()");
   }
 
-  return (req, res, next) => {
+  const middleware = (req, res, next) => {
     res.locals.permission = permission.key;
     res.locals.params = req.params;
 
@@ -33,4 +33,6 @@ export const authorize = permission => {
 
     next();
   };
+  middleware.__permission = permission;
+  return middleware;
 };

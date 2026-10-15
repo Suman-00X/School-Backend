@@ -13,10 +13,18 @@ export const examPapers = pgTable(
   "exam_papers",
   {
     ...baseColumns(),
-    academicYearId: uuid("academic_year_id").notNull().references(() => academicYears.id),
-    examId: uuid("exam_id").notNull().references(() => exams.id),
-    sectionId: uuid("section_id").notNull().references(() => sections.id),
-    subjectId: uuid("subject_id").notNull().references(() => subjects.id),
+    academicYearId: uuid("academic_year_id")
+      .notNull()
+      .references(() => academicYears.id),
+    examId: uuid("exam_id")
+      .notNull()
+      .references(() => exams.id),
+    sectionId: uuid("section_id")
+      .notNull()
+      .references(() => sections.id),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id),
     displayCode: text("display_code").notNull(),
     examDate: date("exam_date"),
     maxMarks: score("max_marks").notNull(),
@@ -27,7 +35,10 @@ export const examPapers = pgTable(
     uniqueIndex("exam_papers_exam_section_subject_uq").on(t.examId, t.sectionId, t.subjectId),
     uniqueIndex("exam_papers_exam_section_code_uq").on(t.examId, t.sectionId, t.displayCode),
     index("exam_papers_section_date_idx").on(t.sectionId, t.examDate),
-    check("exam_papers_marks_chk", sql`${t.maxMarks} > 0 AND (${t.passMarks} IS NULL OR ${t.passMarks} BETWEEN 0 AND ${t.maxMarks})`)
+    check(
+      "exam_papers_marks_chk",
+      sql`${t.maxMarks} > 0 AND (${t.passMarks} IS NULL OR ${t.passMarks} BETWEEN 0 AND ${t.maxMarks})`
+    )
   ]
 );
 

@@ -1,4 +1,4 @@
-import env from "../config/env.config.js";
+import { logger } from "../logging/logger.js";
 import { AppError, ERROR_CODES } from "./errors.js";
 
 /* PostgreSQL column -> API field name (class_order -> classOrder) */
@@ -25,15 +25,29 @@ const fromPostgres = error => {
   const fields = keyFields(pg.detail);
   switch (code) {
     case "23505":
-      return new AppError(409, ERROR_CODES.CONFLICT,
-        fields.length ? `A record with this ${fields.join(" and ")} already exists` : "This record already exists");
+      return new AppError(
+        409,
+        ERROR_CODES.CONFLICT,
+        fields.length ? `A record with this ${fields.join(" and ")} already exists` : "This record already exists"
+      );
     case "23503":
-      return new AppError(422, ERROR_CODES.UNPROCESSABLE_ENTITY,
-        fields.length ? `The referenced ${fields.join(", ")} does not exist` : "A referenced record does not exist");
+      return new AppError(
+        422,
+        ERROR_CODES.UNPROCESSABLE_ENTITY,
+        fields.length ? `The referenced ${fields.join(", ")} does not exist` : "A referenced record does not exist"
+      );
     case "23502":
-      return new AppError(400, ERROR_CODES.VALIDATION_ERROR, `${pg.column ? toField(pg.column) : "A required field"} is required`);
+      return new AppError(
+        400,
+        ERROR_CODES.VALIDATION_ERROR,
+        `${pg.column ? toField(pg.column) : "A required field"} is required`
+      );
     case "23514":
-      return new AppError(422, ERROR_CODES.UNPROCESSABLE_ENTITY, `The request breaks the rule "${pg.constraint ?? "check"}"`);
+      return new AppError(
+        422,
+        ERROR_CODES.UNPROCESSABLE_ENTITY,
+        `The request breaks the rule "${pg.constraint ?? "check"}"`
+      );
     case "22P02":
     case "22007":
     case "22008":
@@ -53,7 +67,12 @@ const toAppError = error => {
   /* Errors raised by express/body-parser (e.g. malformed JSON) */
   const status = error?.status ?? error?.statusCode;
   if (status >= 400 && status < 500) {
-    const message = error.type === "entity.parse.failed" ? "Request body is not valid JSON" : error.expose ? error.message : "Bad request";
+    const message =
+      error.type === "entity.parse.failed"
+        ? "Request body is not valid JSON"
+        : error.expose
+          ? error.message
+          : "Bad request";
     return new AppError(status, ERROR_CODES.BAD_REQUEST, message);
   }
 
@@ -67,25 +86,27 @@ export const errorHandler = (err, req, res, next) => {
 
   const appError = toAppError(err);
 
+  const requestId = req.id;
+
   if (!appError) {
-    console.error(env.isProduction ? err?.message ?? err : err);
+    (req.log ?? logger).error({ err }, "Unhandled error");
     return res.status(500).json({
       success: false,
       message: "Something went wrong. Please try again later.",
-      error: { code: ERROR_CODES.INTERNAL_ERROR }
+      error: { code: ERROR_CODES.INTERNAL_ERROR, requestId }
     });
   }
 
   return res.status(appError.status).json({
     success: false,
     message: appError.message,
-    error: { code: appError.code, ...(appError.details && { details: appError.details }) }
+    error: { code: appError.code, requestId, ...(appError.details && { details: appError.details }) }
   });
 };
 
 export const notFoundHandler = (req, res) =>
   res.status(404).json({
     success: false,
-    message: `Route ${req.method} ${req.originalUrl} does not exist`,
-    error: { code: ERROR_CODES.NOT_FOUND }
+    message: `Route ${req.method} ${req.originalUrl.split("?")[0]} does not exist`,
+    error: { code: ERROR_CODES.NOT_FOUND, requestId: req.id }
   });

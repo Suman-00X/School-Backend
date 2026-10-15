@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { createRouter } from "../../../../common/http/router.js";
 import { authorize } from "../../../../common/auth/authorize.middleware.js";
 import { validate } from "../../../../common/validation/validate.middleware.js";
 import { resolveAcademicYear as inYear } from "../../shared/middlewares/academicYear.middleware.js";
@@ -7,7 +7,7 @@ import { SECTION_SUBJECT_PERMISSIONS as can } from "../permissions/sectionSubjec
 import { sectionSubjectValidators as rules } from "../validators/sectionSubject.validator.js";
 
 /* /api/v1/academics/section-subjects */
-const router = Router();
+const router = createRouter();
 
 router.post("/", authorize(can.create), validate(rules.create), inYear, controller.create);
 router.get("/", authorize(can.read), validate(rules.list), inYear, controller.list);

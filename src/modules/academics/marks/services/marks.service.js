@@ -23,7 +23,12 @@ const buildRow = async (ctx, entry, evaluatedBy) => {
   const paper = await examPaperService.findById(ctx, entry.examPaperId);
   if (!paper) throw unprocessable("examPaperId does not refer to an existing exam paper");
 
-  const enrolled = await enrollmentService.isStudentInSection(ctx, entry.studentId, paper.sectionId, paper.academicYearId);
+  const enrolled = await enrollmentService.isStudentInSection(
+    ctx,
+    entry.studentId,
+    paper.sectionId,
+    paper.academicYearId
+  );
   if (!enrolled) throw unprocessable("The student is not enrolled in this paper's section");
 
   if (!entry.isAbsent && entry.marksObtained > paper.maxMarks) {
@@ -81,7 +86,11 @@ export const marksService = {
       conditions: [
         eq(marks.academicYearId, ctx.academicYearId),
         eq(marks.studentId, studentId),
-        examId && inArray(marks.examPaperId, db.select({ id: examPapers.id }).from(examPapers).where(eq(examPapers.examId, examId)))
+        examId &&
+          inArray(
+            marks.examPaperId,
+            db.select({ id: examPapers.id }).from(examPapers).where(eq(examPapers.examId, examId))
+          )
       ].filter(Boolean)
     })
 };

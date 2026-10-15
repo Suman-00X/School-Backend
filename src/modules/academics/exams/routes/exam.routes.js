@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { createRouter } from "../../../../common/http/router.js";
 import { authorize } from "../../../../common/auth/authorize.middleware.js";
 import { validate } from "../../../../common/validation/validate.middleware.js";
 import { resolveAcademicYear as inYear } from "../../shared/middlewares/academicYear.middleware.js";
@@ -8,7 +8,7 @@ import { EXAM_PERMISSIONS as can } from "../permissions/exam.permissions.js";
 import { examValidators as rules } from "../validators/exam.validator.js";
 
 /* /api/v1/academics/exams */
-const router = Router();
+const router = createRouter();
 
 router.post("/", authorize(can.create), validate(rules.create), inYear, controller.create);
 router.post("/bulk", authorize(can.create), validate(rules.createMany), inYear, controller.createMany);

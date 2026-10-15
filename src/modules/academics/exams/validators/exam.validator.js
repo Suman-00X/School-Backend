@@ -1,5 +1,14 @@
 import { z } from "../../../../common/validation/zod.js";
-import { bulkBody, date, id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import {
+  bulkBody,
+  date,
+  id,
+  idParams,
+  listQuery,
+  optionalText,
+  patchBody,
+  text
+} from "../../../../common/validation/schemas.js";
 import { EXAM_TYPES } from "../../shared/constants/academic.constants.js";
 
 const examFields = z.object({

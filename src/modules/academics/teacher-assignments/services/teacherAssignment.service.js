@@ -10,7 +10,10 @@ import { teacherAssignmentRepository } from "../repositories/teacherAssignment.r
 const base = createCrudService(teacherAssignmentRepository, {
   entity: "Teacher assignment",
   with: {
-    teacher: { columns: { id: true, employeeCode: true }, with: { user: { columns: { firstName: true, lastName: true } } } },
+    teacher: {
+      columns: { id: true, employeeCode: true },
+      with: { user: { columns: { firstName: true, lastName: true } } }
+    },
     section: { columns: { id: true, sectionName: true } },
     subject: { columns: { id: true, subjectName: true, subjectCode: true } }
   }
@@ -21,11 +24,15 @@ export const teacherAssignmentService = {
 
   /* Year-scoped; filter by section and/or teacher */
   list: (ctx, { page, limit, sectionId, teacherId }) =>
-    base.list(ctx, { page, limit }, [
-      eq(teacherAssignments.academicYearId, ctx.academicYearId),
-      sectionId && eq(teacherAssignments.sectionId, sectionId),
-      teacherId && eq(teacherAssignments.teacherId, teacherId)
-    ].filter(Boolean)),
+    base.list(
+      ctx,
+      { page, limit },
+      [
+        eq(teacherAssignments.academicYearId, ctx.academicYearId),
+        sectionId && eq(teacherAssignments.sectionId, sectionId),
+        teacherId && eq(teacherAssignments.teacherId, teacherId)
+      ].filter(Boolean)
+    ),
 
   create: async (ctx, { teacherId, sectionId, subjectId, description }) => {
     const academicYearId = ctx.academicYearId;

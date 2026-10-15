@@ -10,7 +10,11 @@ export const optionalText = (max = 1000) => z.string().trim().max(max).optional(
 
 export const email = () => z.string().trim().toLowerCase().pipe(z.email());
 
-export const phone = () => z.string().trim().regex(/^[+0-9 ()-]{5,20}$/, "must be a valid phone number");
+export const phone = () =>
+  z
+    .string()
+    .trim()
+    .regex(/^[+0-9 ()-]{5,20}$/, "must be a valid phone number");
 
 /* "2026-06-01" */
 export const date = () => z.iso.date();
@@ -38,5 +42,4 @@ export const patchBody = schema =>
   });
 
 /* Bulk bodies: { [key]: [item, ...] } */
-export const bulkBody = (key, itemSchema, max = 200) =>
-  z.object({ [key]: z.array(itemSchema).min(1).max(max) });
+export const bulkBody = (key, itemSchema, max = 200) => z.object({ [key]: z.array(itemSchema).min(1).max(max) });

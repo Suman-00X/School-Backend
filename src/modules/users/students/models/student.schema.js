@@ -7,7 +7,10 @@ export const students = pgTable(
   "students",
   {
     ...baseColumns(),
-    userId: uuid("user_id").notNull().unique().references(() => users.id),
+    userId: uuid("user_id")
+      .notNull()
+      .unique()
+      .references(() => users.id),
     studentCode: text("student_code").notNull(),
     admissionNumber: text("admission_number").notNull(),
     admissionDate: date("admission_date"),

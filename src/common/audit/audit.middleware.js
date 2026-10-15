@@ -20,8 +20,7 @@ const sanitize = value => {
 };
 
 /* The id the request acted on: the created/returned record, else the last :param */
-const entityIdOf = res =>
-  res.locals.entityId ?? Object.values(res.locals.params ?? {}).at(-1);
+const entityIdOf = res => res.locals.entityId ?? Object.values(res.locals.params ?? {}).at(-1);
 
 /* Mounted once for the whole API: records every successful write after the
    response is sent. A logging failure never affects the request. */

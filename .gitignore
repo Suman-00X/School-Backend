@@ -12,3 +12,7 @@ node_modules/
 
 # Logs
 *.log
+
+# Local file storage (STORAGE_DRIVER=local)
+storage/
+coverage/

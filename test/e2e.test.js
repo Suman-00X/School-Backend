@@ -1,0 +1,12 @@
+/* End-to-end suite: one API instance on real PostgreSQL + MongoDB (in-memory),
+   exercised over HTTP. Suites run in order and share state through `world`. */
+import { after, before } from "node:test";
+import { startHarness, stopHarness } from "./helpers/harness.js";
+
+before(startHarness, { timeout: 240_000 });
+after(stopHarness);
+
+await import("./suites/01-framework.suite.js");
+await import("./suites/02-users.suite.js");
+await import("./suites/03-academics.suite.js");
+await import("./suites/04-exams-marks.suite.js");

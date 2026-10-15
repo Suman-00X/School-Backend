@@ -1,0 +1,5 @@
+node_modules/
+migrations/
+storage/
+package-lock.json
+*.md

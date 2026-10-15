@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { createRouter } from "../../../../common/http/router.js";
 import { authorize } from "../../../../common/auth/authorize.middleware.js";
 import { validate } from "../../../../common/validation/validate.middleware.js";
 import { resolveAcademicYear as inYear } from "../../shared/middlewares/academicYear.middleware.js";
@@ -7,7 +7,7 @@ import { SECTION_PERMISSIONS as can } from "../permissions/section.permissions.j
 import { sectionValidators as rules } from "../validators/section.validator.js";
 
 /* /api/v1/academics/sections. `inYear`: current year, or X-Academic-Year-Id */
-const router = Router();
+const router = createRouter();
 
 router.post("/", authorize(can.create), validate(rules.create), inYear, controller.create);
 router.post("/bulk", authorize(can.create), validate(rules.createMany), inYear, controller.createMany);

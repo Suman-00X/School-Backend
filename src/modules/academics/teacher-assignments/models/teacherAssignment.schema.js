@@ -11,10 +11,18 @@ export const teacherAssignments = pgTable(
   "teacher_assignments",
   {
     ...baseColumns(),
-    academicYearId: uuid("academic_year_id").notNull().references(() => academicYears.id),
-    teacherId: uuid("teacher_id").notNull().references(() => teachers.id),
-    sectionId: uuid("section_id").notNull().references(() => sections.id),
-    subjectId: uuid("subject_id").notNull().references(() => subjects.id),
+    academicYearId: uuid("academic_year_id")
+      .notNull()
+      .references(() => academicYears.id),
+    teacherId: uuid("teacher_id")
+      .notNull()
+      .references(() => teachers.id),
+    sectionId: uuid("section_id")
+      .notNull()
+      .references(() => sections.id),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id),
     description: text("description")
   },
   t => [

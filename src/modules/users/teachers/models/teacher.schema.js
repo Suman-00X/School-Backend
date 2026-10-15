@@ -8,7 +8,10 @@ export const teachers = pgTable(
   "teachers",
   {
     ...baseColumns(),
-    userId: uuid("user_id").notNull().unique().references(() => users.id),
+    userId: uuid("user_id")
+      .notNull()
+      .unique()
+      .references(() => users.id),
     employeeCode: text("employee_code").notNull(),
     qualification: text("qualification"),
     experienceYears: integer("experience_years"),

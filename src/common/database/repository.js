@@ -27,9 +27,7 @@ export const createRepository = ({ table, queryKey, hiddenColumns = [], orderBy 
   const visibleColumns = Object.fromEntries(
     Object.entries(getTableColumns(table)).filter(([name]) => !hiddenColumns.includes(name))
   );
-  const columnFilter = hiddenColumns.length
-    ? Object.fromEntries(hiddenColumns.map(name => [name, false]))
-    : undefined;
+  const columnFilter = hiddenColumns.length ? Object.fromEntries(hiddenColumns.map(name => [name, false])) : undefined;
   const defaultOrder = orderBy ?? desc(table.createdAt);
   const relational = dbc => dbc.query[queryKey];
 
@@ -57,11 +55,13 @@ export const createRepository = ({ table, queryKey, hiddenColumns = [], orderBy 
       return Boolean(row);
     },
 
-    count: (tenantId, conditions = [], { dbc = db } = {}) =>
-      dbc.$count(table, scoped(table, tenantId, ...conditions)),
+    count: (tenantId, conditions = [], { dbc = db } = {}) => dbc.$count(table, scoped(table, tenantId, ...conditions)),
 
     /* -> { rows, meta: { page, limit, total, totalPages } } */
-    list: async (tenantId, { conditions = [], page = 1, limit = 20, orderBy: order, with: relations, dbc = db } = {}) => {
+    list: async (
+      tenantId,
+      { conditions = [], page = 1, limit = 20, orderBy: order, with: relations, dbc = db } = {}
+    ) => {
       const where = scoped(table, tenantId, ...conditions);
       const [rows, total] = await Promise.all([
         relational(dbc).findMany({

@@ -10,9 +10,15 @@ export const sectionSubjects = pgTable(
   "section_subjects",
   {
     ...baseColumns(),
-    academicYearId: uuid("academic_year_id").notNull().references(() => academicYears.id),
-    sectionId: uuid("section_id").notNull().references(() => sections.id),
-    subjectId: uuid("subject_id").notNull().references(() => subjects.id),
+    academicYearId: uuid("academic_year_id")
+      .notNull()
+      .references(() => academicYears.id),
+    sectionId: uuid("section_id")
+      .notNull()
+      .references(() => sections.id),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id),
     displayCode: text("display_code").notNull(),
     weeklyNoOfClasses: integer("weekly_no_of_classes"),
     description: text("description")

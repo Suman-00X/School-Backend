@@ -1,5 +1,13 @@
 import { z } from "../../../../common/validation/zod.js";
-import { bulkBody, idParams, listQuery, optionalText, patchBody, positiveInt, text } from "../../../../common/validation/schemas.js";
+import {
+  bulkBody,
+  idParams,
+  listQuery,
+  optionalText,
+  patchBody,
+  positiveInt,
+  text
+} from "../../../../common/validation/schemas.js";
 
 const fields = z.object({
   className: text(50),

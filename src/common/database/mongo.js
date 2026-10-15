@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import env from "../config/env.config.js";
+import { logger } from "../logging/logger.js";
 
 export const connectMongo = async () => {
   mongoose.set("strictQuery", true);
@@ -9,7 +10,7 @@ export const connectMongo = async () => {
     autoIndex: !env.isProduction
   });
 
-  console.log("MongoDB connected");
+  logger.info("MongoDB connected");
 };
 
 export const closeMongo = () => mongoose.disconnect();

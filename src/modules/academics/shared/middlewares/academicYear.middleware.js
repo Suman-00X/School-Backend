@@ -30,3 +30,15 @@ export const resolveAcademicYear = async (req, res, next) => {
   req.context.academicYear = academicYear;
   next();
 };
+
+resolveAcademicYear.__openapi = {
+  parameters: [
+    {
+      name: "X-Academic-Year-Id",
+      in: "header",
+      required: false,
+      description: "Academic year to act on. Defaults to the school's current year.",
+      schema: { type: "string", format: "uuid" }
+    }
+  ]
+};

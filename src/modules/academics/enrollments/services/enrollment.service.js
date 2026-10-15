@@ -44,7 +44,11 @@ export const enrollmentService = {
 
   /* Shared by create, admission and promotion. `placement` (from
      sectionService.getPlacement) skips re-reading the section; `dbc` joins a transaction. */
-  enroll: async (ctx, { studentId, sectionId, rollNumber, admissionType = "NEW", description }, { dbc, placement } = {}) => {
+  enroll: async (
+    ctx,
+    { studentId, sectionId, rollNumber, admissionType = "NEW", description },
+    { dbc, placement } = {}
+  ) => {
     const place = placement ?? (await sectionService.getPlacement(ctx, ctx.academicYearId, sectionId));
     const academicYearId = place.academicYear.id;
 

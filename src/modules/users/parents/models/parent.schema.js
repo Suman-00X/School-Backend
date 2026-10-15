@@ -7,7 +7,10 @@ export const parents = pgTable(
   "parents",
   {
     ...baseColumns(),
-    userId: uuid("user_id").notNull().unique().references(() => users.id),
+    userId: uuid("user_id")
+      .notNull()
+      .unique()
+      .references(() => users.id),
     parentCode: text("parent_code").notNull(),
     occupation: text("occupation"),
     annualIncome: numeric("annual_income", { precision: 12, scale: 2 }),

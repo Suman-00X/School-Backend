@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { createRouter } from "../../../../common/http/router.js";
 import { authorize } from "../../../../common/auth/authorize.middleware.js";
 import { validate } from "../../../../common/validation/validate.middleware.js";
 import { parentController as controller } from "../controllers/parent.controller.js";
@@ -6,7 +6,7 @@ import { PARENT_PERMISSIONS as can } from "../permissions/parent.permissions.js"
 import { parentValidators as rules } from "../validators/parent.validator.js";
 
 /* /api/v1/users/parents */
-const router = Router();
+const router = createRouter();
 
 router.post("/", authorize(can.create), validate(rules.create), controller.create);
 router.get("/", authorize(can.read), validate(rules.list), controller.list);

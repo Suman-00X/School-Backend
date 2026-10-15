@@ -29,10 +29,11 @@ export const sectionService = {
 
   /* Year-scoped: ctx.academicYearId comes from resolveAcademicYear */
   list: (ctx, { page, limit, classId }) =>
-    base.list(ctx, { page, limit }, [
-      eq(sections.academicYearId, ctx.academicYearId),
-      classId && eq(sections.classId, classId)
-    ].filter(Boolean)),
+    base.list(
+      ctx,
+      { page, limit },
+      [eq(sections.academicYearId, ctx.academicYearId), classId && eq(sections.classId, classId)].filter(Boolean)
+    ),
 
   create: async (ctx, data) => {
     await assertReferences(ctx, data);
@@ -40,7 +41,12 @@ export const sectionService = {
   },
 
   createMany: async (ctx, items) => {
-    if (!(await classService.allExist(ctx, items.map(item => item.classId)))) {
+    if (
+      !(await classService.allExist(
+        ctx,
+        items.map(item => item.classId)
+      ))
+    ) {
       throw unprocessable("One or more sections reference a class that does not exist");
     }
     return sectionRepository.createMany(

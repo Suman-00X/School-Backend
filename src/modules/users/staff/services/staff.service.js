@@ -19,7 +19,15 @@ export const staffService = {
   /* ?role=PRINCIPAL filters by the account's role */
   list: (ctx, { page, limit, role }) => {
     const conditions = role
-      ? [inArray(staffMembers.userId, db.select({ id: users.id }).from(users).where(and(eq(users.tenantId, ctx.tenantId), eq(users.role, role))))]
+      ? [
+          inArray(
+            staffMembers.userId,
+            db
+              .select({ id: users.id })
+              .from(users)
+              .where(and(eq(users.tenantId, ctx.tenantId), eq(users.role, role)))
+          )
+        ]
       : [];
     return base.list(ctx, { page, limit }, conditions);
   },

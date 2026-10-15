@@ -15,7 +15,9 @@ export const authenticate = (req, res, next) => {
   try {
     payload = jwt.verify(header.slice(7), env.jwtSecret);
   } catch (error) {
-    throw unauthorized(error.name === "TokenExpiredError" ? "Your session has expired. Please sign in again." : "Invalid token");
+    throw unauthorized(
+      error.name === "TokenExpiredError" ? "Your session has expired. Please sign in again." : "Invalid token"
+    );
   }
 
   if (!payload.userId || !payload.tenantId || !ALL_ROLES.includes(payload.role)) {
