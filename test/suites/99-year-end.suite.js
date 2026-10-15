@@ -100,3 +100,61 @@ describe("year end", () => {
     assert.ok((await AuditLog.countDocuments({ tenantId: h.tenant.id })) > 40);
   });
 });
+
+describe("year archiving", () => {
+  const inYear = id => ({ headers: { "x-academic-year-id": id } });
+
+  it("archives only finished, non-current years", async () => {
+    world.y0 = (
+      await post(`${A}/academic-years`, { yearName: "2025-26", startDate: "2025-06-01", endDate: "2026-03-31" })
+    ).data;
+    world.s1APrev = (await post(`${A}/sections`, { classId: world.c1.id, sectionName: "A" }, inYear(world.y0.id))).data;
+
+    const current = await request("POST", `${A}/academic-years/${world.y2.id}/archival`);
+    assert.equal(current.status, 422);
+    assert.match(current.body.message, /is the current year/);
+    const unfinished = await request("POST", `${A}/academic-years/${world.y1.id}/archival`);
+    assert.equal(unfinished.status, 422);
+    assert.equal(unfinished.body.message, "2026-27 ends on 2027-03-31. Archive it after it has ended.");
+    await post(`${A}/academic-years/${world.y0.id}/archival`, {}, { as: h.tokens.principal }, 403);
+
+    const archived = await post(`${A}/academic-years/${world.y0.id}/archival`, {}, {}, 200);
+    assert.equal(archived.message, "Academic year 2025-26 archived. Its records are now read-only.");
+    assert.ok(archived.data.archivedAt);
+    await post(`${A}/academic-years/${world.y0.id}/archival`, {}, {}, 409);
+  });
+
+  it("makes every academic record of an archived year read-only", async () => {
+    const viaHeader = await request("POST", `${A}/sections`, {
+      body: { classId: world.c2.id, sectionName: "A" },
+      ...inYear(world.y0.id)
+    });
+    assert.equal(viaHeader.status, 409);
+    assert.equal(viaHeader.body.message, "Academic year 2025-26 is archived and read-only");
+
+    /* Paths without the header are stopped by the database trigger */
+    const viaId = await request("PATCH", `${A}/sections/${world.s1APrev.id}`, { body: { capacity: 30 } });
+    assert.equal(viaId.status, 409);
+    assert.equal(viaId.body.message, "Academic year 2025-26 is archived and read-only");
+    assert.equal(viaId.body.error.code, "CONFLICT");
+
+    const year = await request("PATCH", `${A}/academic-years/${world.y0.id}`, { body: { description: "x" } });
+    assert.equal(year.status, 409);
+    assert.match(year.body.message, /Restore it first/);
+    const makeCurrent = await request("PATCH", `${A}/academic-years/${world.y0.id}`, { body: { isCurrent: true } });
+    assert.equal(makeCurrent.status, 409);
+    assert.equal((await get(`${A}/academic-years/current`)).data.id, world.y2.id, "rolled back");
+
+    const sections = await get(`${A}/sections`, inYear(world.y0.id));
+    assert.equal(sections.meta.total, 1, "reads still work");
+  });
+
+  it("restores an archived year", async () => {
+    const restored = await request("DELETE", `${A}/academic-years/${world.y0.id}/archival`);
+    assert.equal(restored.status, 200);
+    assert.equal(restored.body.message, "Academic year 2025-26 restored and editable again");
+    assert.equal(restored.body.data.archivedAt, null);
+    await patch(`${A}/sections/${world.s1APrev.id}`, { capacity: 30 });
+    await request("DELETE", `${A}/academic-years/${world.y0.id}/archival`).then(r => assert.equal(r.status, 409));
+  });
+});

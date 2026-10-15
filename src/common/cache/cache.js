@@ -1,7 +1,9 @@
 import env from "../config/env.config.js";
 
 /* Key/value cache with TTL: Redis when REDIS_URL is set, else in-process.
-   Callers namespace keys by tenant: `tenant:${tenantId}:currentYear`. */
+   Callers namespace keys by tenant: `tenant:${tenantId}:currentYear`.
+   Values are stored as JSON in both stores, so callers get a private copy and
+   the same types (dates come back as ISO strings) with or without Redis. */
 
 const memoryStore = () => {
   const entries = new Map();
@@ -13,10 +15,10 @@ const memoryStore = () => {
         entries.delete(key);
         return undefined;
       }
-      return entry.value;
+      return JSON.parse(entry.value);
     },
     set: async (key, value, ttlSeconds) => {
-      entries.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+      entries.set(key, { value: JSON.stringify(value), expiresAt: Date.now() + ttlSeconds * 1000 });
     },
     del: async key => {
       entries.delete(key);

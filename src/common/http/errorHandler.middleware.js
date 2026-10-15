@@ -15,12 +15,23 @@ const keyFields = detail => {
     .map(toField);
 };
 
+/* Rules enforced inside the database (triggers) raise SQLSTATE "ZA" + HTTP status,
+   e.g. ZA409, with a message written for users. Only these messages are passed through. */
+const DATABASE_RULE = /^ZA(4\d\d)$/;
+const RULE_CODES = { 403: ERROR_CODES.FORBIDDEN, 409: ERROR_CODES.CONFLICT, 422: ERROR_CODES.UNPROCESSABLE_ENTITY };
+
 /* Translate a PostgreSQL error (drizzle wraps it in `cause`) into an AppError.
    Raw driver messages are never sent: they can contain SQL. */
 const fromPostgres = error => {
   const pg = error?.cause?.code ? error.cause : error;
   const code = pg?.code;
   if (typeof code !== "string" || !/^[0-9A-Z]{5}$/.test(code)) return null;
+
+  const rule = DATABASE_RULE.exec(code);
+  if (rule) {
+    const status = Number(rule[1]);
+    return new AppError(status, RULE_CODES[status] ?? ERROR_CODES.BAD_REQUEST, pg.message);
+  }
 
   const fields = keyFields(pg.detail);
   switch (code) {

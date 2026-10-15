@@ -1,11 +1,41 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { cache } from "../../../../common/cache/cache.js";
 import { createCrudService } from "../../../../common/crud/crudService.js";
 import { transaction } from "../../../../common/database/postgres.js";
-import { notFound } from "../../../../common/http/errors.js";
+import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
+import { tenantToday } from "../../../../common/tenancy/tenant.service.js";
 import { academicYears } from "../models/academicYear.schema.js";
 import { academicYearRepository } from "../repositories/academicYear.repository.js";
 
 const base = createCrudService(academicYearRepository, { entity: "Academic year" });
+
+/* The current year is read on almost every academic request */
+const CURRENT_TTL_SECONDS = 300;
+const currentKey = tenantId => `tenant:${tenantId}:academics:currentYear`;
+const forgetCurrent = tenantId => cache.del(currentKey(tenantId));
+
+/* Run a write, then drop the cached current year (after commit, so readers never re-cache stale data) */
+const changing = async (ctx, work) => {
+  const result = await transaction(work);
+  await forgetCurrent(ctx.tenantId);
+  return result;
+};
+
+const lockYear = async (ctx, academicYearId, tx) => {
+  const [year] = await tx
+    .select()
+    .from(academicYears)
+    .where(
+      and(
+        eq(academicYears.tenantId, ctx.tenantId),
+        eq(academicYears.id, academicYearId),
+        eq(academicYears.isActive, true)
+      )
+    )
+    .for("update");
+  if (!year) throw notFound("Academic year");
+  return year;
+};
 
 export const academicYearService = {
   list: base.list,
@@ -19,13 +49,13 @@ export const academicYearService = {
 
   /* Marking a year current un-marks the previous one in the same transaction */
   create: (ctx, data) =>
-    transaction(async tx => {
+    changing(ctx, async tx => {
       if (data.isCurrent) await academicYearRepository.clearCurrent(ctx.tenantId, null, { dbc: tx });
       return academicYearRepository.create(ctx.tenantId, data, { dbc: tx });
     }),
 
   update: (ctx, academicYearId, data) =>
-    transaction(async tx => {
+    changing(ctx, async tx => {
       const existing = await academicYearRepository.findById(ctx.tenantId, academicYearId, { dbc: tx });
       if (!existing) throw notFound("Academic year");
 
@@ -33,7 +63,32 @@ export const academicYearService = {
       return academicYearRepository.update(ctx.tenantId, academicYearId, data, { dbc: tx });
     }),
 
+  /* Freeze a finished year: its academic records become read-only.
+     Fees are not frozen, so arrears stay payable. */
+  archive: (ctx, academicYearId) =>
+    changing(ctx, async tx => {
+      const year = await lockYear(ctx, academicYearId, tx);
+      if (year.archivedAt) throw conflict(`Academic year ${year.yearName} is already archived`);
+      if (year.isCurrent) throw unprocessable(`${year.yearName} is the current year. Make another year current first.`);
+      const today = await tenantToday(ctx.tenantId);
+      if (year.endDate >= today) {
+        throw unprocessable(`${year.yearName} ends on ${year.endDate}. Archive it after it has ended.`);
+      }
+      return academicYearRepository.update(ctx.tenantId, academicYearId, { archivedAt: new Date() }, { dbc: tx });
+    }),
+
+  /* Make an archived year editable again (e.g. to correct a mark) */
+  restore: (ctx, academicYearId) =>
+    changing(ctx, async tx => {
+      const year = await lockYear(ctx, academicYearId, tx);
+      if (!year.archivedAt) throw conflict(`Academic year ${year.yearName} is not archived`);
+      return academicYearRepository.update(ctx.tenantId, academicYearId, { archivedAt: null }, { dbc: tx });
+    }),
+
   /* For other submodules: null when missing */
   findById: (ctx, academicYearId) => academicYearRepository.findById(ctx.tenantId, academicYearId),
-  findCurrent: ctx => academicYearRepository.findOne(ctx.tenantId, [eq(academicYears.isCurrent, true)])
+  findCurrent: ctx =>
+    cache.wrap(currentKey(ctx.tenantId), CURRENT_TTL_SECONDS, async () =>
+      academicYearRepository.findOne(ctx.tenantId, [eq(academicYears.isCurrent, true)])
+    )
 };

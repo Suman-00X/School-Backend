@@ -1,9 +1,10 @@
 import { z } from "../../../../common/validation/zod.js";
-import { badRequest, unprocessable } from "../../../../common/http/errors.js";
+import { badRequest, conflict, unprocessable } from "../../../../common/http/errors.js";
 import { academicYearService } from "../../academic-years/index.js";
 import { ACADEMIC_YEAR_HEADER } from "../constants/academic.constants.js";
 
 const uuid = z.uuid();
+const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /* For year-scoped routes: sets req.context.academicYearId to the year named in
    the X-Academic-Year-Id header, or else the school's current year */
@@ -24,6 +25,11 @@ export const resolveAcademicYear = async (req, res, next) => {
         ? "The academic year in X-Academic-Year-Id does not exist"
         : "No current academic year is set. Mark one as current or send X-Academic-Year-Id."
     );
+  }
+
+  /* Fail fast (before uploads or other side effects); triggers enforce the same rule in the database */
+  if (academicYear.archivedAt && !READ_METHODS.has(req.method)) {
+    throw conflict(`Academic year ${academicYear.yearName} is archived and read-only`);
   }
 
   req.context.academicYearId = academicYear.id;

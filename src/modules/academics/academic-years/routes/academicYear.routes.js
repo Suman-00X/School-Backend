@@ -13,5 +13,7 @@ router.get("/", authorize(can.read), validate(rules.list), controller.list);
 router.get("/current", authorize(can.read), controller.getCurrent);
 router.get("/:academicYearId", authorize(can.read), validate(rules.getById), controller.getById);
 router.patch("/:academicYearId", authorize(can.update), validate(rules.update), controller.update);
+router.post("/:academicYearId/archival", authorize(can.archive), validate(rules.getById), controller.archive);
+router.delete("/:academicYearId/archival", authorize(can.archive), validate(rules.getById), controller.restore);
 
 export default router;
