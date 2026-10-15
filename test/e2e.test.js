@@ -10,3 +10,4 @@ await import("./suites/01-framework.suite.js");
 await import("./suites/02-users.suite.js");
 await import("./suites/03-academics.suite.js");
 await import("./suites/04-exams-marks.suite.js");
+await import("./suites/05-core-academics.suite.js");

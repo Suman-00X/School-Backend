@@ -1,4 +1,4 @@
-import { created, paginated } from "../../../../common/http/responses.js";
+import { created, done, ok, paginated } from "../../../../common/http/responses.js";
 import { examPaperService } from "../services/examPaper.service.js";
 
 export const examPaperController = {
@@ -14,5 +14,17 @@ export const examPaperController = {
       res,
       await examPaperService.create(req.context, req.params.examId, req.body),
       "Exam paper created successfully"
-    )
+    ),
+
+  update: async (req, res) =>
+    ok(
+      res,
+      await examPaperService.update(req.context, req.params.examId, req.params.paperId, req.body),
+      "Exam paper updated successfully"
+    ),
+
+  remove: async (req, res) => {
+    await examPaperService.remove(req.context, req.params.examId, req.params.paperId);
+    return done(res, "Exam paper removed successfully");
+  }
 };

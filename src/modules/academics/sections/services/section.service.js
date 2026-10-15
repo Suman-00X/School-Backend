@@ -84,5 +84,19 @@ export const sectionService = {
   },
 
   isInAcademicYear: (ctx, academicYearId, sectionId) =>
-    sectionRepository.exists(ctx.tenantId, [eq(sections.id, sectionId), eq(sections.academicYearId, academicYearId)])
+    sectionRepository.exists(ctx.tenantId, [eq(sections.id, sectionId), eq(sections.academicYearId, academicYearId)]),
+
+  /* null when missing */
+  findById: (ctx, sectionId) => sectionRepository.findById(ctx.tenantId, sectionId, { with: { class: true } }),
+
+  /* Sections of a year (all of them, with class) */
+  findAllInYear: (ctx, academicYearId) =>
+    sectionRepository.findMany(ctx.tenantId, {
+      conditions: [eq(sections.academicYearId, academicYearId)],
+      with: { class: { columns: { id: true, className: true, classOrder: true } } }
+    }),
+
+  /* Sections where the teacher is class teacher */
+  findByClassTeacher: (ctx, teacherId) =>
+    sectionRepository.findMany(ctx.tenantId, { conditions: [eq(sections.classTeacherId, teacherId)] })
 };

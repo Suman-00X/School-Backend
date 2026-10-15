@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, date, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, check, date, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { baseColumns } from "../../../../common/database/columns.js";
 
 export const academicYears = pgTable(
@@ -10,6 +10,11 @@ export const academicYears = pgTable(
     startDate: date("start_date").notNull(),
     endDate: date("end_date").notNull(),
     isCurrent: boolean("is_current").notNull().default(false),
+    /* Days with no school every week: 0 = Sunday … 6 = Saturday */
+    weeklyOffDays: integer("weekly_off_days")
+      .array()
+      .notNull()
+      .default(sql`'{0}'::integer[]`),
     description: text("description")
   },
   t => [

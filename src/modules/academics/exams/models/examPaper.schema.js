@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { check, date, index, numeric, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, date, index, numeric, pgTable, text, time, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { baseColumns } from "../../../../common/database/columns.js";
 import { academicYears } from "../../academic-years/models/academicYear.schema.js";
 import { sections } from "../../sections/models/section.schema.js";
@@ -27,6 +27,9 @@ export const examPapers = pgTable(
       .references(() => subjects.id),
     displayCode: text("display_code").notNull(),
     examDate: date("exam_date"),
+    startTime: time("start_time"),
+    endTime: time("end_time"),
+    room: text("room"),
     maxMarks: score("max_marks").notNull(),
     passMarks: score("pass_marks"),
     description: text("description")
@@ -35,6 +38,10 @@ export const examPapers = pgTable(
     uniqueIndex("exam_papers_exam_section_subject_uq").on(t.examId, t.sectionId, t.subjectId),
     uniqueIndex("exam_papers_exam_section_code_uq").on(t.examId, t.sectionId, t.displayCode),
     index("exam_papers_section_date_idx").on(t.sectionId, t.examDate),
+    check(
+      "exam_papers_times_chk",
+      sql`${t.startTime} IS NULL OR ${t.endTime} IS NULL OR ${t.endTime} > ${t.startTime}`
+    ),
     check(
       "exam_papers_marks_chk",
       sql`${t.maxMarks} > 0 AND (${t.passMarks} IS NULL OR ${t.passMarks} BETWEEN 0 AND ${t.maxMarks})`

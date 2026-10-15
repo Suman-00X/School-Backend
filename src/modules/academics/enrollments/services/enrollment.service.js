@@ -117,6 +117,35 @@ export const enrollmentService = {
   },
 
   /* For other submodules */
+
+  /* Students currently in a section (status ACTIVE), by roll number */
+  findRoster: (ctx, sectionId, { includeLeft = false } = {}) =>
+    enrollmentRepository.findMany(ctx.tenantId, {
+      conditions: [eq(enrollments.sectionId, sectionId), !includeLeft && eq(enrollments.status, "ACTIVE")].filter(
+        Boolean
+      ),
+      with: {
+        student: {
+          columns: { id: true, studentCode: true, admissionNumber: true, userId: true },
+          with: { user: { columns: { firstName: true, lastName: true } } }
+        }
+      }
+    }),
+
+  /* A student's enrollment in a year (any status), or null */
+  findForStudent: (ctx, studentId, academicYearId) =>
+    enrollmentRepository.findOne(ctx.tenantId, [
+      eq(enrollments.studentId, studentId),
+      eq(enrollments.academicYearId, academicYearId)
+    ]),
+
+  /* Every enrollment of a student, newest year first */
+  findAllForStudent: (ctx, studentId) =>
+    enrollmentRepository.findMany(ctx.tenantId, {
+      conditions: [eq(enrollments.studentId, studentId)],
+      with: { section: { columns: { id: true, sectionName: true, academicYearId: true, classId: true } } }
+    }),
+
   isStudentInSection: (ctx, studentId, sectionId, academicYearId) =>
     enrollmentRepository.exists(ctx.tenantId, [
       eq(enrollments.studentId, studentId),

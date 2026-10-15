@@ -57,6 +57,15 @@ export const createRepository = ({ table, queryKey, hiddenColumns = [], orderBy 
 
     count: (tenantId, conditions = [], { dbc = db } = {}) => dbc.$count(table, scoped(table, tenantId, ...conditions)),
 
+    /* Every matching row, unpaginated (internal use: rosters, report cards) */
+    findMany: (tenantId, { conditions = [], orderBy: order, with: relations, dbc = db } = {}) =>
+      relational(dbc).findMany({
+        where: scoped(table, tenantId, ...conditions),
+        columns: columnFilter,
+        with: relations,
+        orderBy: order ?? defaultOrder
+      }),
+
     /* -> { rows, meta: { page, limit, total, totalPages } } */
     list: async (
       tenantId,

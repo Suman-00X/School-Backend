@@ -6,6 +6,11 @@ const fields = z.object({
   startDate: date(),
   endDate: date(),
   isCurrent: z.boolean().default(false),
+  weeklyOffDays: z
+    .array(z.number().int().min(0).max(6))
+    .max(6)
+    .refine(days => new Set(days).size === days.length, "must not repeat a day")
+    .optional(),
   description: optionalText()
 });
 

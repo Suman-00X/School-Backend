@@ -8,6 +8,11 @@ import { teacherAssignmentRoutes } from "./teacher-assignments/index.js";
 import { enrollmentRoutes } from "./enrollments/index.js";
 import { examRoutes } from "./exams/index.js";
 import { marksRoutes } from "./marks/index.js";
+import { calendarRoutes } from "./calendar/index.js";
+import { attendanceRoutes } from "./attendance/index.js";
+import { periodRoutes, timetableRoutes } from "./timetable/index.js";
+import { gradingRoutes } from "./grading/index.js";
+import { reportCardRoutes } from "./report-cards/index.js";
 
 /* Academics module, mounted at /api/v1/academics */
 const router = createRouter();
@@ -21,5 +26,11 @@ router.use("/teacher-assignments", teacherAssignmentRoutes);
 router.use("/enrollments", enrollmentRoutes);
 router.use("/exams", examRoutes);
 router.use("/marks", marksRoutes);
+router.use("/calendar", calendarRoutes);
+router.use("/attendance", attendanceRoutes);
+router.use("/periods", periodRoutes);
+router.use("/timetable", timetableRoutes);
+router.use("/grade-scales", gradingRoutes);
+router.use("/report-cards", reportCardRoutes);
 
 export default router;
