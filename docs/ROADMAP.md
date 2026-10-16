@@ -8,139 +8,120 @@ Backend only. **The frontend (web and mobile) is out of scope for now** and will
 |---|---|---|
 | 0 | Make it run | ✅ Done |
 | 1 | Architecture: PostgreSQL + MongoDB, modular structure | ✅ Done |
-| 2 | Authentication and foundation | ⬜ Next |
-| 3 | Core academics | ⬜ |
-| 4 | Fees and communication | ⬜ |
-| 5 | Reports and analytics | ⬜ |
-| 6 | Additional modules | ⬜ |
-| 7 | Production readiness | ⬜ |
+| 2 | Authentication and foundation | 🟡 Foundation done; **login not built** (not in the overnight scope, see DECISIONS D-01) |
+| 3 | Core academics | ✅ Done |
+| 4 | Fees and communication | ✅ Done (push notifications later) |
+| 5 | Reports and analytics | ✅ Done |
+| 6 | Additional modules | ✅ Done |
+| 7 | Production readiness | 🟡 Built; needs your choices (host, registry) and a first restore drill |
 
-Effort estimates are rough and assume one developer.
+Status as of 2026-10-16: **156 end-to-end tests** pass on embedded PostgreSQL 18 and in-memory MongoDB. ESLint and Prettier are clean, and a fresh clone passes everything. Review items are in [DECISIONS.md](DECISIONS.md).
 
 ---
 
 ## Phase 0: Make it run ✅
-
-**Housekeeping**
-- ✅ Git repository with a baseline commit
-- ✅ `.gitignore` fixed (was `.gitIgnore`); `.env.example` added
-- ✅ Dead code removed (old monolithic controllers, empty files, stray notes, unused config)
-- ✅ Duplicate handlers merged
-
-**Startup blockers**
-- ✅ Missing dependencies declared; ES modules; `start`/`dev` scripts
-- ✅ Missing and empty files implemented (response index, pagination, tenant model)
-- ✅ Broken imports and calls to functions that did not exist fixed
-- ✅ Student promotion rewritten
-- ✅ Missing permission entries added (exam, mappings, enrollments, parent links)
-- ✅ Doubled `/api/users/users` paths fixed
-- ✅ Validation failures return 400/404/409 instead of 500
-- ✅ `GET /health`
-
----
+- ✅ Git repository, `.gitignore`, `.env.example`; dead code removed
+- ✅ Startup blockers fixed: dependencies, ES modules, broken imports and calls
+- ✅ Validation failures return 4xx instead of 500; `GET /health`
 
 ## Phase 1: Architecture ✅
+- ✅ PostgreSQL for relational data, MongoDB for documents; Drizzle with versioned SQL migrations
+- ✅ Modules → submodules → folders by file type, each with an `index.js`
+- ✅ `src/common` framework layer:
+  - auth, validation, errors, responses
+  - a tenant-scoped repository, CRUD factories
+  - audit trail, sequences
+- ✅ Privileged staff roles (PRINCIPAL, ACCOUNTANT, STAFF) with per-action permissions
+- ✅ REST API v1 with one response/error envelope
 
-- ✅ **PostgreSQL for all relational data** (17 tables) with foreign keys, unique, partial-unique and check constraints, and enum types. See [DATA_MODEL.md](DATA_MODEL.md)
-- ✅ **MongoDB for document data**, starting with the audit log
-- ✅ Drizzle ORM with versioned SQL migrations (`db:generate`, `db:migrate`)
-- ✅ Real transactions for admission, promotion, teacher/parent creation and academic-year switching; bulk inserts are all-or-nothing
-- ✅ Database errors mapped to clean API errors (duplicate → 409; bad reference, bad UUID, broken rule → 400)
-- ✅ **Modules and submodules:** `users` (accounts, staff, teachers, parents, students) and `academics` (academic years, classes, subjects, sections, section subjects, teacher assignments, enrollments, exams, marks). Each submodule has its own folders by file type and an `index.js` entry. See [README](../README.md#project-structure)
-- ✅ **Framework layer** in `src/common/` (no module code):
-  - authentication and role-based `authorize()` with per-module `definePermissions()`
-  - Zod `validate()` middleware
-  - `AppError` with a central error handler
-  - response helpers
-  - tenant-scoped `createRepository`, plus CRUD service and controller factories
-  - automatic audit trail and per-tenant sequences
-- ✅ **Privileged staff roles:** PRINCIPAL, ACCOUNTANT, STAFF (alongside ADMIN), with a `staff_members` profile table and a permission for every action
-- ✅ **REST API v1** (`/api/v1`):
-  - plural resources, PATCH for partial updates
-  - nested routes for owned records (student parents, exam papers)
-  - pagination `meta` on lists
-  - one success/error envelope with machine-readable error codes and readable messages
-  - documented in [API.md](API.md)
-- ✅ `npm run dev:memory`: real PostgreSQL 18 and in-memory MongoDB, no installs needed
-- ✅ Verified with a 144-check end-to-end run
+## Phase 2: Authentication and foundation 🟡
+- ⬜ **Login:** `POST /auth/login`, password hashing, refresh tokens, logout
+- ⬜ Change/forgot/reset password; first-login invitations for admitted students and parents
+- 🟡 **School onboarding:** operator CLI (`npm run school:create`). Self-service sign-up still to do
+- ✅ Field whitelisting and Zod validation on every route
+- 🟡 Helmet and global rate limiting ✅; a stricter limit on login comes with login
+- ✅ ESLint and Prettier
+- ✅ Structured logging (pino) with request ids
+- ✅ OpenAPI 3.1 generated from the route table, Swagger UI at `/api/docs`, generated [ENDPOINTS.md](ENDPOINTS.md)
+- ✅ End-to-end tests (node:test, 156 tests) and GitHub Actions CI
+- ✅ `/health` and `/ready`
+- 🟡 Demo seed: `dev:memory` seeds a school and admin. A full demo dataset is still to do
 
----
+## Phase 3: Core academics ✅
+- ✅ Calendar: holidays and events, which decide working days
+- ✅ Student attendance, daily or per period, with summaries and absence alerts. Staff attendance is in HR
+- ✅ Timetable: periods, slots, and clash checks for section, teacher and room; section and teacher views
+- ✅ Exam schedule: dates, times, rooms, clash checks; result publication
+- ✅ Grade scales and automatic grades
+- ✅ Report cards: per exam, totals, percentage, rank, class average; PDF with the school letterhead
+- ✅ Bulk promotion of a section, with repeat and leave overrides
+- ✅ Record-level scope:
+  - teachers see only their sections and subjects
+  - students see only themselves
+  - parents see only their children
+- ✅ CSV student import in the background, with per-row errors
 
-## Phase 2: Authentication and foundation ⬜ (about 1–2 weeks)
+## Phase 4: Fees and communication ✅
+- ✅ Fee heads, structures per class and year, installments, concessions, invoices, late fees (daily job), statements
+- ✅ Payments at the counter and online (Razorpay, or mock) with an idempotent webhook; receipt PDFs
+- ✅ Notifications: in-app inbox, email (SMTP), SMS (HTTP provider); announcements to audiences
+- ⬜ Push notifications (D-24)
+- ✅ Background jobs (BullMQ with Redis, or in-process), domain events, exactly-once side effects
+- ⬜ Verify Razorpay with real test keys before go-live (D-20)
 
-- ⬜ **Login:** `POST /auth/login`, bcrypt password hashing, JWT with `tenantId`, refresh tokens, logout
-- ⬜ Change password, forgot/reset password, first-login invite for admitted students and parents
-- ⬜ **School onboarding:** create a tenant and its first admin
-- ✅ **Field whitelisting:** every route has a Zod schema, and unknown fields are dropped
-- ✅ **Input validation** with Zod on every route (types, required fields, formats, readable messages)
-- 🟡 Helmet and rate limiting: global limits are done; a stricter limit on login is still to do
-- ⬜ Delete/deactivate endpoints for every entity
-- ⬜ Seed script with a realistic demo school (years, classes, sections, staff, students)
-- ⬜ ESLint and Prettier
-- ⬜ Structured logging (pino or winston) with request IDs
-- 🟡 API docs: [API.md](API.md) is written by hand; still to do: generate OpenAPI/Swagger from the Zod schemas
-- ⬜ **Tests:** Jest + Supertest against `inMemoryDatabases` (port the 144-check smoke run); GitHub Actions CI
-- 🟡 Health check: `/health` exists; add database readiness checks
+## Phase 5: Reports and analytics ✅
+- ✅ Dashboards: overview, attendance, fees (with defaulters), academics (toppers, pass rates)
+- ✅ Exports: students, attendance register, fee collections, defaulters and results as XLSX or CSV
+- ✅ Audit log viewer with filters
 
-**Done when:** an admin can log in, set up a school, and admit a student end to end with real credentials.
+## Phase 6: Additional modules ✅
+- ✅ Files: student, staff and general documents with type, size and signature checks, and signed downloads (S3 or local)
+- ✅ School logo on report cards and receipts
+- ✅ Homework: attachments, submissions, late rules, grading and returns, notifications
+- ✅ Library:
+  - catalogue with ISBN checks, copies, loans, renewals
+  - fines and waivers
+  - daily overdue reminders
+- ✅ Transport: vehicles with compliance expiry dates, routes and stops, seat capacity under lock, rosters
+- ✅ Hostel: hostels, rooms, bed allocations with gender rules, transfers, occupancy
+- ✅ HR and payroll:
+  - staff attendance
+  - leave types, requests, approvals and balances
+  - salary structures
+  - payroll runs with loss of pay and payslip PDFs
+  - bank details encrypted
+- ✅ Inventory: items, vendors, append-only stock ledger with weighted average cost, low-stock, valuation and consumption reports
 
----
-
-## Phase 3: Core academics ⬜ (about 2–3 weeks)
-
-- ⬜ **Attendance:** daily or per period for students; staff attendance (PostgreSQL)
-- ⬜ **Timetable:** periods, slots per section, subject and teacher; clash checks
-- 🟡 **Exam schedule:** each paper has `examDate`. Still to do: start/end times and a timetable view
-- ⬜ **Grade scales** per school; automatic grade from marks
-- ⬜ **Report cards:** results per exam and per year, totals, percentage, rank
-- ⬜ **Bulk promotion** of a whole section at year end (single-student promotion exists)
-- ⬜ **Record-level scoping:** teachers see only their assigned sections; students only themselves; parents only their children (role checks per action already exist)
-- ⬜ Bulk student admission (CSV import with per-row errors)
-
----
-
-## Phase 4: Fees and communication ⬜ (about 3–4 weeks)
-
-- ⬜ **Fees:** categories, structures per class and year, invoices, payments, receipts, concessions, late fines (PostgreSQL, `numeric` money)
-- ⬜ **Payment gateway** (Razorpay, Stripe or similar) with webhooks
-- ⬜ **Notifications:** email, SMS and push; announcements and circulars (MongoDB)
-- ⬜ **Background jobs:** BullMQ + Redis for bulk messages, reports and reminders
-
----
-
-## Phase 5: Reports and analytics ⬜ (about 2 weeks)
-
-- ⬜ Dashboard endpoints: attendance %, fee collection, results by class
-- ⬜ Exports: report cards as PDF; data as Excel/CSV
-- 🟡 **Audit log:** every write is already recorded in MongoDB. Still to do: an admin endpoint to browse and filter it
-
----
-
-## Phase 6: Additional modules ⬜ (as needed)
-
-- ⬜ Homework/assignments
-- ⬜ File uploads to S3 (photos, documents), with metadata in MongoDB
-- ⬜ Library
-- ⬜ Transport
-- ⬜ Hostel
-- ⬜ Staff payroll
-- ⬜ Inventory
+## Phase 7: Production readiness 🟡
+- ✅ Dockerfile (non-root, healthcheck), and docker-compose with api, worker, migrate, PostgreSQL, MongoDB and Redis. *Not built on this machine (no Docker); CI builds it*
+- ✅ CI: format, lint, migration drift check, endpoint-doc freshness, tests on Node 22 and 24, image build
+- 🟡 Staging and production: documented in [OPERATIONS.md](OPERATIONS.md). **Choose a registry and host** (D-42)
+- 🟡 Backups:
+  - ✅ `npm run backup` / `npm run restore`, with checksums and retention, plus the runbook
+  - ⬜ a real restore drill (D-44)
+- 🟡 PostgreSQL row-level security: designed, not built (D-45)
+- ✅ Caching of hot reads: the current year and the school profile
+- ✅ Prometheus metrics, alert rules, and an error-reporting hook (Sentry optional)
+- ✅ Read-only archiving of past academic years, enforced by database triggers
+- ✅ Encryption of sensitive fields at rest
+- 🟡 Multiple languages:
+  - plan written
+  - ⬜ Unicode fonts in PDFs for non-Latin names (D-37)
 
 ---
 
-## Phase 7: Production readiness ⬜ (about 1–2 weeks, before launch)
+## Suggested next steps
 
-- ⬜ Docker images; staging and production environments; deployment pipeline
-- ⬜ Managed PostgreSQL and MongoDB, with automated backups and tested restores
-- ⬜ PostgreSQL row-level security as a second layer of tenant isolation
-- ⬜ Redis caching for hot reads (classes, subjects, current year)
-- ⬜ Error tracking (Sentry) and metrics and alerts
-- ⬜ Archiving of old academic years
-- ⬜ Multi-language support for API messages
-
----
-
-## Out of scope for now
-
-- Web frontend (admin, teacher, student and parent portals)
-- Mobile app
+1. **Phase 2 login** (D-01): password hashing, login, refresh tokens, invitations. The portal and payments are ready for it.
+2. **Row-level security** (D-45), before real schools' data goes in.
+3. **Unicode PDF fonts** (D-37) for the regions you launch in.
+4. Go-live checks:
+   - test Razorpay with real test keys (D-20)
+   - run a restore drill (D-44)
+   - choose a host and registry (D-42)
+5. **Frontend** (web portals, then mobile).
+6. Product extensions:
+   - push notifications
+   - transport fees on invoices
+   - a LIBRARIAN role
+   - parent notifications for library and transport
