@@ -9,12 +9,22 @@ import { counter } from "./metrics.js";
 const unexpected = counter("unexpected_errors_total", "Unexpected errors", ["source"]);
 let sentry = null;
 
+/* Database errors carry query parameters ("Failed query: … params: Asha,asha@x.in"),
+   i.e. personal data. Keep the query shape, drop the values. */
+const withoutParams = text => (typeof text === "string" ? text.replace(/params:[\s\S]*/i, "params: [removed]") : text);
+const scrub = event => {
+  for (const exception of event.exception?.values ?? []) exception.value = withoutParams(exception.value);
+  if (event.message) event.message = withoutParams(event.message);
+  delete event.request?.data;
+  return event;
+};
+
 export const initErrorReporting = async () => {
   if (!env.sentryDsn) return;
   try {
     const moduleName = "@sentry/node";
     sentry = await import(moduleName);
-    sentry.init({ dsn: env.sentryDsn, environment: env.nodeEnv, sendDefaultPii: false });
+    sentry.init({ dsn: env.sentryDsn, environment: env.nodeEnv, sendDefaultPii: false, beforeSend: scrub });
     logger.info("Error reporting to Sentry enabled");
   } catch {
     logger.warn(

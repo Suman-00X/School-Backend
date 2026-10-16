@@ -1,7 +1,7 @@
 import express from "express";
 import { sql } from "drizzle-orm";
 import mongoose from "mongoose";
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import env from "./common/config/env.config.js";
 import { db } from "./common/database/postgres.js";
 import { httpMetrics } from "./common/observability/httpMetrics.middleware.js";
@@ -22,8 +22,9 @@ app.use(requestLogger);
 app.use(httpMetrics);
 
 /* Prometheus scrape endpoint: before rate limiting, off unless METRICS_TOKEN is set */
+/* Compare digests: equal length always, so any input (including non-ASCII) is safe */
 const sameSecret = (given, expected) =>
-  given.length === expected.length && timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+  timingSafeEqual(createHash("sha256").update(given).digest(), createHash("sha256").update(expected).digest());
 app.get("/metrics", (req, res, next) => {
   const token = req.get("authorization")?.replace(/^Bearer /, "") ?? "";
   if (!env.metricsToken || !sameSecret(token, env.metricsToken)) return next();

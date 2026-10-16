@@ -287,6 +287,8 @@ Report cards and receipts use PDF's built-in Helvetica. Names in Devanagari, Tam
 - **Archive:** `POST /academics/academic-years/:id/archival`, ADMIN only. The year must have ended and must not be current. `DELETE …/archival` restores it.
 - **Enforcement:** triggers on every academic table reject writes to an archived year with a 409 ("Academic year 2025-26 is archived and read-only"). That covers sections, enrollments, exams, marks, attendance, timetable, calendar and homework, so jobs, imports and future modules cannot bypass it. A middleware also rejects writes early when the year comes from the `X-Academic-Year-Id` header.
 - **Fees are not frozen:** arrears from an old year must stay payable.
+- **Order of year-end:** archiving is refused while students are still ACTIVE in that year ("12 students are still active in 2025-26. Promote them or mark them as left first."). Once a year is archived, its enrollments cannot be closed.
+- **Operations modules are not frozen:** hostel and transport rows belong to a year but are not frozen, so staff can still vacate or end them.
 
 The alternative was "archive = move rows to cold storage". It isn't needed at school-sized data volumes; indexes keep old years cheap.
 
@@ -298,6 +300,7 @@ A trigger can raise SQLSTATE `ZA` + HTTP status (for example `ZA409`). The error
 - **Not cached:** lists of classes, subjects and so on. They are small indexed queries, and stale lists cause subtle bugs.
 - The in-process cache now stores JSON like Redis does, so dev and production behave the same.
 - With more than one API instance, Redis is required (D-02); otherwise one instance could serve a stale year for up to 5 minutes.
+- **Known narrow race:** a request that read the old year just before a switch can write it back to the cache just after. The current year can then be stale for up to 5 minutes. Switching the current year happens once a year; if that matters, do it outside school hours or flush the key. A versioned key would close the race.
 
 ### 🟢 D-41: Metrics without a dependency
 `GET /metrics` serves Prometheus metrics: HTTP by route template, jobs, PostgreSQL pool, memory and event loop. It is a 100-line built-in registry instead of `prom-client`.

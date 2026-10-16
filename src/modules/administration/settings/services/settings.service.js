@@ -17,31 +17,45 @@ const PUBLIC_FIELDS = [
   "updatedAt"
 ];
 
+const logoFiles = ctx => fileService.forOwner(ctx, "TENANT", ctx.tenantId);
+
 /* Settings with a short-lived logo link when a logo is set */
-const view = async tenant => ({
-  ...Object.fromEntries(PUBLIC_FIELDS.map(field => [field, tenant[field] ?? null])),
-  logoUrl: tenant.logoKey
-    ? await storage.signedUrl(tenant.logoKey, { contentType: "image/png", expiresInSeconds: 3600 })
-    : null
-});
+const view = async (ctx, tenant) => {
+  const logo = tenant.logoKey ? (await logoFiles(ctx)).find(f => f.category === "LOGO") : null;
+  return {
+    ...Object.fromEntries(PUBLIC_FIELDS.map(field => [field, tenant[field] ?? null])),
+    logoUrl: tenant.logoKey
+      ? await storage.signedUrl(tenant.logoKey, {
+          contentType: logo?.contentType ?? "application/octet-stream",
+          expiresInSeconds: 3600
+        })
+      : null
+  };
+};
 
 export const settingsService = {
   get: async ctx => {
     const tenant = await getTenant(ctx.tenantId);
     if (!tenant) throw notFound("School");
-    return view(tenant);
+    return view(ctx, tenant);
   },
 
   update: async (ctx, changes) => {
     const tenant = await updateTenant(ctx.tenantId, changes);
     if (!tenant) throw notFound("School");
-    return view(tenant);
+    return view(ctx, tenant);
   },
 
   /* Replace the school logo (used on report cards and receipts) */
   setLogo: async (ctx, file) => {
     const stored = await fileService.store(ctx, file, { ownerType: "TENANT", ownerId: ctx.tenantId, category: "LOGO" });
     const { storageKey } = await fileService.getById(ctx, stored.id);
-    return view(await updateTenant(ctx.tenantId, { logoKey: storageKey }));
+    const tenant = await updateTenant(ctx.tenantId, { logoKey: storageKey });
+    /* The previous logo is no longer referenced */
+    for (const old of await logoFiles(ctx)) {
+      if (old.id !== stored.id && old.category === "LOGO")
+        await fileService.remove(ctx, old.id, { ownerType: "TENANT" });
+    }
+    return view(ctx, tenant);
   }
 };

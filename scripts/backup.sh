@@ -6,6 +6,8 @@
 #   BACKUP_S3_URI=s3://bucket/school npm run backup   # also copy off-site (aws cli)
 #
 # Needs pg_dump (same major version as the server or newer) and mongodump.
+# Database URLs are passed on the command line; on shared hosts prefer ~/.pgpass
+# and a mongodump --config file so passwords do not show in `ps`.
 # Managed databases should ALSO have point-in-time recovery switched on;
 # this script is the portable, provider-independent copy. See docs/OPERATIONS.md.
 set -eu
@@ -36,5 +38,6 @@ if [ -n "${BACKUP_S3_URI:-}" ]; then
   aws s3 cp --recursive --only-show-errors "$target" "$BACKUP_S3_URI/$stamp"
 fi
 
-find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -mtime +"$KEEP_DAYS" -exec rm -rf {} +
+# Only folders this script created (named like 20261016T020000Z) are pruned
+find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name '????????T??????Z' -mtime +"$KEEP_DAYS" -exec rm -rf {} +
 echo "Backup complete: $target"

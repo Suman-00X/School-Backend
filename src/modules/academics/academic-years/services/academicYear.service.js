@@ -1,9 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { cache } from "../../../../common/cache/cache.js";
 import { createCrudService } from "../../../../common/crud/crudService.js";
 import { transaction } from "../../../../common/database/postgres.js";
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { tenantToday } from "../../../../common/tenancy/tenant.service.js";
+import { studentEnrollments as enrollments } from "../../enrollments/models/enrollment.schema.js";
 import { academicYears } from "../models/academicYear.schema.js";
 import { academicYearRepository } from "../repositories/academicYear.repository.js";
 
@@ -73,6 +74,23 @@ export const academicYearService = {
       const today = await tenantToday(ctx.tenantId);
       if (year.endDate >= today) {
         throw unprocessable(`${year.yearName} ends on ${year.endDate}. Archive it after it has ended.`);
+      }
+      /* Once archived, enrollments cannot be closed or promoted, so finish year-end first */
+      const [{ active }] = await tx
+        .select({ active: count() })
+        .from(enrollments)
+        .where(
+          and(
+            eq(enrollments.tenantId, ctx.tenantId),
+            eq(enrollments.academicYearId, academicYearId),
+            eq(enrollments.isActive, true),
+            eq(enrollments.status, "ACTIVE")
+          )
+        );
+      if (active > 0) {
+        throw unprocessable(
+          `${active} student${active === 1 ? " is" : "s are"} still active in ${year.yearName}. Promote them or mark them as left first.`
+        );
       }
       return academicYearRepository.update(ctx.tenantId, academicYearId, { archivedAt: new Date() }, { dbc: tx });
     }),

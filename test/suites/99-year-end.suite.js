@@ -184,3 +184,18 @@ describe("operations", () => {
     assert.doesNotMatch(text, /route="\/api\/v1\/academics\/sections\/[0-9a-f]{8}-/, "never raw ids");
   });
 });
+
+describe("year archiving: year-end must be finished", () => {
+  it("refuses to archive a year that still has active students", async () => {
+    /* y1 has ended in this scenario only if its end date is past; force it for the check */
+    await h.pool.query("UPDATE academic_years SET end_date = '2026-03-31', start_date = '2025-04-01' WHERE id = $1", [
+      world.y1.id
+    ]);
+    const res = await request("POST", `${A}/academic-years/${world.y1.id}/archival`);
+    assert.equal(res.status, 422);
+    assert.match(
+      res.body.message,
+      /^\d+ students? (is|are) still active in 2026-27\. Promote them or mark them as left first\.$/
+    );
+  });
+});
