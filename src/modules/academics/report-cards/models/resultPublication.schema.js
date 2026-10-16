@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { check, index, integer, pgEnum, pgTable, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, index, integer, jsonb, pgEnum, pgTable, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { baseColumns } from "../../../../common/database/columns.js";
 import { users } from "../../../users/accounts/models/user.schema.js";
 import { academicYears } from "../../academic-years/models/academicYear.schema.js";
@@ -30,7 +30,9 @@ export const resultPublications = pgTable(
     withdrawnBy: uuid("withdrawn_by").references(() => users.id),
     reportCount: integer("report_count").notNull().default(0),
     /* Report cards that differ from the previous version (null for the first) */
-    changedCount: integer("changed_count")
+    changedCount: integer("changed_count"),
+    /* { studentId: seal } of every snapshot of this version, to detect edited, forged or deleted ones */
+    snapshotSeals: jsonb("snapshot_seals").notNull().default({})
   },
   t => [
     uniqueIndex("result_publications_exam_version_uq")

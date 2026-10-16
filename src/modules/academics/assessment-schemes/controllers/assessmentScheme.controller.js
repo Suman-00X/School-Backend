@@ -3,6 +3,11 @@ import { created, done, ok, paginated } from "../../../../common/http/responses.
 import { assessmentSchemeService, weightsLabel } from "../services/assessmentScheme.service.js";
 import { schemeResultService } from "../services/schemeResult.service.js";
 
+const integrityMessage = report =>
+  report.intact
+    ? `Version ${report.version} is intact: all ${report.expected} report card(s) match their seals`
+    : `Version ${report.version} FAILED its integrity check: ${report.tampered.length} changed, ${report.missing.length} missing, ${report.unexpected.length} not part of the publication`;
+
 const cards = n => `${n} report card${n === 1 ? "" : "s"}`;
 
 export const assessmentSchemeController = {
@@ -99,6 +104,11 @@ export const assessmentSchemeController = {
       publication,
       `${source.name} results re-published as version ${publication.version} (${cards(publication.changedCount ?? 0)} changed)`
     );
+  },
+
+  integrity: async (req, res) => {
+    const report = await schemeResultService.integrity(req.context, req.params.schemeId, req.params.version);
+    return ok(res, report, integrityMessage(report));
   },
 
   comparison: async (req, res) => {

@@ -1,0 +1,1 @@
+ALTER TABLE "result_publications" ADD COLUMN "snapshot_seals" jsonb DEFAULT '{}'::jsonb NOT NULL;

@@ -50,11 +50,16 @@ export const reportCardController = {
     ),
 
   snapshotPdf: async (req, res) => {
-    const snapshot = await reportSnapshotService.getById(req.context, req.params.snapshotId);
+    const snapshot = await reportSnapshotService.getIntact(req.context, req.params.snapshotId);
     const { buffer, fileName } = await reportCardPdfService.renderSnapshot(req.context, snapshot);
     return sendFile(res, { buffer, fileName, format: "pdf" });
   }
 };
+
+const integrityMessage = report =>
+  report.intact
+    ? `Version ${report.version} is intact: all ${report.expected} report card(s) match their seals`
+    : `Version ${report.version} FAILED its integrity check: ${report.tampered.length} changed, ${report.missing.length} missing, ${report.unexpected.length} not part of the publication`;
 
 /* /exams/:examId/result-publication */
 export const resultPublicationController = {
@@ -76,6 +81,11 @@ export const resultPublicationController = {
         ? `${source.examName} results withdrawn: version ${publication.version} is hidden from students and parents and kept on record`
         : `${source.examName} results withdrawn`
     );
+  },
+
+  integrity: async (req, res) => {
+    const report = await resultPublicationService.examIntegrity(req.context, req.params.examId, req.params.version);
+    return ok(res, report, integrityMessage(report));
   },
 
   versions: async (req, res) =>

@@ -16,17 +16,6 @@ export const reportSnapshotRepository = {
         )
       : [],
 
-  /* Leftovers of an attempt that never committed in PostgreSQL (crash, failed clean-up).
-     Called under the source's row lock, for the version about to be written. */
-  removeUncommittedVersion: (tenantId, kind, sourceId, version) =>
-    ReportSnapshot.deleteMany({ tenantId, kind, sourceId, version }),
-
-  /* Undo a publication whose PostgreSQL transaction did not commit */
-  removePublication: (tenantId, publicationId) => ReportSnapshot.deleteMany({ tenantId, publicationId }),
-
-  setWithdrawn: (tenantId, publicationId, withdrawnAt) =>
-    ReportSnapshot.updateMany({ tenantId, publicationId }, { $set: { withdrawnAt } }),
-
   /* { studentId -> contentHash } of one publication */
   hashesOf: async (tenantId, publicationId) => {
     const docs = await ReportSnapshot.find({ tenantId, publicationId }, { studentId: 1, contentHash: 1 }).lean();

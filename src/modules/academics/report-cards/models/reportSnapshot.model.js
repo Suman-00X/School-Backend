@@ -2,7 +2,11 @@ import mongoose from "mongoose";
 import { PUBLICATION_KINDS } from "../../shared/constants/academic.constants.js";
 
 /* A student's report card exactly as published: one document per student per
-   publication version. Immutable: the only change ever made is marking it withdrawn. */
+   publication version. Write-once: never updated or deleted (whether a version is visible,
+   superseded or withdrawn lives in PostgreSQL, result_publications).
+   `seal` is an HMAC of the document's content with a key only the application holds, and
+   the publication row lists every student's seal, so an edit, a forged document or a
+   deleted one is detected on read (see resultPublication.service sealed()). */
 const reportSnapshotSchema = new mongoose.Schema(
   {
     tenantId: { type: String, required: true },
@@ -23,34 +27,42 @@ const reportSnapshotSchema = new mongoose.Schema(
     /* The report card body: subjects, totals, grades, GPA, grace, result, rank */
     report: { type: Object, required: true },
     contentHash: { type: String, required: true },
-    publishedAt: { type: Date, required: true },
+    publishedAt: { type: String, required: true },
     publishedBy: { type: String },
-    withdrawnAt: { type: Date, default: null }
+    seal: { type: String, required: true }
   },
   { collection: "report_snapshots", minimize: false, timestamps: { createdAt: true, updatedAt: false } }
 );
 
-reportSnapshotSchema.index({ tenantId: 1, kind: 1, sourceId: 1, studentId: 1, version: 1 }, { unique: true });
-reportSnapshotSchema.index({ tenantId: 1, publicationId: 1, studentId: 1 });
+/* One per student per publication; a publication that never committed leaves documents
+   under its own id, which nothing reads and which never block the next attempt */
+reportSnapshotSchema.index({ tenantId: 1, publicationId: 1, studentId: 1 }, { unique: true });
+reportSnapshotSchema.index({ tenantId: 1, kind: 1, sourceId: 1, version: 1 });
 reportSnapshotSchema.index({ tenantId: 1, studentId: 1, academicYearId: 1, publishedAt: -1 });
 
-const IMMUTABLE = "Report snapshots are immutable; only withdrawnAt can change";
-
-/* Only { withdrawnAt } may ever be updated */
-const onlyWithdrawal = function () {
-  const update = this.getUpdate() ?? {};
-  const fields = Object.entries(update).flatMap(([key, value]) =>
-    key.startsWith("$") ? Object.keys(value ?? {}) : [key]
-  );
-  if (fields.some(field => field !== "withdrawnAt")) throw new Error(IMMUTABLE);
+const IMMUTABLE = "Report snapshots are write-once: they cannot be changed or deleted";
+const refuse = () => {
+  throw new Error(IMMUTABLE);
 };
 
-reportSnapshotSchema.pre(["updateOne", "updateMany", "findOneAndUpdate"], onlyWithdrawal);
-reportSnapshotSchema.pre(["replaceOne", "findOneAndReplace"], () => {
-  throw new Error(IMMUTABLE);
-});
+/* In the application nothing may change or remove a snapshot. (In the database, the
+   least-privilege role from scripts/mongo-app-role.js enforces the same; the seal detects
+   anything done around both.) */
+reportSnapshotSchema.pre(
+  [
+    "updateOne",
+    "updateMany",
+    "findOneAndUpdate",
+    "replaceOne",
+    "findOneAndReplace",
+    "deleteOne",
+    "deleteMany",
+    "findOneAndDelete"
+  ],
+  refuse
+);
 reportSnapshotSchema.pre("save", function () {
-  if (!this.isNew) throw new Error(IMMUTABLE);
+  if (!this.isNew) refuse();
 });
 
 export const ReportSnapshot = mongoose.models.ReportSnapshot ?? mongoose.model("ReportSnapshot", reportSnapshotSchema);

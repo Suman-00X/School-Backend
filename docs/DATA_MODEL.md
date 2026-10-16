@@ -110,6 +110,7 @@ The backend uses two databases, each for the kind of data it handles best.
 | invoices | `invoice_lines` | Bill lines per fee head: gross, concession, net | CHECK net = gross − concession, concession ≤ gross |
 | invoices | `invoice_line_concessions` | Which concession took how much off a line (name copied for receipts) | CHECK amount > 0 |
 | payments | `payments` | Cash or online payments; one receipt each; gateway ids; the part kept as credit; balance after | Unique receipt number. **Unique (tenant, gateway order) and (tenant, gateway payment id)**, which makes webhooks idempotent. CHECK amount > 0, 0 ≤ excess ≤ amount |
+| payments | `payment_refunds` | Money paid back: the amount split into `from_credit`, `from_invoice` and `unallocated`; method (ORIGINAL = back through the gateway), status (PENDING, PROCESSED, FAILED = reversed), source (STAFF, or GATEWAY for dashboard refunds). Numbered `RFND26-000001` | Unique refund number and (provider, gateway refund id). CHECK the parts add up to the amount |
 | credits | `student_credit_balances` | A student's unused credit (overpayments), across years | Unique (tenant, student). **CHECK balance ≥ 0**; spent with a conditional update |
 | credits | `student_credit_entries` | Credit history: OVERPAYMENT, APPLIED (to an invoice), REFUNDED | CHECK amount > 0; overpayments name their payment, applications their invoice |
 | payment-settings | `payment_gateway_accounts` | The school's own Razorpay key id, **key secret and webhook secret encrypted at rest** | Partial unique tenant. Secrets never returned |
@@ -233,7 +234,7 @@ erDiagram
 | `importjobs` | `administration/imports` | CSV import progress and per-row errors | (tenant, time) |
 | `storedfiles` | `files/documents` | Upload metadata: owner, category, type, size, storage key (never returned), uploader | (tenant, owner type, owner id, time) |
 | `jobclaims` | `common/jobs/claims.js` | Once-only side effects (results published, absence alert sent today) | Unique `key`; TTL 90 days |
-| `report_snapshots` | `academics/report-cards` | A student's report card exactly as published, one per publication version: student, policy (with its settings), the report body (subjects, grades, GPA/CGPA, grace, result, ranks). **Immutable**: only `withdrawnAt` ever changes. The portal and its PDFs read these, never live marks | Unique (tenant, kind, source, student, version); (tenant, publication, student); (tenant, student, year, publishedAt) |
+| `report_snapshots` | `academics/report-cards` | A student's report card exactly as published, one per publication version: student, policy (with its settings), the report body (subjects, grades, GPA/CGPA, grace, result, ranks). **Write-once** (never updated or deleted; visibility lives in `result_publications`) and HMAC-**sealed**: the publication row lists every seal (`snapshot_seals`), so edits, forgeries and deletions are detected on read. The portal and its PDFs read these, never live marks | Unique (tenant, publication, student); (tenant, kind, source, version); (tenant, student, year, publishedAt) |
 
 IDs in Mongo documents are the **PostgreSQL UUIDs** stored as strings. There are no cross-database foreign keys; PostgreSQL stays the source of truth. File bytes live in object storage (S3 or local disk), never in a database.
 

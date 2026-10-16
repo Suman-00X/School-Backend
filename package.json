@@ -11,6 +11,7 @@
     "db:studio": "drizzle-kit studio",
     "docs:endpoints": "node scripts/generate-endpoints.js",
     "mongo:sync-indexes": "node scripts/sync-mongo-indexes.js",
+    "mongo:app-role": "node scripts/mongo-app-role.js",
     "school:create": "node scripts/create-school.js",
     "backup": "sh scripts/backup.sh",
     "restore": "sh scripts/restore.sh",

@@ -38,7 +38,7 @@ One image, three commands:
 |---|---|---|
 | API | `node src/server.js` (default) | Horizontally; stateless when `REDIS_URL` is set |
 | Worker | `node src/worker.js` | 1+; BullMQ shares the work. Runs schedules (late fees, fee reminders) |
-| One-off | `node scripts/migrate.js`, `node scripts/sync-mongo-indexes.js`, `node scripts/create-school.js …` | Run before rolling out a release |
+| One-off | `node scripts/migrate.js`, `node scripts/sync-mongo-indexes.js` (all models), `node scripts/mongo-app-role.js …`, `node scripts/create-school.js …` | Run before rolling out a release |
 
 Health: `GET /health` (liveness, no dependencies) and `GET /ready` (PostgreSQL and MongoDB answer; use for load-balancer readiness). The API drains connections for up to 15 s on `SIGTERM`.
 
@@ -144,6 +144,8 @@ npm run db:migrate                              # bring an older backup up to th
 - [ ] TLS is terminated at the load balancer, with HSTS (helmet sends it).
 - [ ] Databases sit on private networks, with TLS in `DATABASE_URL`/`MONGO_URI` (`sslmode=require`, `tls=true`).
 - [ ] The app's database user owns nothing it does not need. Migrations run as a separate owner role; see the row-level security note.
+- [ ] The application's MongoDB user has the `school_app` role from `npm run mongo:app-role -- --db <db> --user <user> --password …`, run with `MONGO_ADMIN_URI`. Published report cards are then insert-only even for the application. Run it again after releases that add collections.
+- [ ] Razorpay webhooks are configured for each school: `payment.captured`, `refund.processed`, `refund.failed`, all pointing at `POST /api/v1/public/payments/razorpay/<schoolId>/webhook`.
 - [ ] The S3 bucket is private. Downloads always go through short-lived signed URLs.
 - [ ] Mock gateway is off (`PAYMENT_PROVIDER` unset or `razorpay` in production). Each school enters its own Razorpay keys and points its webhook at the URL shown in `GET /finance/payment-settings`. `DATA_ENCRYPTION_KEY` is backed up: without it the stored keys cannot be read.
 - [ ] `METRICS_TOKEN` is set, and `/metrics` is reachable only from the monitoring network.

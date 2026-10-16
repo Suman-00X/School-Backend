@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { plainJson, seal, sealMatches } from "../../../../common/crypto/integrity.js";
 import { eq } from "drizzle-orm";
 import { transaction } from "../../../../common/database/postgres.js";
 import { publish } from "../../../../common/events/events.js";
@@ -16,9 +17,32 @@ import { reportCardService, studentReport } from "./reportCard.service.js";
    publish:  lock the exam/scheme row -> compute every sheet -> version N+1 -> snapshots -> visible
    revise:   the same while already published; version N is superseded
    withdraw: hides the current version from the portal; snapshots are kept
-   The snapshots are written inside the PostgreSQL transaction and removed again if it fails. */
+   Snapshots are sealed (HMAC) and their seals listed on the publication, so a snapshot changed,
+   added or removed directly in MongoDB is detected (sealed(), verifyPublication()). */
 
 const hashOf = report => createHash("sha256").update(JSON.stringify(report)).digest("hex");
+
+/* Every stored field except the seal itself */
+const SNAPSHOT_SEAL = "report-snapshot-seal";
+const SEALED_FIELDS = [
+  "tenantId",
+  "publicationId",
+  "kind",
+  "sourceId",
+  "sourceName",
+  "version",
+  "academicYearId",
+  "sectionId",
+  "classId",
+  "studentId",
+  "student",
+  "policy",
+  "report",
+  "contentHash",
+  "publishedAt",
+  "publishedBy"
+];
+const sealedContent = snapshot => Object.fromEntries(SEALED_FIELDS.map(field => [field, snapshot[field] ?? null]));
 
 const statusOf = publication =>
   publication.withdrawnAt ? "WITHDRAWN" : publication.supersededAt ? "SUPERSEDED" : "CURRENT";
@@ -60,96 +84,120 @@ const snapshotDocs = (sheets, { kind, sourceId, sourceName, academicYearId, repo
 
 /* Generic publish/revise of an exam or scheme.
    lock(tx) -> locked source row (throws 404/409); compute(source) -> { sheets, sourceName, academicYearId, reportFor };
-   after(tx, source, publishedAt) -> updated source row. */
-const publishVersion = async (ctx, { kind, sourceId, lock, compute, after }) => {
-  let insertedFor = null;
-  try {
-    return await transaction(async tx => {
-      const source = await lock(tx);
-      const { sheets, sourceName, academicYearId, reportFor } = await compute(source);
-      const docs = snapshotDocs(sheets, { kind, sourceId, sourceName, academicYearId, reportFor });
+   after(tx, source, publishedAt) -> updated source row.
+   Snapshots are inserted before the PostgreSQL commit, under the new publication's id. If the
+   commit fails they stay behind as orphans: nothing reads them (every read starts from a
+   committed publication) and they never block a later attempt, so nothing is ever deleted. */
+const publishVersion = async (ctx, { kind, sourceId, lock, compute, after }) =>
+  transaction(async tx => {
+    const source = await lock(tx);
+    const { sheets, sourceName, academicYearId, reportFor } = await compute(source);
+    const docs = snapshotDocs(sheets, { kind, sourceId, sourceName, academicYearId, reportFor });
 
-      const version = (await resultPublicationRepository.latestVersion(ctx.tenantId, kind, sourceId, { dbc: tx })) + 1;
-      const previous =
-        version > 1 &&
-        (await resultPublicationRepository.findOne(
-          ctx.tenantId,
-          [resultPublicationRepository.sourceCondition(kind, sourceId), eq(resultPublications.version, version - 1)],
-          { dbc: tx }
-        ));
-      const previousHashes = previous ? await reportSnapshotRepository.hashesOf(ctx.tenantId, previous.id) : null;
-      const changedCount = previousHashes
-        ? docs.filter(doc => previousHashes.get(doc.studentId) !== doc.contentHash).length +
-          [...previousHashes.keys()].filter(id => !docs.some(doc => doc.studentId === id)).length
-        : null;
-
-      const publishedAt = new Date();
-      const current = await resultPublicationRepository.findCurrent(ctx.tenantId, kind, sourceId, { dbc: tx });
-      if (current) {
-        await resultPublicationRepository.update(ctx.tenantId, current.id, { supersededAt: publishedAt }, { dbc: tx });
-      }
-      const publication = await resultPublicationRepository.create(
+    const version = (await resultPublicationRepository.latestVersion(ctx.tenantId, kind, sourceId, { dbc: tx })) + 1;
+    const previous =
+      version > 1 &&
+      (await resultPublicationRepository.findOne(
         ctx.tenantId,
-        {
-          kind,
-          [sourceKey(kind)]: sourceId,
-          academicYearId,
-          version,
-          publishedAt,
-          publishedBy: ctx.userId ?? null,
-          reportCount: docs.length,
-          changedCount
-        },
+        [resultPublicationRepository.sourceCondition(kind, sourceId), eq(resultPublications.version, version - 1)],
+        { dbc: tx }
+      ));
+    const previousHashes = previous ? await reportSnapshotRepository.hashesOf(ctx.tenantId, previous.id) : null;
+    const changedCount = previousHashes
+      ? docs.filter(doc => previousHashes.get(doc.studentId) !== doc.contentHash).length +
+        [...previousHashes.keys()].filter(id => !docs.some(doc => doc.studentId === id)).length
+      : null;
+
+    const publishedAt = new Date();
+    const current = await resultPublicationRepository.findCurrent(ctx.tenantId, kind, sourceId, { dbc: tx });
+    if (current) {
+      await resultPublicationRepository.update(ctx.tenantId, current.id, { supersededAt: publishedAt }, { dbc: tx });
+    }
+    const publication = await resultPublicationRepository.create(
+      ctx.tenantId,
+      {
+        kind,
+        [sourceKey(kind)]: sourceId,
+        academicYearId,
+        version,
+        publishedAt,
+        publishedBy: ctx.userId ?? null,
+        reportCount: docs.length,
+        changedCount
+      },
+      { dbc: tx }
+    );
+
+    /* Seal each snapshot and record every seal on the publication (the manifest) */
+    const stored = docs.map(doc =>
+      plainJson({
+        ...doc,
+        tenantId: ctx.tenantId,
+        publicationId: publication.id,
+        version,
+        publishedAt,
+        publishedBy: ctx.userId ?? null
+      })
+    );
+    const sealedDocs = stored.map(doc => ({ ...doc, seal: seal(SNAPSHOT_SEAL, sealedContent(doc)) }));
+    await resultPublicationRepository.setManifest(
+      ctx.tenantId,
+      publication.id,
+      Object.fromEntries(sealedDocs.map(doc => [doc.studentId, doc.seal])),
+      { dbc: tx }
+    );
+    await reportSnapshotRepository.insertMany(ctx.tenantId, sealedDocs);
+    const updated = await after(tx, source, publishedAt);
+    return { source: updated, publication: publicationView(publication) };
+  });
+
+/* Generic withdrawal: hide the current version (in PostgreSQL); its snapshots are untouched */
+const withdrawVersion = async (ctx, { kind, sourceId, lock, after }) =>
+  transaction(async tx => {
+    const source = await lock(tx);
+    const withdrawnAt = new Date();
+    const current = await resultPublicationRepository.findCurrent(ctx.tenantId, kind, sourceId, { dbc: tx });
+    if (current) {
+      await resultPublicationRepository.update(
+        ctx.tenantId,
+        current.id,
+        { withdrawnAt, withdrawnBy: ctx.userId ?? null },
         { dbc: tx }
       );
+    }
+    const updated = await after(tx, source);
+    return { source: updated, publication: current ? publicationView({ ...current, withdrawnAt }) : null };
+  });
 
-      insertedFor = publication.id;
-      /* version N+1 is not committed anywhere, so any snapshot carrying it is a leftover */
-      await reportSnapshotRepository.removeUncommittedVersion(ctx.tenantId, kind, sourceId, version);
-      await reportSnapshotRepository.insertMany(
-        ctx.tenantId,
-        docs.map(doc => ({
-          ...doc,
-          publicationId: publication.id,
-          version,
-          publishedAt,
-          publishedBy: ctx.userId ?? null
-        }))
-      );
-      const updated = await after(tx, source, publishedAt);
-      return { source: updated, publication: publicationView(publication) };
-    });
-  } catch (error) {
-    if (insertedFor) await reportSnapshotRepository.removePublication(ctx.tenantId, insertedFor);
-    throw error;
-  }
-};
+/* Integrity of one snapshot against its seal and its publication's manifest */
+export const sealed = (snapshot, manifest) =>
+  Boolean(manifest) &&
+  manifest[snapshot.studentId] === snapshot.seal &&
+  sealMatches(SNAPSHOT_SEAL, sealedContent(snapshot), snapshot.seal);
 
-/* Generic withdrawal: hide the current version; keep it and its snapshots */
-const withdrawVersion = async (ctx, { kind, sourceId, lock, after }) => {
-  let withdrawnFor = null;
-  try {
-    return await transaction(async tx => {
-      const source = await lock(tx);
-      const withdrawnAt = new Date();
-      const current = await resultPublicationRepository.findCurrent(ctx.tenantId, kind, sourceId, { dbc: tx });
-      if (current) {
-        await resultPublicationRepository.update(
-          ctx.tenantId,
-          current.id,
-          { withdrawnAt, withdrawnBy: ctx.userId ?? null },
-          { dbc: tx }
-        );
-        withdrawnFor = current.id;
-        await reportSnapshotRepository.setWithdrawn(ctx.tenantId, current.id, withdrawnAt);
-      }
-      const updated = await after(tx, source);
-      return { source: updated, publication: current ? publicationView({ ...current, withdrawnAt }) : null };
-    });
-  } catch (error) {
-    if (withdrawnFor) await reportSnapshotRepository.setWithdrawn(ctx.tenantId, withdrawnFor, null);
-    throw error;
+/* Check every snapshot of one published version: edited, forged or missing ones */
+export const verifyPublication = async (ctx, publication) => {
+  const manifest = (await resultPublicationRepository.manifestOf(ctx.tenantId, publication.id)) ?? {};
+  const snapshots = await reportSnapshotRepository.findMany(ctx.tenantId, { publicationId: publication.id });
+  const seen = new Set();
+  const tampered = [];
+  const unexpected = [];
+  for (const snapshot of snapshots) {
+    seen.add(snapshot.studentId);
+    if (!(snapshot.studentId in manifest)) unexpected.push(snapshot.studentId);
+    else if (!sealed(snapshot, manifest)) tampered.push(snapshot.studentId);
   }
+  const missing = Object.keys(manifest).filter(studentId => !seen.has(studentId));
+  return {
+    publicationId: publication.id,
+    version: publication.version,
+    expected: Object.keys(manifest).length,
+    verified: snapshots.length - tampered.length - unexpected.length,
+    intact: !tampered.length && !missing.length && !unexpected.length,
+    tampered,
+    missing,
+    unexpected
+  };
 };
 
 const FIELDS = ["result", "percentage", "grade", "gpa", "cgpa", "totalObtained", "graceTotal", "rank", "classRank"];
@@ -315,6 +363,21 @@ export const resultPublicationService = {
       with: { publisher: { columns: { id: true, firstName: true, lastName: true } } }
     });
     return { ...result, rows: result.rows.map(publicationView) };
+  },
+
+  /* Check that every snapshot of one published version is exactly as published */
+  integrity: async (ctx, kind, sourceId, version) => {
+    const publication = await resultPublicationRepository.findOne(ctx.tenantId, [
+      resultPublicationRepository.sourceCondition(kind, sourceId),
+      eq(resultPublications.version, version)
+    ]);
+    if (!publication) throw notFound(`Published version ${version}`);
+    return verifyPublication(ctx, publication);
+  },
+
+  examIntegrity: async (ctx, examId, version) => {
+    await reportCardService.loadExam(ctx, examId);
+    return resultPublicationService.integrity(ctx, "EXAM", examId, version);
   },
 
   examVersions: async (ctx, examId, query) => {

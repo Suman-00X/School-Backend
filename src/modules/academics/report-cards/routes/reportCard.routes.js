@@ -60,6 +60,13 @@ examPublicationRoutes.post(
   validate(rules.publication),
   publication.revise
 );
+/* Are the published report cards of a version exactly as published? */
+examPublicationRoutes.get(
+  "/:examId/result-publication/versions/:version/integrity",
+  authorize(canPublish.publish),
+  validate(rules.integrity),
+  publication.integrity
+);
 examPublicationRoutes.get(
   "/:examId/result-publication/comparison",
   authorize(canPublish.read),

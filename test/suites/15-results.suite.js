@@ -707,10 +707,10 @@ describe("results: publication and report snapshots", () => {
 
     const kept = await get(`${A}/report-cards/snapshots?examId=${t.term1.id}&studentId=${t.bo.id}`);
     assert.deepEqual(
-      kept.data.map(s => [s.version, Boolean(s.withdrawnAt)]),
+      kept.data.map(s => [s.version, s.publicationStatus, s.integrity]),
       [
-        [2, true],
-        [1, false]
+        [2, "WITHDRAWN", "VERIFIED"],
+        [1, "SUPERSEDED", "VERIFIED"]
       ]
     );
 
@@ -746,9 +746,10 @@ describe("results: publication and report snapshots", () => {
     const { ReportSnapshot } = await import("../../src/modules/academics/report-cards/models/reportSnapshot.model.js");
     await assert.rejects(
       ReportSnapshot.updateOne({ _id: mine.id }, { $set: { "report.result": "FAIL" } }),
-      /immutable/
+      /write-once/
     );
-    await assert.rejects(ReportSnapshot.replaceOne({ _id: mine.id }, { tenantId: "x" }), /immutable/);
+    await assert.rejects(ReportSnapshot.replaceOne({ _id: mine.id }, { tenantId: "x" }), /write-once/);
+    await assert.rejects(ReportSnapshot.deleteMany({ _id: mine.id }), /write-once/);
     assert.equal((await ReportSnapshot.findById(mine.id).lean()).report.result, mine.report.result);
   });
 
@@ -795,9 +796,10 @@ describe("results: publication and report snapshots", () => {
     });
     const revised = await post(`${A}/exams/${t.term2.id}/result-publication/versions`, {});
     assert.match(revised.message, /^Term 2 results re-published as version 2/);
-    assert.equal(await ReportSnapshot.countDocuments({ tenantId: h.tenant.id, sourceId: t.term2.id, version: 2 }), 7);
-    const listed = await get(`${A}/report-cards/snapshots?examId=${t.term2.id}&limit=100`);
-    assert.ok(listed.data.every(snapshot => snapshot.publicationId));
+    /* The orphan stays in MongoDB (nothing is ever deleted) but nobody sees it */
+    const listed = await get(`${A}/report-cards/snapshots?examId=${t.term2.id}&version=2&limit=100`);
+    assert.equal(listed.meta.total, 7);
+    assert.ok(listed.data.every(snapshot => snapshot.integrity === "VERIFIED"));
   });
 
   it("never ranks or averages students whose marks are incomplete", async () => {
@@ -980,5 +982,97 @@ describe("results: weighted assessment schemes", () => {
       "WITHDRAWN"
     );
     await post(`${A}/assessment-schemes/${t.annual.id}/result-publication`, {}, {}, 200);
+  });
+});
+
+describe("results: tamper-proof report snapshots", () => {
+  const currentTerm1 = async () => {
+    const versions = await get(`${A}/exams/${t.term1.id}/result-publication/versions`);
+    return versions.data.find(v => v.status === "CURRENT").version;
+  };
+  const integrity = async version =>
+    (await get(`${A}/exams/${t.term1.id}/result-publication/versions/${version}/integrity`)).data;
+
+  it("verifies a published version end to end", async () => {
+    const version = await currentTerm1();
+    const report = await get(`${A}/exams/${t.term1.id}/result-publication/versions/${version}/integrity`);
+    assert.equal(report.data.intact, true);
+    assert.equal(report.message, `Version ${version} is intact: all 7 report card(s) match their seals`);
+    await get(
+      `${A}/exams/${t.term1.id}/result-publication/versions/${version}/integrity`,
+      { as: h.tokens.teacher2 },
+      403
+    );
+    await get(`${A}/exams/${t.term1.id}/result-publication/versions/99/integrity`, {}, 404);
+  });
+
+  it("detects a report card edited directly in the database and never shows it", async () => {
+    const { ReportSnapshot } = await import("../../src/modules/academics/report-cards/models/reportSnapshot.model.js");
+    const version = await currentTerm1();
+    const target = await ReportSnapshot.findOne({
+      tenantId: h.tenant.id,
+      sourceId: t.term1.id,
+      version,
+      studentId: t.bo.id
+    }).lean();
+    /* Someone with database access (not the application) turns a FAIL into a PASS */
+    await ReportSnapshot.collection.updateOne(
+      { _id: target._id },
+      { $set: { "report.result": target.report.result === "PASS" ? "FAIL" : "PASS", "report.percentage": 99 } }
+    );
+
+    const check = await integrity(version);
+    assert.equal(check.intact, false);
+    assert.deepEqual(check.tampered, [t.bo.id]);
+
+    const family = await get(`${ME}/students/${t.bo.id}/report-cards?examId=${t.term1.id}`, { as: h.tokens.rbo }, 404);
+    assert.ok(family);
+    const pdf = await request("GET", `${ME}/students/${t.bo.id}/report-cards/pdf?examId=${t.term1.id}`, {
+      as: h.tokens.rbo
+    });
+    assert.equal(pdf.status, 409);
+    assert.equal(
+      pdf.body.message,
+      "This report card failed its integrity check and cannot be shown. The school has been alerted."
+    );
+
+    const staff = await get(`${A}/report-cards/snapshots/${String(target._id)}`);
+    assert.equal(staff.data.integrity, "TAMPERED");
+    assert.equal((await request("GET", `${A}/report-cards/snapshots/${String(target._id)}/pdf`)).status, 409);
+
+    /* Copying a valid seal from another student does not help: the seal binds the student */
+    const other = await ReportSnapshot.findOne({
+      tenantId: h.tenant.id,
+      sourceId: t.term1.id,
+      version,
+      studentId: { $ne: t.bo.id }
+    }).lean();
+    await ReportSnapshot.collection.updateOne({ _id: target._id }, { $set: { seal: other.seal } });
+    assert.deepEqual((await integrity(version)).tampered, [t.bo.id]);
+
+    /* The school re-publishes: a fresh, sealed version replaces the bad one for families */
+    await post(`${A}/exams/${t.term1.id}/result-publication/versions`, {});
+    const cards = await get(`${ME}/students/${t.bo.id}/report-cards?examId=${t.term1.id}`, { as: h.tokens.rbo });
+    assert.equal(cards.data.reports.length, 1);
+    assert.equal((await integrity(version + 1)).intact, true);
+  });
+
+  it("detects deleted and forged report cards", async () => {
+    const { ReportSnapshot } = await import("../../src/modules/academics/report-cards/models/reportSnapshot.model.js");
+    const version = await currentTerm1();
+    const docs = await ReportSnapshot.find({ tenantId: h.tenant.id, sourceId: t.term1.id, version }).lean();
+    const [gone, template] = docs;
+    await ReportSnapshot.collection.deleteOne({ _id: gone._id });
+    const { _id, ...copy } = template;
+    await ReportSnapshot.collection.insertOne({ ...copy, studentId: crypto.randomUUID() });
+
+    const check = await integrity(version);
+    assert.equal(check.intact, false);
+    assert.deepEqual(check.missing, [gone.studentId]);
+    assert.equal(check.unexpected.length, 1);
+    assert.match(
+      (await get(`${A}/exams/${t.term1.id}/result-publication/versions/${version}/integrity`)).message,
+      /FAILED its integrity check: 0 changed, 1 missing, 1 not part of the publication$/
+    );
   });
 });

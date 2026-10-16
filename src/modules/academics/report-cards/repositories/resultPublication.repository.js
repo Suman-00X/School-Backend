@@ -8,7 +8,9 @@ const sourceColumn = kind => (kind === "EXAM" ? resultPublications.examId : resu
 const base = createRepository({
   table: resultPublications,
   queryKey: "resultPublications",
-  orderBy: desc(resultPublications.version)
+  orderBy: desc(resultPublications.version),
+  /* Read only through manifestOf */
+  hiddenColumns: ["snapshotSeals"]
 });
 
 const isCurrent = [isNull(resultPublications.supersededAt), isNull(resultPublications.withdrawnAt)];
@@ -17,6 +19,36 @@ export const resultPublicationRepository = {
   ...base,
 
   sourceCondition: (kind, sourceId) => eq(sourceColumn(kind), sourceId),
+
+  /* The seal of every student's snapshot: { studentId: seal } */
+  setManifest: (tenantId, publicationId, seals, { dbc }) =>
+    dbc
+      .update(resultPublications)
+      .set({ snapshotSeals: seals })
+      .where(scoped(resultPublications, tenantId, eq(resultPublications.id, publicationId))),
+
+  manifestOf: async (tenantId, publicationId) => {
+    const [row] = await db
+      .select({ seals: resultPublications.snapshotSeals })
+      .from(resultPublications)
+      .where(scoped(resultPublications, tenantId, eq(resultPublications.id, publicationId)));
+    return row?.seals ?? null;
+  },
+
+  /* Manifests and visibility of several publications: Map(publicationId -> { seals, supersededAt, withdrawnAt }) */
+  manifestsOf: async (tenantId, publicationIds) => {
+    if (!publicationIds.length) return new Map();
+    const rows = await db
+      .select({
+        id: resultPublications.id,
+        seals: resultPublications.snapshotSeals,
+        supersededAt: resultPublications.supersededAt,
+        withdrawnAt: resultPublications.withdrawnAt
+      })
+      .from(resultPublications)
+      .where(scoped(resultPublications, tenantId, inArray(resultPublications.id, publicationIds)));
+    return new Map(rows.map(row => [row.id, row]));
+  },
 
   /* Highest version so far (0 when never published); call with the source row locked */
   latestVersion: async (tenantId, kind, sourceId, { dbc = db } = {}) => {

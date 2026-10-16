@@ -41,6 +41,7 @@ export const reportCardValidators = {
   /* /exams/:examId/result-publication */
   publication: { params: examParams },
   versions: { params: examParams, query: listQuery() },
+  integrity: { params: examParams.extend({ version: version() }) },
   comparison: {
     params: examParams,
     query: z.object({ sectionId: id().optional(), version: version().optional() })

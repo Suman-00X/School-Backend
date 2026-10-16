@@ -378,6 +378,11 @@ export const schemeResultService = {
     return resultPublicationService.versions(ctx, "SCHEME", schemeId, query);
   },
 
+  integrity: async (ctx, schemeId, version) => {
+    await assessmentSchemeService.getById(ctx, schemeId);
+    return resultPublicationService.integrity(ctx, "SCHEME", schemeId, version);
+  },
+
   compare: async (ctx, schemeId, { sectionId, version }) => {
     const scheme = await assessmentSchemeService.getById(ctx, schemeId);
     if (sectionId) await teachingScope.assertSection(ctx, sectionId);

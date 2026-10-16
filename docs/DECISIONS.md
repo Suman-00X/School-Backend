@@ -28,7 +28,7 @@ Design decisions made while building roadmap phases 3–7 without you. Each entr
 
 | # | Decision | Area |
 |---|---|---|
-| D-20 | Run one school through Razorpay test mode (order, checkout, webhook); refunds through Razorpay not built | Fees |
+| D-20 | Run one school through Razorpay test mode (order, checkout, webhook, refund) | Fees |
 | D-37 | PDFs cannot print non-Latin names yet; choose the fonts for your regions | Reports |
 | D-44 | Confirm backup targets and run one real restore drill | Ops |
 | D-45 | Row-level security: designed, build it before the first real school | Security |
@@ -187,7 +187,19 @@ Live report cards are still computed from marks. Publishing (an exam or an asses
   - Students with marks still missing are not ranked and don't count in averages.
   - Pass/fail and grade bands use the exact percentage; rounding is for display only.
   - Snapshots left behind by a publication that crashed before committing are cleaned up on the next publish, and are never listed.
-  - **Limit:** snapshots are protected from edits by the application. A database administrator could still change them in MongoDB directly.
+- **Tamper-proof (built, round 3):**
+  - **Sealing:**
+    - Every published report card is sealed with an HMAC of its full content. The key is derived from `DATA_ENCRYPTION_KEY`, which never leaves the application.
+    - The seal binds the student and the publication, so copying one student's seal onto another's card fails.
+    - The publication row in PostgreSQL lists every student's seal (the manifest).
+  - **On every read** (families' list and PDF, staff views and PDF), the card is checked against its seal and the manifest.
+    - A card changed directly in MongoDB is **never shown or printed**. Families get "failed its integrity check… the school has been alerted".
+    - The alert is logged, counted and sent to error tracking.
+  - **Whole-version check:** `GET …/result-publication/versions/:version/integrity` (ADMIN, PRINCIPAL) reports edited, deleted and forged cards. Re-publishing restores clean cards for families.
+  - **Write-once storage:**
+    - Snapshots are never updated or deleted, even by the application. Withdrawal now lives only in PostgreSQL.
+    - `npm run mongo:app-role` creates a MongoDB role in which `report_snapshots` is insert and read only. It was tested against an auth-enabled MongoDB: update, delete and drop are refused.
+  - **🟡 For you:** run `mongo:app-role` and use that user in production's `MONGO_URI` (OPERATIONS.md › security checklist).
 
 ### Review points for D-09 / D-10
 - 🟡 **Grace counts in the total** (`graceCountsInTotal`, default true), and the subject's grade uses the graced marks. Some boards keep grace out of the aggregate: set it to false.
@@ -311,7 +323,19 @@ Stripe-style integer minor units in the API would be stricter, but they're awkwa
   - A webhook is settled only if its amount and currency match the order; otherwise it is logged and left pending.
   - Webhooks are exempt from the global per-IP rate limit, because every school's webhooks arrive from Razorpay's few IPs and are signed.
   - The server refuses to start with `PAYMENT_PROVIDER=mock` in production.
-- **Not handled yet:** refunds made in the Razorpay dashboard (`refund.*` webhooks are ignored), so a refunded invoice stays PAID until the accountant records it.
+- **Refunds (built, round 3):**
+  - **Staff refunds:** `POST /finance/payments/:id/refunds` (ADMIN, ACCOUNTANT), part or all of a payment.
+    - Online payments go back through the school's own Razorpay account to the payer's card, UPI or bank.
+    - Counter payments record how the money was paid back.
+  - **Where the money comes from:** the payment's leftover credit (an overpayment) first, then what it paid on its invoice. The invoice reopens to PARTIALLY_PAID or ISSUED as needed.
+  - **Dashboard refunds:**
+    - Refunds made in the Razorpay dashboard arrive as `refund.*` webhooks and are recorded automatically. Repeat webhooks change nothing.
+    - A **failed** refund is reversed: the money goes back on the invoice, and any surplus becomes credit.
+    - A dashboard refund the books cannot cover (its credit was already spent) keeps the rest as `unallocated`. Accountants find these with `GET /finance/refunds?needsReview=true`.
+  - **Safety:** refunds of one payment are serialised by a row lock (proved by a test). They appear on statements, as `totals.refunded`, and on the dashboard (`refundedThisYear`, `netCollectedThisYear`). Families are notified in-app and by email.
+  - **🟡 For you:**
+    - Refund approval: today one ADMIN or ACCOUNTANT can refund on their own. A two-person approval above an amount is easy to add.
+    - No refund receipt PDF yet.
 
 ### 🟡 D-21: Partial online payments; overpayment becomes student credit (built after review)
 > Product owner: "We will allow partial payment online also."

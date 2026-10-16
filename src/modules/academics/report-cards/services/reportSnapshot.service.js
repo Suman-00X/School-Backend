@@ -1,4 +1,6 @@
-import { forbidden, notFound, unprocessable } from "../../../../common/http/errors.js";
+import { conflict, forbidden, notFound, unprocessable } from "../../../../common/http/errors.js";
+import { logger } from "../../../../common/logging/logger.js";
+import { reportError } from "../../../../common/observability/errorReporter.js";
 import { academicYearService } from "../../academic-years/index.js";
 import { enrollmentService } from "../../enrollments/index.js";
 import { sectionService } from "../../sections/index.js";
@@ -6,6 +8,43 @@ import { teachingScope } from "../../teacher-assignments/index.js";
 import { reportSnapshotRepository } from "../repositories/reportSnapshot.repository.js";
 import { resultPublicationRepository } from "../repositories/resultPublication.repository.js";
 import { forFamilies, reportCardService } from "./reportCard.service.js";
+import { sealed } from "./resultPublication.service.js";
+
+const TAMPERED = "This report card failed its integrity check and cannot be shown. The school has been alerted.";
+
+/* A snapshot that does not match its seal was changed outside the application: never
+   show it, and raise an alert (logged, counted, sent to error tracking) */
+const alarm = (ctx, snapshot) => {
+  logger.error(
+    { tenantId: ctx.tenantId, snapshotId: snapshot.id, studentId: snapshot.studentId },
+    "Report snapshot seal mismatch"
+  );
+  reportError(new Error("Report snapshot seal mismatch"), { source: "integrity", tenantId: ctx.tenantId });
+};
+
+/* Attach integrity to snapshots: VERIFIED, or TAMPERED (with an alert) */
+const withIntegrity = async (ctx, snapshots) => {
+  const manifests = await resultPublicationRepository.manifestsOf(ctx.tenantId, [
+    ...new Set(snapshots.map(snapshot => snapshot.publicationId))
+  ]);
+  return snapshots.map(snapshot => {
+    const publication = manifests.get(snapshot.publicationId);
+    const intact = sealed(snapshot, publication?.seals);
+    if (!intact) alarm(ctx, snapshot);
+    return {
+      ...snapshot,
+      integrity: intact ? "VERIFIED" : "TAMPERED",
+      /* Visibility lives on the publication */
+      publicationStatus: !publication
+        ? null
+        : publication.withdrawnAt
+          ? "WITHDRAWN"
+          : publication.supersededAt
+            ? "SUPERSEDED"
+            : "CURRENT"
+    };
+  });
+};
 
 /* Report snapshots: staff browse every version; students and parents only see the
    current published version of each exam or scheme (never live marks, never withdrawn). */
@@ -29,10 +68,11 @@ const visibleSnapshots = async (ctx, studentId, { examId, schemeId, academicYear
   if (!publications.length) return [];
   const snapshots = await reportSnapshotRepository.findMany(
     ctx.tenantId,
-    { studentId, publicationId: { $in: publications.map(p => p.id) }, withdrawnAt: null },
+    { studentId, publicationId: { $in: publications.map(p => p.id) } },
     { sort: { publishedAt: 1 } }
   );
-  return snapshots;
+  /* Families never see a report card that fails its seal */
+  return (await withIntegrity(ctx, snapshots)).filter(snapshot => snapshot.integrity === "VERIFIED");
 };
 
 export const reportSnapshotService = {
@@ -50,18 +90,27 @@ export const reportSnapshotService = {
       ...(version && { version }),
       ...(sectionId ? { sectionId } : visible ? { sectionId: { $in: visible } } : {})
     };
-    return reportSnapshotRepository.list(ctx.tenantId, {
+    const result = await reportSnapshotRepository.list(ctx.tenantId, {
       filter,
       page,
       limit,
       sort: { publishedAt: -1, sourceName: 1, "student.rollNumber": 1 }
     });
+    return { ...result, rows: await withIntegrity(ctx, result.rows) };
   },
 
   getById: async (ctx, snapshotId) => {
     const snapshot = await reportSnapshotRepository.findById(ctx.tenantId, snapshotId);
     if (!snapshot) throw notFound("Report snapshot");
     await teachingScope.assertSection(ctx, snapshot.sectionId);
+    const [checked] = await withIntegrity(ctx, [snapshot]);
+    return checked;
+  },
+
+  /* Printing: only an intact snapshot */
+  getIntact: async (ctx, snapshotId) => {
+    const snapshot = await reportSnapshotService.getById(ctx, snapshotId);
+    if (snapshot.integrity !== "VERIFIED") throw conflict(TAMPERED);
     return snapshot;
   },
 
@@ -101,13 +150,11 @@ export const reportSnapshotService = {
       examId ? { examIds: [examId] } : { schemeIds: [schemeId] }
     );
     const [snapshot] = publication
-      ? await reportSnapshotRepository.findMany(ctx.tenantId, {
-          studentId,
-          publicationId: publication.id,
-          withdrawnAt: null
-        })
+      ? await reportSnapshotRepository.findMany(ctx.tenantId, { studentId, publicationId: publication.id })
       : [];
     if (!snapshot) throw notFound("Report card");
-    return snapshot;
+    const [checked] = await withIntegrity(ctx, [snapshot]);
+    if (checked.integrity !== "VERIFIED") throw conflict(TAMPERED);
+    return checked;
   }
 };

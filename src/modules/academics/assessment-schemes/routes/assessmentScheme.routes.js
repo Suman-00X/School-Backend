@@ -42,6 +42,12 @@ router.post(
   controller.revise
 );
 router.get(
+  "/:schemeId/result-publication/versions/:version/integrity",
+  authorize(can.publish),
+  validate(rules.integrity),
+  controller.integrity
+);
+router.get(
   "/:schemeId/result-publication/comparison",
   authorize(can.read),
   validate(rules.comparison),

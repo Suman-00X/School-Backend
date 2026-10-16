@@ -1,27 +1,15 @@
-import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
-import env from "../config/env.config.js";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { masterKey } from "./keys.js";
 
 /* Encryption of individual sensitive values at rest (bank account numbers, ID numbers).
    AES-256-GCM; stored as "enc:v1:<iv>.<tag>.<ciphertext>" (base64url), so a reader
    can tell encrypted values apart and the format can be rotated later (v2…).
-   Key: DATA_ENCRYPTION_KEY (32 bytes, base64 or hex), required in production.
-   Outside production it is derived from JWT_SECRET so dev and tests need no setup. */
+   Key: the master key (DATA_ENCRYPTION_KEY, see keys.js). */
 
 const PREFIX = "enc:v1:";
 
-const loadKey = () => {
-  const raw = env.dataEncryptionKey;
-  if (raw) {
-    const key = /^[0-9a-f]{64}$/i.test(raw) ? Buffer.from(raw, "hex") : Buffer.from(raw, "base64");
-    if (key.length !== 32) throw new Error("DATA_ENCRYPTION_KEY must be 32 bytes (64 hex characters or base64)");
-    return key;
-  }
-  if (env.isProduction) throw new Error("DATA_ENCRYPTION_KEY is required in production");
-  return Buffer.from(hkdfSync("sha256", env.jwtSecret, "school-backend", "field-encryption", 32));
-};
-
-let key = null;
-const getKey = () => (key ??= loadKey());
+/* The master key itself (kept as it was, so existing ciphertext stays readable) */
+const getKey = masterKey;
 
 export const isEncrypted = value => typeof value === "string" && value.startsWith(PREFIX);
 

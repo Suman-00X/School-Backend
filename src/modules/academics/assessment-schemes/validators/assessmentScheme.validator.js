@@ -36,5 +36,6 @@ export const assessmentSchemeValidators = {
   },
   publication: { params },
   versions: { params, query: listQuery() },
+  integrity: { params: params.extend({ version: version() }) },
   comparison: { params, query: z.object({ sectionId: id().optional(), version: version().optional() }) }
 };

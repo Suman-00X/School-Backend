@@ -2,10 +2,9 @@
    in a schema. Run after deploys that change Mongo indexes. */
 import mongoose from "mongoose";
 import { closeMongo, connectMongo } from "../src/common/database/mongo.js";
-import "../src/common/audit/auditLog.model.js";
-/* Its unique (student, version) index guards published report cards */
-import "../src/modules/academics/report-cards/models/reportSnapshot.model.js";
+import { loadMongoModels } from "./lib/mongoModels.js";
 
+await loadMongoModels();
 await connectMongo();
 
 const result = await mongoose.syncIndexes();
