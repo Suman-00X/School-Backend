@@ -26,5 +26,6 @@ await import("./suites/16-auth.suite.js");
 await import("./suites/17-finance-plans.suite.js");
 await import("./suites/18-refunds.suite.js");
 await import("./suites/19-ledger.suite.js");
+await import("./suites/20-tenancy.suite.js");
 /* keep last */
 await import("./suites/99-year-end.suite.js");

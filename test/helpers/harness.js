@@ -62,6 +62,8 @@ export const startHarness = async () => {
   /* Raw SQL against the test school's own database */
   h.pool = new pg.Pool({ connectionString: tenancy.databaseUrlFor(tst.record), max: 4 });
   h.otherPool = new pg.Pool({ connectionString: tenancy.databaseUrlFor(oth.record), max: 2 });
+  h.platformPool = new pg.Pool({ connectionString: databases.databaseUrl, max: 2 });
+  h.modules.tenancy = tenancy;
   h.schema = await import("../../src/database.schema.js");
   h.modules.jobs = await import("../../src/common/jobs/queue.js");
   h.modules.outbox = (await import("../../src/common/messaging/outbox.js")).outbox;
@@ -108,6 +110,7 @@ export const stopHarness = async () => {
   server?.close();
   await h.pool?.end();
   await h.otherPool?.end();
+  await h.platformPool?.end();
   const { stopInfrastructure } = await import("../../src/bootstrap.js");
   await stopInfrastructure();
   await databases?.stop();
