@@ -1,9 +1,12 @@
 import { eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { transaction } from "../../../../common/database/postgres.js";
+import { scoped } from "../../../../common/database/repository.js";
 import { publish } from "../../../../common/events/events.js";
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { tenantToday } from "../../../../common/tenancy/tenant.service.js";
 import { fileService } from "../../../files/documents/index.js";
 import { teacherService } from "../../../users/teachers/index.js";
+import { academicYearService } from "../../academic-years/index.js";
 import { enrollmentService } from "../../enrollments/index.js";
 import { sectionService } from "../../sections/index.js";
 import { sectionSubjectService } from "../../section-subjects/index.js";
@@ -27,6 +30,16 @@ const loadForStaff = async (ctx, homeworkId) => {
   const homework = await loadHomework(ctx, homeworkId);
   await teachingScope.assertSection(ctx, homework.sectionId, { subjectId: homework.subjectId });
   return homework;
+};
+
+/* Lock a submission row for the rest of the transaction (submit vs grade) */
+const lockSubmission = async (ctx, tx, ...conditions) => {
+  const [row] = await tx
+    .select()
+    .from(homeworkSubmissions)
+    .where(scoped(homeworkSubmissions, ctx.tenantId, ...conditions))
+    .for("update");
+  return row ?? null;
 };
 
 /* Submission status of a student for one homework */
@@ -117,12 +130,14 @@ export const homeworkService = {
   },
 
   addAttachment: async (ctx, homeworkId, file) => {
-    await loadForStaff(ctx, homeworkId);
+    const homework = await loadForStaff(ctx, homeworkId);
+    await academicYearService.assertWritable(ctx, homework.academicYearId);
     return fileService.store(ctx, file, { ownerType: "HOMEWORK", ownerId: homeworkId, category: "ATTACHMENT" });
   },
 
   removeAttachment: async (ctx, homeworkId, fileId) => {
-    await loadForStaff(ctx, homeworkId);
+    const homework = await loadForStaff(ctx, homeworkId);
+    await academicYearService.assertWritable(ctx, homework.academicYearId);
     return fileService.remove(ctx, fileId, { ownerType: "HOMEWORK", ownerId: homeworkId });
   },
 
@@ -158,19 +173,22 @@ export const homeworkService = {
   /* GRADED keeps the marks; RETURNED asks the student to resubmit */
   grade: async (ctx, homeworkId, submissionId, { marksAwarded, feedback, status }) => {
     const homework = await loadForStaff(ctx, homeworkId);
-    const submission = await submissionRepository.findById(ctx.tenantId, submissionId);
-    if (!submission || submission.homeworkId !== homeworkId) throw notFound("Submission");
     if (marksAwarded !== undefined && homework.maxMarks === null)
       throw unprocessable("This homework is not marked; send feedback only");
     if (marksAwarded !== undefined && marksAwarded > homework.maxMarks) {
       throw unprocessable(`marksAwarded cannot exceed ${homework.maxMarks}`);
     }
-    const updated = await submissionRepository.update(ctx.tenantId, submissionId, {
-      status,
-      marksAwarded: marksAwarded ?? null,
-      feedback,
-      gradedBy: ctx.userId,
-      gradedAt: new Date()
+    /* Locked so a resubmission cannot interleave with grading */
+    const { submission, updated } = await transaction(async tx => {
+      const submission = await lockSubmission(ctx, tx, eq(homeworkSubmissions.id, submissionId));
+      if (!submission || submission.homeworkId !== homeworkId) throw notFound("Submission");
+      const updated = await submissionRepository.update(
+        ctx.tenantId,
+        submissionId,
+        { status, marksAwarded: marksAwarded ?? null, feedback, gradedBy: ctx.userId, gradedAt: new Date() },
+        { dbc: tx }
+      );
+      return { submission, updated };
     });
     await publish(HOMEWORK_GRADED, {
       tenantId: ctx.tenantId,
@@ -184,6 +202,8 @@ export const homeworkService = {
 
   submissionAttachmentUrl: async (ctx, homeworkId, submissionId, fileId) => {
     await loadForStaff(ctx, homeworkId);
+    const submission = await submissionRepository.findById(ctx.tenantId, submissionId);
+    if (!submission || submission.homeworkId !== homeworkId) throw notFound("Submission");
     return fileService.downloadUrl(ctx, fileId, { ownerType: "SUBMISSION", ownerId: submissionId });
   },
 
@@ -261,36 +281,54 @@ export const homeworkService = {
   /* A student submits (or resubmits after RETURNED) -> { submission, created } */
   submit: async (ctx, studentId, homeworkId, { content }, file) => {
     const homework = await loadHomework(ctx, homeworkId);
-    if (!(await enrollmentService.isStudentInSection(ctx, studentId, homework.sectionId, homework.academicYearId)))
-      throw notFound("Homework");
+    const enrolled = await enrollmentService.isStudentInSection(
+      ctx,
+      studentId,
+      homework.sectionId,
+      homework.academicYearId,
+      { activeOnly: true }
+    );
+    if (!enrolled) throw notFound("Homework");
     if (!content && !file) throw unprocessable("Send some text or attach a file");
+    /* Reject a bad file before anything is written */
+    if (file) fileService.check(file, "ATTACHMENT");
 
     const today = await tenantToday(ctx.tenantId);
     const isLate = today > homework.dueDate;
     if (isLate && !homework.allowLateSubmission) throw unprocessable(`The due date (${homework.dueDate}) has passed`);
 
-    const existing = await submissionRepository.findOne(ctx.tenantId, [
-      eq(homeworkSubmissions.homeworkId, homeworkId),
-      eq(homeworkSubmissions.studentId, studentId)
-    ]);
-    if (existing?.status === "GRADED") throw conflict("This homework has already been graded");
+    /* Row lock: a resubmission and a grading of the same work never interleave.
+       The file is stored inside the transaction, so a storage failure leaves no half-written submission. */
+    return transaction(async tx => {
+      const existing = await lockSubmission(
+        ctx,
+        tx,
+        eq(homeworkSubmissions.homeworkId, homeworkId),
+        eq(homeworkSubmissions.studentId, studentId)
+      );
+      if (existing?.status === "GRADED") throw conflict("This homework has already been graded");
 
-    const values = {
-      content: content ?? null,
-      submittedAt: new Date(),
-      isLate,
-      status: "SUBMITTED",
-      marksAwarded: null,
-      feedback: existing?.feedback ?? null
-    };
-    const submission = existing
-      ? await submissionRepository.update(ctx.tenantId, existing.id, values)
-      : await submissionRepository.create(ctx.tenantId, { ...values, homeworkId, studentId });
+      const values = {
+        content: content ?? null,
+        submittedAt: new Date(),
+        isLate,
+        status: "SUBMITTED",
+        marksAwarded: null,
+        feedback: existing?.feedback ?? null
+      };
+      const submission = existing
+        ? await submissionRepository.update(ctx.tenantId, existing.id, values, { dbc: tx })
+        : await submissionRepository.create(ctx.tenantId, { ...values, homeworkId, studentId }, { dbc: tx });
 
-    const attachment = file
-      ? await fileService.store(ctx, file, { ownerType: "SUBMISSION", ownerId: submission.id, category: "ATTACHMENT" })
-      : null;
-    return { submission: { ...submission, attachments: attachment ? [attachment] : [] }, created: !existing };
+      const attachment = file
+        ? await fileService.store(ctx, file, {
+            ownerType: "SUBMISSION",
+            ownerId: submission.id,
+            category: "ATTACHMENT"
+          })
+        : null;
+      return { submission: { ...submission, attachments: attachment ? [attachment] : [] }, created: !existing };
+    });
   },
 
   findById: (ctx, homeworkId) => homeworkRepository.findById(ctx.tenantId, homeworkId, { with: withSubject }),

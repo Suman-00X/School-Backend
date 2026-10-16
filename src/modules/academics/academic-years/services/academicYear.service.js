@@ -85,6 +85,12 @@ export const academicYearService = {
       return academicYearRepository.update(ctx.tenantId, academicYearId, { archivedAt: null }, { dbc: tx });
     }),
 
+  /* For writes that the archive triggers cannot see (files in storage) */
+  assertWritable: async (ctx, academicYearId) => {
+    const year = await academicYearRepository.findById(ctx.tenantId, academicYearId);
+    if (year?.archivedAt) throw conflict(`Academic year ${year.yearName} is archived and read-only`);
+  },
+
   /* For other submodules: null when missing */
   findById: (ctx, academicYearId) => academicYearRepository.findById(ctx.tenantId, academicYearId),
   findCurrent: ctx =>

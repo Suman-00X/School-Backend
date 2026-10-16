@@ -2,7 +2,10 @@ import { created, done, ok, paginated } from "../../../../common/http/responses.
 import { unprocessable } from "../../../../common/http/errors.js";
 import { studentService } from "../../../users/students/index.js";
 import { staffService } from "../../../users/staff/index.js";
+import { DIRECT_OWNER_TYPES } from "../../shared/constants/file.constants.js";
 import { fileService } from "../services/file.service.js";
+
+const direct = { ownerTypes: DIRECT_OWNER_TYPES };
 
 /* The owner named in an upload must exist in this school */
 const checkOwner = async (ctx, { ownerType, ownerId }) => {
@@ -24,22 +27,22 @@ export const fileController = {
   },
 
   list: async (req, res) =>
-    paginated(res, await fileService.list(req.context, req.query), "Files retrieved successfully"),
+    paginated(res, await fileService.list(req.context, { ...req.query, ...direct }), "Files retrieved successfully"),
 
   getById: async (req, res) => {
-    const { storageKey: _key, ...file } = await fileService.getById(req.context, req.params.fileId);
+    const { storageKey: _key, ...file } = await fileService.getById(req.context, req.params.fileId, direct);
     return ok(res, file, "File retrieved successfully");
   },
 
   downloadUrl: async (req, res) =>
     ok(
       res,
-      await fileService.downloadUrl(req.context, req.params.fileId),
+      await fileService.downloadUrl(req.context, req.params.fileId, direct),
       "Download link created (valid for 15 minutes)"
     ),
 
   remove: async (req, res) => {
-    await fileService.remove(req.context, req.params.fileId);
+    await fileService.remove(req.context, req.params.fileId, direct);
     return done(res, "File deleted successfully");
   }
 };

@@ -252,6 +252,49 @@ describe("homework", () => {
     assert.ok(notices.some(n => n.body === '"Fractions worksheet" has been graded: 8/10.'));
   });
 
+  it("keeps module-owned files out of reach of other paths", async () => {
+    const second = await post(
+      `${A}/homework`,
+      { sectionId: world.s1A.id, subjectId: world.math.id, title: "Decimals", dueDate: dueIn3() },
+      { as: h.tokens.teacher }
+    );
+    const first = await upload(`${ME}/homework/${second.data.id}/submission`, {
+      bytes: PDF,
+      type: "application/pdf",
+      name: "decimals.pdf",
+      fields: { content: "first try" },
+      as: h.tokens.student1
+    });
+    assert.equal(first.status, 201);
+    const fileId = first.body.data.attachments[0].id;
+
+    /* A rejected file leaves the earlier submission untouched */
+    const bad = await upload(`${ME}/homework/${second.data.id}/submission`, {
+      bytes: Buffer.from("not a png"),
+      type: "image/png",
+      name: "x.png",
+      fields: { content: "second try" },
+      as: h.tokens.student1
+    });
+    assert.equal(bad.status, 400);
+    const detail = await get(`${ME}/students/${world.s1.id}/homework/${second.data.id}`, { as: h.tokens.student1 });
+    assert.equal(detail.data.mySubmission.content, "first try");
+
+    /* A submission is only reachable through its own homework */
+    await get(
+      `${A}/homework/${world.homework.id}/submissions/${first.body.data.id}/attachments/${fileId}/download-url`,
+      { as: h.tokens.teacher },
+      404
+    );
+
+    /* /files serves only student, staff and general files */
+    const all = await get("/api/v1/files?limit=100", { as: h.tokens.accountant });
+    assert.ok(all.data.every(f => ["STUDENT", "STAFF", "GENERAL"].includes(f.ownerType)));
+    await get(`/api/v1/files/${fileId}`, {}, 404);
+    await get(`/api/v1/files/${world.homeworkFile.id}/download-url`, {}, 404);
+    await del(`/api/v1/files/${world.homeworkFile.id}`, {}, 404);
+  });
+
   it("enforces due dates and protects submitted homework", async () => {
     await h.pool.query("UPDATE homework_assignments SET assigned_on = $1, due_date = $1 WHERE id = $2", [
       "2026-07-01",

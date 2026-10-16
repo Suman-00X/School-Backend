@@ -1,5 +1,9 @@
 /* What a file belongs to, and what kind of file it is */
 export const OWNER_TYPES = ["TENANT", "STUDENT", "STAFF", "HOMEWORK", "SUBMISSION", "ANNOUNCEMENT", "GENERAL"];
+/* Owners managed through /api/v1/files. Files of other owners (homework, submissions,
+   the school logo) are reached only through their module, which applies its own access rules. */
+export const DIRECT_OWNER_TYPES = ["STUDENT", "STAFF", "GENERAL"];
+
 export const FILE_CATEGORIES = ["LOGO", "PHOTO", "DOCUMENT", "ATTACHMENT"];
 
 const IMAGES = ["image/jpeg", "image/png", "image/webp"];

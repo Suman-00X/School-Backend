@@ -33,8 +33,8 @@ const view = file => {
 /* Framework for the rest of the app: any module stores files through here,
    after doing its own access checks */
 export const fileService = {
-  /* Validate and store an upload (multer file) -> metadata */
-  store: async (ctx, file, { ownerType, ownerId, category, description }) => {
+  /* Throws 400 unless the upload is allowed for the category (type, size, content) */
+  check: (file, category) => {
     const rule = CATEGORY_RULES[category];
     if (!rule.types.includes(file.mimetype)) {
       throw badRequest(`A ${category.toLowerCase()} cannot be ${file.mimetype}. Allowed: ${rule.types.join(", ")}`);
@@ -45,6 +45,11 @@ export const fileService = {
     if (!matchesDeclaredType(file.buffer, file.mimetype)) {
       throw badRequest(`The content of ${file.originalname ?? "the file"} is not a valid ${file.mimetype} file`);
     }
+  },
+
+  /* Validate and store an upload (multer file) -> metadata */
+  store: async (ctx, file, { ownerType, ownerId, category, description }) => {
+    fileService.check(file, category);
 
     const name = safeName(file.originalname ?? "file");
     const storageKey = `${ctx.tenantId}/${ownerType.toLowerCase()}/${ownerId}/${randomUUID()}-${name}`;
@@ -66,21 +71,33 @@ export const fileService = {
     );
   },
 
-  list: (ctx, { page, limit, ownerType, ownerId, category }) =>
+  /* ownerTypes: the owner types the caller may see (always applied) */
+  list: (ctx, { page, limit, ownerType, ownerId, category, ownerTypes }) =>
     storedFileRepository.list(ctx.tenantId, {
       page,
       limit,
       projection: hidden,
-      filter: { ...(ownerType && { ownerType }), ...(ownerId && { ownerId }), ...(category && { category }) }
+      filter: {
+        ownerType: ownerType && ownerTypes.includes(ownerType) ? ownerType : { $in: ownerTypes },
+        ...(ownerId && { ownerId }),
+        ...(category && { category })
+      }
     }),
 
   forOwner: async (ctx, ownerType, ownerId) =>
     (await storedFileRepository.list(ctx.tenantId, { filter: { ownerType, ownerId }, limit: 100, projection: hidden }))
       .rows,
 
-  getById: async (ctx, fileId, { ownerType, ownerId } = {}) => {
+  /* owner: { ownerType, ownerId } of the record the caller came through, or
+     { ownerTypes } for the files endpoints; anything else is "not found" */
+  getById: async (ctx, fileId, { ownerType, ownerId, ownerTypes } = {}) => {
     const file = await storedFileRepository.findById(ctx.tenantId, fileId);
-    if (!file || (ownerType && file.ownerType !== ownerType) || (ownerId && file.ownerId !== ownerId))
+    if (
+      !file ||
+      (ownerType && file.ownerType !== ownerType) ||
+      (ownerId && file.ownerId !== ownerId) ||
+      (ownerTypes && !ownerTypes.includes(file.ownerType))
+    )
       throw notFound("File");
     return file;
   },

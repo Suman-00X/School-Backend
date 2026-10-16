@@ -219,10 +219,15 @@ export const enrollmentService = {
       with: { section: { columns: { id: true, sectionName: true, academicYearId: true, classId: true } } }
     }),
 
-  isStudentInSection: (ctx, studentId, sectionId, academicYearId) =>
-    enrollmentRepository.exists(ctx.tenantId, [
-      eq(enrollments.studentId, studentId),
-      eq(enrollments.sectionId, sectionId),
-      eq(enrollments.academicYearId, academicYearId)
-    ])
+  /* activeOnly: the student must still be in the section (not LEFT) */
+  isStudentInSection: (ctx, studentId, sectionId, academicYearId, { activeOnly = false } = {}) =>
+    enrollmentRepository.exists(
+      ctx.tenantId,
+      [
+        eq(enrollments.studentId, studentId),
+        eq(enrollments.sectionId, sectionId),
+        eq(enrollments.academicYearId, academicYearId),
+        activeOnly && eq(enrollments.status, "ACTIVE")
+      ].filter(Boolean)
+    )
 };
