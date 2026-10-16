@@ -1,4 +1,4 @@
-import { date, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { date, index, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { baseColumns } from "../../../../common/database/columns.js";
 import { ALL_ROLES } from "../../../../common/auth/roles.js";
 import { GENDERS, USER_STATUSES } from "../../shared/constants/user.constants.js";
@@ -23,9 +23,7 @@ export const users = pgTable(
     dob: date("dob"),
     address: text("address"),
     status: userStatus("status").notNull().default("ACTIVE"),
-    /* Sign-in state (see modules/auth) */
-    failedLoginCount: integer("failed_login_count").notNull().default(0),
-    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    /* Sign-in state (see modules/auth; attempt limits live in the cache) */
     passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true })
   },

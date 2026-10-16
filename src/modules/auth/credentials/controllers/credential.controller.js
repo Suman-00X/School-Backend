@@ -1,4 +1,6 @@
 import { accepted, done, ok } from "../../../../common/http/responses.js";
+import { clientInfo } from "../../shared/utils/request.util.js";
+import { passwordResetJob } from "../jobs/credential.job.js";
 import { credentialService } from "../services/credential.service.js";
 
 export const credentialController = {
@@ -9,7 +11,7 @@ export const credentialController = {
   },
 
   requestReset: async (req, res) => {
-    await credentialService.requestReset(req.body);
+    await passwordResetJob.enqueue({ schoolCode: req.body.schoolCode, email: req.body.email });
     return accepted(res, null, "If an account matches, we have emailed a link to reset the password.");
   },
 
@@ -22,7 +24,7 @@ export const credentialController = {
   },
 
   change: async (req, res) => {
-    const signedOut = await credentialService.changePassword(req.context, req.body);
+    const signedOut = await credentialService.changePassword(req.context, req.body, clientInfo(req));
     return done(res, `Password changed${signedOut ? `; ${signedOut} other device(s) signed out` : ""}`);
   }
 };

@@ -1,4 +1,5 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
+import { db } from "../../../../common/database/postgres.js";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { authTokens } from "../models/authToken.schema.js";
 
@@ -14,6 +15,23 @@ export const authTokenRepository = {
       .from(authTokens)
       .where(and(eq(authTokens.tokenHash, tokenHash), eq(authTokens.isActive, true)))
       .for("update");
+    return row ?? null;
+  },
+
+  /* Unlocked look-up of a link that can still be spent (null otherwise) */
+  findUsable: async tokenHash => {
+    const [row] = await db
+      .select({ id: authTokens.id })
+      .from(authTokens)
+      .where(
+        and(
+          eq(authTokens.tokenHash, tokenHash),
+          eq(authTokens.isActive, true),
+          isNull(authTokens.usedAt),
+          gt(authTokens.expiresAt, new Date())
+        )
+      )
+      .limit(1);
     return row ?? null;
   },
 

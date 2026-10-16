@@ -32,5 +32,15 @@ export const authEmails = {
       "",
       `This link works once and expires in ${hours} hour(s). If you did not ask for this, ignore this email; your password stays the same.`
     ].join("\n")
+  }),
+  emailChanged: ({ user, school, oldEmail, newEmail }) => ({
+    to: oldEmail,
+    subject: `The email on your ${school.name} account was changed`,
+    text: [
+      `Hello ${user.firstName},`,
+      "",
+      `The sign-in email of your ${school.name} account was changed from ${oldEmail} to ${newEmail}, and every device was signed out.`,
+      "If you did not ask the school for this, contact the school office right away."
+    ].join("\n")
   })
 };

@@ -5,6 +5,13 @@ import { startInfrastructure, stopInfrastructure } from "./bootstrap.js";
 
 try {
   await startInfrastructure();
+  /* Behind a load balancer every client would share the balancer's IP, and the
+     per-IP sign-in limits would throttle the whole school */
+  if (env.isProduction && !Number(process.env.TRUST_PROXY_HOPS)) {
+    logger.warn(
+      "TRUST_PROXY_HOPS is 0: set it to the number of proxies in front of the API, or per-IP limits see one IP"
+    );
+  }
 
   const server = app.listen(env.port, () => {
     logger.info({ port: env.port }, "API listening");

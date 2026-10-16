@@ -8,3 +8,4 @@ import "./modules/communication/notifications/jobs/deliver.job.js";
 import "./modules/communication/announcements/jobs/publish.job.js";
 import "./modules/communication/subscribers/index.js";
 import "./modules/library/loans/jobs/overdueReminder.job.js";
+import "./modules/auth/credentials/jobs/credential.job.js";

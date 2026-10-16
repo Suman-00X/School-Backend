@@ -1,7 +1,6 @@
 /* Dev only: run the API against throwaway PostgreSQL + MongoDB, seeded with
-   one school and an admin who can sign in (and a ready-made token).
+   one school and an admin who can sign in.
    Nothing persists after the process exits. Not for production use. */
-import jwt from "jsonwebtoken";
 import { startInMemoryDatabases } from "./lib/inMemoryDatabases.js";
 
 const databases = await startInMemoryDatabases();
@@ -22,7 +21,7 @@ await startDatabases();
 const { db } = postgres; // initialised by startDatabases()
 
 const [tenant] = await db.insert(tenants).values({ name: "Demo School", code: "DEMO" }).returning();
-const [admin] = await db
+await db
   .insert(users)
   .values({
     tenantId: tenant.id,
@@ -34,10 +33,6 @@ const [admin] = await db
   })
   .returning();
 
-const token = jwt.sign({ userId: admin.id, tenantId: tenant.id, role: "ADMIN" }, process.env.JWT_SECRET, {
-  expiresIn: "12h"
-});
-
 const port = Number(process.env.PORT) || 3000;
 const server = app.listen(port, () => {
   console.log(`\nIn-memory dev server: http://localhost:${port}/api/v1`);
@@ -45,7 +40,6 @@ const server = app.listen(port, () => {
   console.log(
     `Sign in: POST /api/v1/auth/login {"schoolCode":"DEMO","email":"admin@demo.school","password":"${DEV_PASSWORD}"}`
   );
-  console.log(`Or use this admin token (12h):\n${token}\n`);
 });
 
 const shutdown = async () => {

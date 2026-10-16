@@ -10,6 +10,7 @@ import { accountService } from "../../../users/accounts/index.js";
 import { sessionService } from "../../sessions/index.js";
 import { TOKEN_TTL_HOURS } from "../../shared/constants/auth.constants.js";
 import { authEmails } from "../../shared/utils/authEmails.util.js";
+import { signInThrottle } from "../../shared/utils/signInThrottle.util.js";
 import { authTokenRepository } from "../repositories/authToken.repository.js";
 
 const LINK_INVALID = "This link is invalid or has expired. Ask for a new one.";
@@ -62,8 +63,9 @@ export const credentialService = {
     return { invited, skipped };
   },
 
-  /* Always the same answer, whether or not the account exists */
-  requestReset: async ({ schoolCode, email: address }) => {
+  /* Job body for a reset request. The HTTP request only queues it, so the answer and its
+     timing are the same whether or not the account exists. */
+  sendResetLink: async ({ schoolCode, email: address }) => {
     const school = await findTenantByCode(schoolCode);
     if (!school) return;
     const ctx = { tenantId: school.id, role: "SYSTEM" };
@@ -75,6 +77,9 @@ export const credentialService = {
 
   /* Spend an invitation or reset link: set the password and end every session */
   resetPassword: async ({ token, password }) => {
+    /* Cheap check first: no 32 MB hash for a link that cannot work */
+    const known = await authTokenRepository.findUsable(digest(token));
+    if (!known) throw unprocessable(LINK_INVALID);
     const passwordHash = await hashPassword(password);
     const outcome = await transaction(async tx => {
       const row = await authTokenRepository.lockByHash(digest(token), { dbc: tx });
@@ -96,20 +101,41 @@ export const credentialService = {
   },
 
   /* Signed in: change my password; my other devices are signed out */
-  changePassword: async (ctx, { currentPassword, newPassword }) => {
+  changePassword: async (ctx, { currentPassword, newPassword }, client) => {
     const user = await accountService.credentials.findById(ctx, ctx.userId);
+    /* Guessing the current password with a stolen access token is limited like sign-in */
+    const attempt = { tenantKey: ctx.tenantId, email: user?.email ?? ctx.userId, ip: client.ipAddress ?? "unknown" };
+    await signInThrottle.claim(attempt);
     if (!user || !(await verifyPassword(currentPassword, user.passwordHash))) {
       throw unprocessable("The current password is incorrect");
     }
+    await signInThrottle.clear(attempt);
     if (currentPassword === newPassword) throw unprocessable("The new password must be different from the current one");
     const passwordHash = await hashPassword(newPassword);
     return transaction(async tx => {
       await accountService.credentials.setPasswordHash(ctx, ctx.userId, passwordHash, { dbc: tx });
+      /* Reset links requested before the change stop working */
+      await authTokenRepository.spendUnused(ctx.tenantId, ctx.userId, { dbc: tx });
       return sessionService.revokeAllForUser(ctx, ctx.userId, {
         exceptId: ctx.sessionId,
         reason: "PASSWORD_CHANGED",
         dbc: tx
       });
     });
+  },
+
+  /* The account's email changed (by the office): the old address is told, earlier links
+     stop working and every session ends, so a changed email cannot be used to take over
+     an account quietly through password reset. */
+  emailChanged: async ({ tenantId, userId, oldEmail, newEmail }) => {
+    const ctx = { tenantId, role: "SYSTEM" };
+    const [user] = await accountService.findManyByIds(ctx, [userId]);
+    const school = await getTenant(tenantId);
+    await transaction(async tx => {
+      await authTokenRepository.spendUnused(tenantId, userId, { dbc: tx });
+      await sessionService.revokeAllForUser(ctx, userId, { reason: "EMAIL_CHANGED", dbc: tx });
+    });
+    await revokeUserTokens(userId);
+    if (user && oldEmail) await email.send(authEmails.emailChanged({ user, school, oldEmail, newEmail }));
   }
 };

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { h, world, request, get, post, patch, del, tokenFor } from "../helpers/harness.js";
+import jwt from "jsonwebtoken";
+import { h, world, request, get, post, patch, del, settleJobs, tokenFor } from "../helpers/harness.js";
 
 const AUTH = "/api/v1/auth";
 const PASSWORD = "Sunrise2026";
@@ -125,11 +126,20 @@ describe("auth: sign-in and sessions", () => {
     assert.notEqual(refreshed.data.refreshToken, first.refreshToken);
     await get("/api/v1/me/students", { as: refreshed.data.accessToken });
 
+    /* Right after a rotation (another tab, a retry) the old token is refused, the session lives */
+    const late = await request("POST", `${AUTH}/refresh`, { as: null, body: { refreshToken: first.refreshToken } });
+    assert.equal(late.status, 401);
+    assert.equal(late.body.message, "This refresh token was just replaced. Use the newest one.");
+    await get("/api/v1/me/students", { as: refreshed.data.accessToken });
+
+    /* Later, an old token means theft: the whole session ends */
+    await h.pool.query("UPDATE auth_sessions SET last_used_at = now() - interval '5 minutes' WHERE id = $1", [
+      first.refreshToken.split(".")[0]
+    ]);
     const replay = await request("POST", `${AUTH}/refresh`, { as: null, body: { refreshToken: first.refreshToken } });
     assert.equal(replay.status, 401);
     assert.equal(replay.body.message, "This sign-in was ended for your security. Please sign in again.");
 
-    /* The whole session is gone: its newest refresh token and its access tokens */
     const after = await request("POST", `${AUTH}/refresh`, {
       as: null,
       body: { refreshToken: refreshed.data.refreshToken }
@@ -144,6 +154,16 @@ describe("auth: sign-in and sessions", () => {
       body: { refreshToken: "not-a-real-refresh-token" }
     });
     assert.equal(junk.status, 401);
+  });
+
+  it("survives two refreshes at once", async () => {
+    const session = (await login(world.auth.mother.email)).body.data;
+    const results = await Promise.all(
+      [1, 2].map(() => request("POST", `${AUTH}/refresh`, { as: null, body: { refreshToken: session.refreshToken } }))
+    );
+    assert.deepEqual(results.map(r => r.status).sort(), [200, 401]);
+    const winner = results.find(r => r.status === 200).body.data;
+    await post(`${AUTH}/refresh`, { refreshToken: winner.refreshToken }, { as: null }, 200);
   });
 
   it("lists devices, signs one out remotely, and signs out", async () => {
@@ -219,7 +239,9 @@ describe("auth: passwords", () => {
       body: { schoolCode: "TST", email: teacher.email }
     });
     assert.equal(unknown.status, 202);
-    assert.deepEqual(unknown.body, { ...known.body }, "same answer either way");
+    assert.deepEqual(unknown.body.message, known.body.message, "same answer either way");
+    /* The link is sent by a background job */
+    await settleJobs();
     assert.equal(h.modules.outbox.email.length, sentBefore + 1);
 
     const mail = lastEmailTo(teacher.email);
@@ -241,22 +263,29 @@ describe("auth: passwords", () => {
     h.tokens.teacher = tokenFor(world.teacher.userId, "TEACHER");
   });
 
-  it("locks an account after repeated wrong passwords", async () => {
+  it("limits password guessing, also in parallel and for unknown accounts", async () => {
     const student2 = (await get(`/api/v1/users/${world.s2.userId}`)).data;
     await activate(student2.id, student2.email);
 
-    for (let i = 0; i < 5; i++) assert.equal((await login(student2.email, "Wrong2026")).status, 401);
+    /* 12 guesses at once: no more than 5 reach the password check */
+    const burst = await Promise.all(Array.from({ length: 12 }, () => login(student2.email, "Wrong2026")));
+    const statuses = burst.map(r => r.status);
+    assert.ok(statuses.filter(s => s === 401).length <= 5, statuses.join(","));
+    assert.ok(statuses.includes(429));
     const locked = await login(student2.email);
     assert.equal(locked.status, 429);
-    assert.match(locked.body.message, /^Too many failed sign-in attempts\. Try again in 1[45] minute\(s\)/);
+    assert.match(
+      locked.body.message,
+      /^Too many sign-in attempts\. Try again in 1[45] minute\(s\), or reset your password\.$/
+    );
 
-    await h.pool.query("UPDATE users SET locked_until = now() - interval '1 minute' WHERE id = $1", [student2.id]);
-    assert.equal((await login(student2.email)).status, 201);
-    const state = await h.pool.query("SELECT failed_login_count, last_login_at FROM users WHERE id = $1", [
-      student2.id
-    ]);
-    assert.equal(state.rows[0].failed_login_count, 0);
-    assert.ok(state.rows[0].last_login_at);
+    /* Unknown accounts answer exactly the same way, so lockouts reveal nothing */
+    const ghost = [];
+    for (let i = 0; i < 6; i++) ghost.push((await login("ghost.student@test.school", "Wrong2026")).status);
+    assert.deepEqual(ghost, [401, 401, 401, 401, 401, 429]);
+
+    /* Other accounts are unaffected */
+    assert.equal((await login(world.auth.mother.email)).status, 201);
   });
 
   it("stores only password hashes, never passwords", async () => {
@@ -267,6 +296,34 @@ describe("auth: passwords", () => {
 });
 
 describe("auth: account lifecycle and records", () => {
+  it("ends sessions and tells the old address when the office changes an email", async () => {
+    const parent = await post("/api/v1/users/parents", {
+      user: { firstName: "Lata", lastName: "Menon", email: "lata.old@test.school" },
+      profile: {}
+    });
+    await activate(parent.data.userId, "lata.old@test.school");
+    const session = (await login("lata.old@test.school")).body.data;
+
+    await patch(`/api/v1/users/${parent.data.userId}`, { email: "lata.new@test.school" });
+    await settleJobs();
+    const notice = lastEmailTo("lata.old@test.school");
+    assert.match(notice.subject, /The email on your .* account was changed/);
+    assert.match(notice.text, /lata\.new@test\.school/);
+    assert.equal((await request("GET", "/api/v1/me", { as: session.accessToken })).status, 401);
+    assert.equal(
+      (await request("POST", `${AUTH}/refresh`, { as: null, body: { refreshToken: session.refreshToken } })).status,
+      401
+    );
+    assert.equal((await login("lata.new@test.school")).status, 201, "the password still works with the new email");
+  });
+
+  it("accepts only session access tokens", async () => {
+    const forged = jwt.sign({ userId: h.admin.id, tenantId: h.tenant.id, role: "ADMIN" }, "test-secret");
+    const res = await request("GET", "/api/v1/users", { as: forged });
+    assert.equal(res.status, 401);
+    assert.equal(res.body.message, "Invalid token");
+  });
+
   it("ends every session when an account is deactivated", async () => {
     const teacher = await post("/api/v1/users/teachers", {
       user: { firstName: "Temp", lastName: "Teacher", email: "temp.teacher@test.school" },

@@ -12,18 +12,20 @@ const tooMany = (req, res) =>
   });
 
 /* A stricter limit for sensitive public endpoints (sign-in, password reset).
-   keyField: also key on a body field (e.g. email), so one school office sharing an IP
-   does not lock everyone out, while guessing one account stays slow. */
-export const strictRateLimit = ({ windowMs, limit, keyField }) =>
+   key(req): what to count by (default: the client IP). Every call makes its own counter.
+   Counters are per process; the account-level protection that must hold across
+   instances lives in the shared cache (see auth signInThrottle). */
+export const strictRateLimit = ({ windowMs, limit, key }) =>
   rateLimit({
     windowMs,
     limit,
     standardHeaders: "draft-8",
     legacyHeaders: false,
     handler: tooMany,
-    keyGenerator: req =>
-      `${ipKeyGenerator(req.ip ?? "")}:${keyField ? String(req.body?.[keyField] ?? "").toLowerCase() : ""}`
+    keyGenerator: req => (key ? key(req) : ipKeyGenerator(req.ip ?? ""))
   });
+
+export { ipKeyGenerator };
 
 /* Security headers, CORS and rate limiting for the whole app */
 export const securityMiddlewares = () => [

@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { db } from "../../../../common/database/postgres.js";
 import { users } from "../models/user.schema.js";
@@ -6,7 +6,7 @@ import { users } from "../models/user.schema.js";
 const base = createRepository({
   table: users,
   queryKey: "users",
-  hiddenColumns: ["passwordHash", "failedLoginCount", "lockedUntil"]
+  hiddenColumns: ["passwordHash"]
 });
 
 export const userRepository = {
@@ -31,29 +31,15 @@ export const userRepository = {
     return user ?? null;
   },
 
-  /* One more wrong password, atomically; locks the account at `maxFailures` */
-  recordFailedLogin: async (tenantId, userId, { maxFailures, lockoutMinutes }) => {
-    const [user] = await db
-      .update(users)
-      .set({
-        failedLoginCount: sql`${users.failedLoginCount} + 1`,
-        lockedUntil: sql`CASE WHEN ${users.failedLoginCount} + 1 >= ${maxFailures}
-          THEN now() + make_interval(mins => ${lockoutMinutes}) ELSE ${users.lockedUntil} END`
-      })
-      .where(and(eq(users.tenantId, tenantId), eq(users.id, userId)))
-      .returning({ failedLoginCount: users.failedLoginCount, lockedUntil: users.lockedUntil });
-    return user;
-  },
-
   recordLogin: (tenantId, userId, extra = {}) =>
     db
       .update(users)
-      .set({ failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date(), ...extra })
+      .set({ lastLoginAt: new Date(), ...extra })
       .where(and(eq(users.tenantId, tenantId), eq(users.id, userId))),
 
   setPasswordHash: (tenantId, userId, passwordHash, { dbc = db } = {}) =>
     dbc
       .update(users)
-      .set({ passwordHash, passwordChangedAt: new Date(), failedLoginCount: 0, lockedUntil: null })
+      .set({ passwordHash, passwordChangedAt: new Date() })
       .where(scoped(users, tenantId, eq(users.id, userId)))
 };

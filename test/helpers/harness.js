@@ -84,7 +84,9 @@ export const stopHarness = async () => {
 };
 
 export const tokenFor = (userId, role, tenantId = h.tenant.id) =>
-  jwt.sign({ userId, tenantId, role, iatMs: Date.now() }, "test-secret", { expiresIn: "1h" });
+  jwt.sign({ userId, tenantId, role, typ: "access", sid: crypto.randomUUID(), iatMs: Date.now() }, "test-secret", {
+    expiresIn: "1h"
+  });
 
 /* HTTP client. `as` is a token (default admin); null sends no Authorization. */
 export const request = async (method, url, { body, as = h.tokens.admin, headers = {}, raw, form } = {}) => {

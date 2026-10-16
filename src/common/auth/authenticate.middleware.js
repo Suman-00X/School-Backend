@@ -21,12 +21,13 @@ export const authenticate = async (req, res, next) => {
     );
   }
 
-  /* Only access tokens open the API (not, say, a token minted for another purpose) */
+  /* Only access tokens of a session open the API (not a token minted for another purpose) */
   if (
+    payload.typ !== "access" ||
+    !payload.sid ||
     !payload.userId ||
     !payload.tenantId ||
-    !ALL_ROLES.includes(payload.role) ||
-    (payload.typ && payload.typ !== "access")
+    !ALL_ROLES.includes(payload.role)
   ) {
     throw unauthorized("Invalid token");
   }
@@ -36,7 +37,7 @@ export const authenticate = async (req, res, next) => {
     tenantId: payload.tenantId,
     userId: payload.userId,
     role: payload.role,
-    sessionId: payload.sid ?? null
+    sessionId: payload.sid
   };
 
   next();

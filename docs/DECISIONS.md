@@ -59,11 +59,22 @@ You asked for it after the overnight review. Sign-in is `POST /api/v1/auth/login
   - Only ADMIN can invite privileged staff.
   - `npm run school:create` now sends the first admin an invitation.
 - **Protection:**
-  - After 5 wrong passwords the account is locked for 15 minutes.
-  - Sign-in and reset requests are rate-limited per IP and email.
-  - Logout, password reset and deactivation end tokens immediately, through revocation markers.
-  - Sign-ins are recorded in the audit trail.
-  - Password and token hashes are stripped from every response, and the tests fail if one ever appears.
+  - **Password guessing:**
+    - Each attempt is claimed *before* the password is checked, so parallel bursts count too.
+    - Counters live in the shared cache, per account: 5 attempts per 15 minutes from one IP, and 50 from all IPs together.
+    - One attacker therefore cannot lock the real owner out; only a distributed attack can, for 15 minutes.
+    - Unknown emails are counted the same way, so lockouts reveal nothing.
+    - Guessing the current password in "change password" counts too.
+  - **Rate limits:** sign-in, refresh (counted per session) and reset requests each have their own limits.
+  - **Reset emails** are sent by a background job, so the answer and its timing are the same for every email.
+  - **Refresh:**
+    - Two tabs refreshing at once is handled: there is a 30-second grace window, and the session stays.
+    - Any older refresh token for a live session ends that session (theft).
+  - **Ending sessions:** logout, password reset, deactivation and **an email change by the office** end tokens immediately. On an email change, the old address is also notified, so a changed email cannot quietly be used to take an account over.
+  - **Accepted tokens:** only real session access tokens open the API.
+  - **Audit and secrets:** sign-ins are in the audit trail. Hashes and secret-named fields (passwords, tokens, keys) are stripped from responses, audit records and logs.
+  - A security review agent audited all of this, and each finding has a test.
+- **🟡 Production:** set `TRUST_PROXY_HOPS` behind a load balancer (the server warns at startup if it is missing). Otherwise every user shares the balancer's IP for the per-IP limits.
 - **🟡 For you:**
   - Should invitations go out automatically on admission? Today the office sends them, in bulk of up to 500.
   - Is phone-number + OTP sign-in needed for parents? It would need an SMS provider.

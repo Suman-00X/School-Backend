@@ -23,6 +23,20 @@ const memoryStore = () => {
     del: async key => {
       entries.delete(key);
     },
+    /* Counter in a fixed window that starts with the first increment */
+    increment: async (key, ttlSeconds) => {
+      const entry = entries.get(key);
+      const live = entry && entry.expiresAt >= Date.now();
+      const value = (live ? JSON.parse(entry.value) : 0) + 1;
+      entries.set(key, {
+        value: JSON.stringify(value),
+        expiresAt: live ? entry.expiresAt : Date.now() + ttlSeconds * 1000
+      });
+      return {
+        value,
+        ttlSeconds: Math.ceil(((live ? entry.expiresAt : Date.now() + ttlSeconds * 1000) - Date.now()) / 1000)
+      };
+    },
     clear: async () => entries.clear()
   };
 };
@@ -41,6 +55,10 @@ const redisStore = async url => {
     del: async key => {
       await redis.del(key);
     },
+    increment: async (key, ttlSeconds) => {
+      const [[, value], , [, ttl]] = await redis.multi().incr(key).expire(key, ttlSeconds, "NX").ttl(key).exec();
+      return { value, ttlSeconds: ttl };
+    },
     clear: async () => {},
     quit: () => redis.quit()
   };
@@ -58,6 +76,8 @@ export const cache = {
   get: key => store.get(key),
   set: (key, value, ttlSeconds = 300) => store.set(key, value, ttlSeconds),
   del: key => store.del(key),
+  /* Atomic counter: -> { value, ttlSeconds left in its window }. Safe across processes with Redis. */
+  increment: (key, ttlSeconds) => store.increment(key, ttlSeconds),
   clear: () => store.clear(),
 
   /* Read-through: return the cached value or compute, store and return it.

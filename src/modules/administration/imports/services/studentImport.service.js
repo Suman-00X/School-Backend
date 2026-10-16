@@ -115,7 +115,9 @@ export const studentImportService = {
       throw unprocessable("No academic year to admit students into. Set a current year or send academicYearId.");
 
     const { headers, rows } = parseCsvTable(file.buffer, { maxRows: MAX_ROWS });
-    const mapping = { ...suggestMapping(headers), ...(requested ?? {}) };
+    const mapping = Object.fromEntries(
+      Object.entries({ ...suggestMapping(headers), ...(requested ?? {}) }).filter(([, header]) => header !== null)
+    );
     checkMapping(headers, mapping);
 
     const job = await importJobRepository.create(ctx.tenantId, {
@@ -154,7 +156,9 @@ export const studentImportService = {
     if (missing.length) {
       throw unprocessable(`Map these required fields to a column first: ${missing.map(f => f.label).join(", ")}`);
     }
-    await importJobRepository.update(ctx.tenantId, importId, { status: "QUEUED" });
+    if (!(await importJobRepository.transition(ctx.tenantId, importId, "MAPPING", "QUEUED"))) {
+      throw conflict("This import has already been started or cancelled");
+    }
     await enqueue({ tenantId: ctx.tenantId, userId: ctx.userId, role: ctx.role, importId });
     return studentImportService.getById(ctx, importId);
   },
@@ -162,25 +166,30 @@ export const studentImportService = {
   /* Discard an import that has not started */
   cancel: async (ctx, importId) => {
     const job = await loadMapping(ctx, importId);
+    if (
+      !(await importJobRepository.transition(ctx.tenantId, importId, "MAPPING", "CANCELLED", {
+        finishedAt: new Date()
+      }))
+    ) {
+      throw conflict("This import has already been started or cancelled");
+    }
     await storage.remove(job.storageKey).catch(() => {});
-    await importJobRepository.update(ctx.tenantId, importId, { status: "CANCELLED", finishedAt: new Date() });
     return studentImportService.getById(ctx, importId);
   },
 
   /* Background job body: admit every row; one bad row never stops the rest */
   run: async ({ tenantId, userId, role, importId }) => {
     const ctx = { tenantId, userId, role };
-    const job = await importJobRepository.findById(tenantId, importId);
-    if (!job || job.status === "COMPLETED") return;
-
-    await importJobRepository.update(tenantId, importId, {
-      status: "PROCESSING",
+    /* Only a queued import runs, and only once (a duplicate job finds it already PROCESSING) */
+    const claimed = await importJobRepository.transition(tenantId, importId, "QUEUED", "PROCESSING", {
       startedAt: new Date(),
       processedRows: 0,
       succeeded: 0,
       failed: 0,
       rowErrors: []
     });
+    if (!claimed) return;
+    const job = await importJobRepository.findById(tenantId, importId);
 
     try {
       const chunks = [];

@@ -4,11 +4,12 @@ import env from "../../../../common/config/env.config.js";
 import { hashPassword, needsRehash, verifyPassword } from "../../../../common/crypto/password.js";
 import { digest, randomToken } from "../../../../common/crypto/tokens.js";
 import { transaction } from "../../../../common/database/postgres.js";
-import { forbidden, notFound, tooManyRequests, unauthorized } from "../../../../common/http/errors.js";
+import { forbidden, notFound, unauthorized } from "../../../../common/http/errors.js";
 import { findTenantByCode } from "../../../../common/tenancy/tenant.service.js";
 import { accountService } from "../../../users/accounts/index.js";
 import { BAD_CREDENTIALS } from "../../shared/constants/auth.constants.js";
 import { auditAuth } from "../../shared/utils/authAudit.util.js";
+import { signInThrottle } from "../../shared/utils/signInThrottle.util.js";
 import { authSessionRepository } from "../repositories/authSession.repository.js";
 
 const SESSION_ENDED = "Your session has ended. Please sign in again.";
@@ -31,29 +32,29 @@ const tokens = (user, session, secret) => ({
   refreshTokenExpiresAt: session.expiresAt
 });
 
-const minutesUntil = date => Math.max(1, Math.ceil((new Date(date) - Date.now()) / 60_000));
+/* Two tabs refreshing at once: the loser presents the token the winner just rotated.
+   Within this window that is refused without ending the session. */
+const ROTATION_GRACE_MS = 30_000;
 
 export const sessionService = {
   /* Sign in with the school code, email and password -> tokens */
   login: async ({ schoolCode, email, password }, client) => {
     const tenant = await findTenantByCode(schoolCode);
+    /* Counted before the password check, also for unknown schools and emails */
+    const attempt = {
+      tenantKey: tenant?.id ?? `code:${String(schoolCode).trim().toUpperCase()}`,
+      email,
+      ip: client.ipAddress ?? "unknown"
+    };
+    await signInThrottle.claim(attempt);
+
     const ctx = { tenantId: tenant?.id, role: "SYSTEM" };
     const user = tenant ? await accountService.credentials.find(ctx, email) : null;
-
-    if (user?.lockedUntil && new Date(user.lockedUntil) > new Date()) {
-      throw tooManyRequests(
-        `Too many failed sign-in attempts. Try again in ${minutesUntil(user.lockedUntil)} minute(s), or reset your password.`
-      );
-    }
 
     /* Always one hash check, so timing does not reveal unknown accounts */
     const valid = await verifyPassword(password, user?.passwordHash);
     if (!user || !valid) {
       if (user) {
-        await accountService.credentials.recordFailedLogin(ctx, user.id, {
-          maxFailures: env.auth.maxFailedLogins,
-          lockoutMinutes: env.auth.lockoutMinutes
-        });
         auditAuth({
           tenantId: tenant.id,
           userId: user.id,
@@ -66,6 +67,7 @@ export const sessionService = {
       throw unauthorized(BAD_CREDENTIALS);
     }
     if (user.status !== "ACTIVE") throw forbidden("This account is disabled. Please contact the school office.");
+    await signInThrottle.clear(attempt);
 
     const rehash = needsRehash(user.passwordHash) ? { passwordHash: await hashPassword(password) } : {};
     await accountService.credentials.recordLogin(ctx, user.id, rehash);
@@ -98,7 +100,11 @@ export const sessionService = {
       if (!session || session.revokedAt || new Date(session.expiresAt) <= new Date()) return { error: SESSION_ENDED };
 
       const presented = digest(secret);
-      if (presented === session.previousRefreshHash) {
+      if (presented !== session.refreshHash) {
+        const justRotated =
+          presented === session.previousRefreshHash && Date.now() - new Date(session.lastUsedAt) < ROTATION_GRACE_MS;
+        if (justRotated) return { error: "This refresh token was just replaced. Use the newest one." };
+        /* Any other token for this session is an old one: a sign of theft. End the session. */
         await authSessionRepository.update(
           session.tenantId,
           session.id,
@@ -107,7 +113,6 @@ export const sessionService = {
         );
         return { error: "This sign-in was ended for your security. Please sign in again.", revoke: session.id };
       }
-      if (presented !== session.refreshHash) return { error: SESSION_ENDED };
 
       const ctx = { tenantId: session.tenantId, role: "SYSTEM" };
       const [user] = await accountService.findManyByIds(ctx, [session.userId]);

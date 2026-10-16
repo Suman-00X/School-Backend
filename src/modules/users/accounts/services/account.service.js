@@ -1,9 +1,12 @@
 import { eq, inArray } from "drizzle-orm";
 import { createCrudService } from "../../../../common/crud/crudService.js";
 import { revokeUserTokens } from "../../../../common/auth/revocation.js";
+import { publish } from "../../../../common/events/events.js";
 import { notFound, unprocessable } from "../../../../common/http/errors.js";
 import { users } from "../models/user.schema.js";
 import { userRepository } from "../repositories/user.repository.js";
+
+export const USER_EMAIL_CHANGED = "users.account.emailChanged";
 
 const base = createCrudService(userRepository, { entity: "User" });
 
@@ -13,7 +16,20 @@ export const accountService = {
 
   getById: base.getById,
 
-  update: base.update,
+  /* A changed sign-in email ends the account's sessions and tells the old address (auth module) */
+  update: async (ctx, userId, data) => {
+    const before = data.email ? await userRepository.findById(ctx.tenantId, userId) : null;
+    const user = await base.update(ctx, userId, data);
+    if (before && before.email !== user.email) {
+      await publish(USER_EMAIL_CHANGED, {
+        tenantId: ctx.tenantId,
+        userId,
+        oldEmail: before.email,
+        newEmail: user.email
+      });
+    }
+    return user;
+  },
 
   deactivate: async (ctx, userId) => {
     if (userId === ctx.userId) throw unprocessable("You cannot deactivate your own account");
@@ -40,7 +56,6 @@ export const accountService = {
   credentials: {
     find: (ctx, email) => userRepository.findCredentials(ctx.tenantId, String(email).trim().toLowerCase()),
     findById: (ctx, userId) => userRepository.findCredentialsById(ctx.tenantId, userId),
-    recordFailedLogin: (ctx, userId, policy) => userRepository.recordFailedLogin(ctx.tenantId, userId, policy),
     recordLogin: (ctx, userId, extra) => userRepository.recordLogin(ctx.tenantId, userId, extra),
     setPasswordHash: (ctx, userId, passwordHash, options) =>
       userRepository.setPasswordHash(ctx.tenantId, userId, passwordHash, options)
