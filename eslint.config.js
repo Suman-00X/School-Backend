@@ -2,7 +2,7 @@ import js from "@eslint/js";
 import globals from "globals";
 
 export default [
-  { ignores: ["node_modules/", "migrations/", "storage/", "coverage/", ".claude/"] },
+  { ignores: ["node_modules/", "migrations/", "migrations-platform/", "storage/", "coverage/", ".claude/"] },
   js.configs.recommended,
   {
     languageOptions: {

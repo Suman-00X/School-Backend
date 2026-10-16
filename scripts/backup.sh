@@ -1,6 +1,8 @@
 #!/bin/sh
-# Back up PostgreSQL, MongoDB and (local driver) uploaded files into
+# Back up the platform database and EVERY school's own PostgreSQL and MongoDB databases
+# (database per school), plus (local driver) uploaded files, into
 # $BACKUP_DIR/<UTC timestamp>/ with SHA-256 checksums, then prune old backups.
+# Files: platform.postgres.dump, <CODE>.postgres.dump, <CODE>.mongo.archive.gz, storage.tar.gz
 #
 #   npm run backup                      # reads .env when present
 #   BACKUP_S3_URI=s3://bucket/school npm run backup   # also copy off-site (aws cli)
@@ -24,8 +26,15 @@ umask 077
 mkdir -p "$target"
 
 echo "Backing up to $target"
-pg_dump --format=custom --no-owner --no-privileges --file="$target/postgres.dump" "$DATABASE_URL"
-mongodump --uri="$MONGO_URI" --archive="$target/mongo.archive.gz" --gzip --quiet
+# One line per database set: name, PostgreSQL URL, MongoDB URL (piped, never written to disk)
+node scripts/list-databases.js | while IFS="$(printf '\t')" read -r name pg_url mongo_url; do
+  [ -n "$name" ] || continue
+  echo "  $name"
+  pg_dump --format=custom --no-owner --no-privileges --file="$target/$name.postgres.dump" "$pg_url"
+  if [ -n "$mongo_url" ]; then
+    mongodump --uri="$mongo_url" --archive="$target/$name.mongo.archive.gz" --gzip --quiet
+  fi
+done
 
 if [ "${STORAGE_DRIVER:-local}" = "local" ] && [ -d "${STORAGE_LOCAL_DIR:-./storage}" ]; then
   tar -czf "$target/storage.tar.gz" -C "${STORAGE_LOCAL_DIR:-./storage}" .

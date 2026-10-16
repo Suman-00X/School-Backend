@@ -7,6 +7,7 @@
     "dev": "node --watch src/server.js",
     "dev:memory": "node scripts/dev-memory.js",
     "db:generate": "drizzle-kit generate",
+    "db:generate:platform": "drizzle-kit generate --config drizzle.platform.config.js",
     "db:migrate": "node scripts/migrate.js",
     "db:studio": "drizzle-kit studio",
     "docs:endpoints": "node scripts/generate-endpoints.js",

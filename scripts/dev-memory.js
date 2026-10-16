@@ -6,24 +6,26 @@ import { startInMemoryDatabases } from "./lib/inMemoryDatabases.js";
 const databases = await startInMemoryDatabases();
 
 process.env.DATABASE_URL = databases.databaseUrl;
+process.env.POSTGRES_ADMIN_URL = databases.adminUrl;
 process.env.MONGO_URI = databases.mongoUri;
 process.env.JWT_SECRET ||= "dev-only-secret";
 process.env.NODE_ENV ||= "development";
 
 const { startDatabases, stopDatabases } = await import("../src/bootstrap.js");
 const postgres = await import("../src/common/database/postgres.js");
-const { tenants, users } = await import("../src/database.schema.js");
+const { runInTenant } = await import("../src/common/tenancy/context.js");
+const { migratePlatformDatabase, provisionTenant } = await import("../src/common/tenancy/provisioning.js");
+const { users } = await import("../src/database.schema.js");
 const { hashPassword } = await import("../src/common/crypto/password.js");
 const DEV_PASSWORD = "Admin12345";
 const { default: app } = await import("../src/app.js");
 
 await startDatabases();
-const { db } = postgres; // initialised by startDatabases()
-
-const [tenant] = await db.insert(tenants).values({ name: "Demo School", code: "DEMO" }).returning();
-await db
-  .insert(users)
-  .values({
+await migratePlatformDatabase();
+/* A demo school with its own databases (school_demo), like production */
+const { profile: tenant } = await provisionTenant({ code: "DEMO", name: "Demo School" });
+await runInTenant(tenant.id, async () =>
+  postgres.db.insert(users).values({
     tenantId: tenant.id,
     firstName: "Demo",
     lastName: "Admin",
@@ -31,7 +33,7 @@ await db
     role: "ADMIN",
     passwordHash: await hashPassword(DEV_PASSWORD)
   })
-  .returning();
+);
 
 const port = Number(process.env.PORT) || 3000;
 const server = app.listen(port, () => {

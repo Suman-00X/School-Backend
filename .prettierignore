@@ -4,3 +4,4 @@ storage/
 package-lock.json
 *.md
 .claude/
+migrations-platform/
