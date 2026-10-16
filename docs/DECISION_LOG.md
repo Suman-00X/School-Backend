@@ -91,9 +91,18 @@ The Sentry path itself is untested (no DSN here). Try it once on staging.
 | `EXCUSED` | left out of the denominator (doesn't count against the student) |
 | `ABSENT` | absent |
 
-Working days are the days in the range, minus weekly off days and HOLIDAY/VACATION calendar events. Days with no register taken are reported as `unmarked` and don't count as absent.
+Working days are the days in the range, minus weekly off days and HOLIDAY/VACATION calendar events. Days with no register taken are reported as `unmarked`. They stay in the denominator with no credit, so an untaken day lowers the percentage like an absence. (Corrected in round 5; this was always the code's behaviour.) Two-session and period-wise attendance are in D-66.
 
 The weights live in one constant (`ATTENDANCE_WEIGHT`). They can become a per-school setting next to the attendance lock (D-08) if schools differ, for example counting LATE as half. Say if you want that.
+
+### ✅ D-11: Teachers reach only their own sections (round 5)
+Decided by you and built. "My sections" = class teacher of, or teaching a subject in.
+- **Report cards:** the class teacher of the section only.
+- **Timetable:** their own, plus their section's as class teacher.
+- **Academics:** limited to their sections, and those sections' classes and subjects.
+- **Students:** only students of their sections. A subject teacher sees every student of a section they teach in, with parents' contacts.
+- **Attendance:** the daily register is now the class teacher's. Period registers go to the period's teacher.
+- **Unchanged:** marks and homework. Teachers were already taken out of transport and hostel in round 4 (D-51).
 
 ### ✅ D-08: Attendance registers lock; admins can still change them (round 2)
 - **Edit window:** each school sets one (`GET`/`PATCH /academics/attendance/policy`, ADMIN). A register can be taken or changed until N days after its date; the default is 2, and 0 means the same day only.

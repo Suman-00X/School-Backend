@@ -84,7 +84,8 @@ In every school's database.
 | teacher-assignments | `teacher_assignments` | Who teaches a subject in a section. Drives teacher record-level scope | Partial unique (section, subject) |
 | enrollments | `student_enrollments` | A student's section and roll number for one year. Promotion adds next year's row | Unique (year, student) and (section, roll number) |
 | calendar | `calendar_events` | Holidays, events and exam days that affect working days | CHECK end ≥ start |
-| attendance | `attendance_sessions` | One register: section × date × period (0 = daily) | Unique (section, date, period) |
+| attendance | `attendance_sessions` | One register: section × date × kind (DAY, FORENOON, AFTERNOON, PERIOD) × period (0 unless PERIOD) | Unique (section, date, kind, period); CHECK period > 0 exactly when kind is PERIOD |
+| attendance | `attendance_mode_rules` | How attendance is taken (DAILY, TWO_SESSIONS, PERIOD_WISE) from a date, for the school (`class_id` null) or one class (mode null = follow the school) | Partial unique (school, date) and (class, date); a school rule must have a mode |
 | attendance | `attendance_records` | One student's mark in a register: PRESENT, ABSENT, LATE, HALF_DAY, EXCUSED | Unique (session, student). Indexed by student/date and section/date |
 | timetable | `periods` | The bell schedule for a year | Partial unique (year, period number). CHECK end > start |
 | timetable | `timetable_slots` | Section × weekday × period → subject, teacher, room | Partial uniques stop clashes: one slot per section, one per teacher, one per room, per weekday and period |

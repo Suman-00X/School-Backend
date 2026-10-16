@@ -51,7 +51,9 @@ Status as of 2026-10-16: **156 end-to-end tests** pass on embedded PostgreSQL 18
 
 ## Phase 3: Core academics ✅
 - ✅ Calendar: holidays and events, which decide working days
-- ✅ Student attendance, daily or per period, with summaries and absence alerts. Staff attendance is in HR
+- ✅ Student attendance, in three modes per school or class (once a day, forenoon/afternoon, every period), with summaries and absence alerts. Staff attendance is in HR
+- ✅ Teachers reach only their own sections: students, attendance, marks, report cards (class teacher), timetable (D-11)
+- ✅ Module owners and customisable operator roles for library, transport, hostel, HR and inventory (D-67)
 - ✅ Timetable: periods, slots, and clash checks for section, teacher and room; section and teacher views
 - ✅ Exam schedule: dates, times, rooms, clash checks; result publication
 - ✅ Grade scales and automatic grades

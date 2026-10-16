@@ -11,7 +11,7 @@ Only **open** items are here: things that need your decision, or that you may wa
 | 🟡 | D-63: refunds, now in plain words (six short questions) |
 | 🔴 | D-65: library choices (two need you: borrowing blocks, holiday calendar) |
 | 🟡 | D-64 hostel; the fee and result choices to confirm (D-17 to D-21, D-09/D-10) |
-| Building | D-11 teacher scope, the three attendance modes, module owners and operators (round 5) |
+| 🟡 | D-66 attendance modes and D-67 module owners and operators: built, choices to confirm |
 | Later | D-44: restore drill, once there is drill data |
 
 **Before go-live** (checklist; details in OPERATIONS.md):
@@ -56,6 +56,37 @@ The rest stays as built unless you say otherwise:
 
 ## Worth a look
 
+### 🟡 D-66: Three attendance systems: choices to confirm
+Built: a school picks **once a day**, **forenoon and afternoon**, or **every period**, for the whole school or per class, starting from a date. How each counts is in API.md › Attendance.
+- **Switching modes:** a change starts tomorrow by default. It can start earlier only if no register has been taken in those classes from that date, so old registers keep their meaning.
+- **A register not taken:** a session not taken counts as half a day absent, like an untaken day today. For periods, only periods actually taken count as "held".
+- **Half day:** cannot be marked in a forenoon or afternoon register (the two sessions already make the halves). In a period register it is worth half that period.
+- **Period-wise day:** present when at least 50% of the periods taken were attended. This is one school-wide setting, and it also re-evaluates past days.
+- **Period registers follow the timetable:** a period can only be taken if the section has a class then, and the subject comes from the timetable. A one-day substitute is not modelled yet; changing the slot's teacher works.
+- **Class teacher away:** only ADMIN or PRINCIPAL can take the daily register. *Option:* a deputy class teacher per section.
+- **Last year:** a teacher still sees last year's sections (not its students). *Option:* current year only.
+- **Absence alerts:** parents get one alert per missed session; in period mode, one per day at the first missed period.
+
+### 🟡 D-67: Module owners and operators: choices to confirm
+Built under `/administration/access`:
+- **Owners:** the built-in managers (librarian, transport, hostel, HR, inventory) own their module. ADMIN can also make any staff member the owner of a module.
+- **Operators:** an owner creates operator roles by ticking the actions of their module (for example "Issue, return and renew books"), and assigns them to one or more people, optionally between two dates.
+- **Changes** take effect on the next request.
+
+To confirm:
+- **Owner powers:** an owner gets what the built-in manager can do in that module, plus managing its operators. Anything that is ADMIN-only stays ADMIN-only.
+- **Never given to operators (owner-only):**
+  - library: fine waivers, library policy;
+  - inventory: stock adjustments;
+  - HR: approving leave, cancelling anyone's leave, finalising payroll;
+  - every module: managing operators.
+
+  Everything else, salary and bank details included, can be ticked into an operator role.
+- **The HR manager can now cancel approved leave**, as "admin inside the module". Before, only ADMIN could.
+- **Granularity:** actions are as fine as the module's permissions today. For example, "manage seat assignments" covers assigning, changing and ending a seat. Finer ticks mean splitting permissions per module; say where you want them.
+- **Who can be an operator:** any active employee, teachers included. Not students, parents or ADMIN.
+- **History:** removing someone keeps the record as revoked. An operator role that someone holds cannot be deleted until they are removed.
+
 ### 🟡 D-63: Refunds, in plain words
 Refunds work as you asked: the accountant requests, the admin approves, a refund receipt is printed, and the books (double-entry ledger) are updated. Six small questions remain. Reply with the numbers you want changed; the rest stays as it is.
 
@@ -73,32 +104,6 @@ Refunds work as you asked: the accountant requests, the admin approves, a refund
 - **Resources tied to a bed** (locker, cupboard) move and shrink with it. On a transfer, hostel-wide items (mess plan, laundry plan) continue and room items end. A student has at most one mess plan and one laundry plan per day.
 - **Fees:** the monthly fee of a resource is stored on the resource only, and nothing is invoiced yet. When hostel fees are invoiced, the fee will be copied onto each assignment so later price changes do not rewrite history.
 - **Old allocation data** was dropped by the migration, not converted. That is safe only because no school is live. Tell me if any real data exists.
-
-### 🟡 D-11: What teachers can access (record-level scope)
-A teacher can act on a section if they are its **class teacher** or are **assigned a subject** in it. Inside such a section:
-- a subject teacher can take whole-day attendance;
-- marks are limited to the teacher's own subjects; class teachers can record marks for any subject in their section.
-
-**What teachers can do today, as you asked**, so you can choose:
-
-| Area | Teacher can | Limited to |
-|---|---|---|
-| Attendance | take and retake registers, view registers and summaries | their sections; locked registers excluded (D-08) |
-| Marks | record and update marks, single or bulk | their subjects (class teacher: all subjects of their section) |
-| Homework | create, edit and delete homework, add attachments, see submissions, grade or return work | their sections and subjects |
-| Report cards | view, and download as PDF | their sections |
-| Timetable | view their own and their sections' timetables | — |
-| Academics (read) | years, classes, subjects, sections, enrollments, exams, grade scales, periods | — |
-| Students (read) | list and view students | currently **all** students of the school |
-| HR self-service | apply for and cancel own leave, see own attendance, leave balance and payslips | themselves |
-| Read-only elsewhere | transport routes and assignments, hostel rooms and allocations, vehicles | — |
-
-**Options to consider:**
-1. Whole-day attendance for the **class teacher only**. This is a one-word change.
-2. Limit the student list and student profiles to students in their sections.
-3. Hide transport and hostel data from teachers. This includes the parent phone numbers on rosters (D-51).
-4. Let teachers publish results, or create exams, for their subjects. Today only ADMIN and PRINCIPAL can.
-5. Let class teachers approve leave notes from parents. This is a new feature.
 
 ### 🟡 D-09 / D-10: Results: points to confirm
 Configurable result policies and frozen, sealed report cards are built (DECISION_LOG.md › D-09, D-10). These choices need your confirmation:

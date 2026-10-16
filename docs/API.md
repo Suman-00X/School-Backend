@@ -126,9 +126,20 @@ An access token carries `{ userId, tenantId, role, sid }`. Each endpoint allows 
 | `PRINCIPAL` | Head of school | Academic management and approvals (leave, fine waivers). Reads most other areas |
 | `ACCOUNTANT` | Fees and payroll | Fees, payments, concessions, payroll, financial reports |
 | `STAFF` | Office | Admissions, parents, enrollments, attendance of staff, library, transport, hostel, inventory |
-| `TEACHER` | Teacher | Marks, attendance, homework and timetables **only for the sections and subjects they teach** |
+| `TEACHER` | Teacher | Only the sections they teach (class teacher or subject teacher), see below |
 | `STUDENT` | Student | `/me`: own timetable, attendance, homework (and submitting it), results, fees, library, transport, hostel |
 | `PARENT` | Parent/guardian | `/me`: the same, for **linked children only**; pays fees online |
+
+**What a teacher reaches.** "My sections" means the sections where the teacher is class teacher, plus the sections where they teach a subject:
+
+| Area | Teacher can |
+|---|---|
+| Students | List and view students of their sections, with their parents' contacts. Any other student is 404. A subject teacher sees every student of the section they teach in |
+| Attendance | Daily and forenoon/afternoon registers: class teacher only. Period registers: the class teacher, the timetabled teacher, or the subject teacher |
+| Marks, homework | Their subjects in their sections (the class teacher: every subject of their section) |
+| Report cards | Class teacher of the section only, including PDFs, snapshots and scheme results |
+| Timetable | Their own, and their section's if they are its class teacher |
+| Academics | Sections, classes, subjects and assignments of their sections. Years, periods, grade scales, calendar and exams are visible to all |
 
 Self-service lives under `/api/v1/me` (portal), plus `my-…` endpoints in library, transport and hostel, and `/hr/me/…` for staff (own attendance, leave, payslips).
 
@@ -204,6 +215,20 @@ For many students (any spreadsheet layout, saved as CSV):
 3. Add section subjects and teacher assignments.
 4. Set periods and the timetable (`/academics/timetable/…`). Clashes of section, teacher or room are rejected.
 5. Add the calendar: holidays and events. These decide working days for attendance and leave.
+
+### Attendance
+
+1. **Choose how attendance is taken:** `PATCH /academics/attendance/policy` (ADMIN) with a `mode` for the school and, if some classes differ, `classModes: [{ classId, mode }]` (`mode: null` makes a class follow the school again). A change starts on `modeEffectiveFrom`, by default tomorrow. It may start earlier only where no registers exist yet. `GET …/policy` shows today's mode, the classes that differ and changes scheduled.
+
+   | Mode | Registers per day | A day counts as |
+   |---|---|---|
+   | `DAILY` | one (`kind: DAY`) | its mark |
+   | `TWO_SESSIONS` | `FORENOON` and `AFTERNOON` | each session is half a day; present in one = 0.5 day |
+   | `PERIOD_WISE` | one per timetabled period (`kind: PERIOD`, `periodNumber`) | present when the share of periods attended reaches `periodPresenceThreshold` (default 50%) |
+
+2. **Take a register:** `POST /academics/attendance` with `sectionId`, `date`, `kind` (and `periodNumber` for periods) and the marks. A register that does not fit the class's mode that day is refused with a message saying which one to take. Period registers need a timetabled class; the subject comes from the timetable.
+3. **See the day:** `GET /academics/attendance/register?sectionId&date` returns every register of the day with each student's marks (`FN`, `AN`, `P1`…) and the resulting day status.
+4. **Percentages:** summaries return the day percentage, and the period percentage for period-wise classes, with a per-day breakdown. Parents get one absence alert per missed session, or one per day in period-wise mode.
 
 ### Exams and results
 
