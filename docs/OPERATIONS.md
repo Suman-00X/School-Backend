@@ -68,7 +68,7 @@ Health: `GET /health` (liveness, no dependencies) and `GET /ready` (PostgreSQL a
 
 ## Onboarding a school
 
-Until login exists (roadmap Phase 2), schools are created by an operator:
+Schools are created by an operator (self-service sign-up is not built):
 
 ```sh
 npm run school:create -- --name "Green Valley School" --code GVS \
@@ -76,7 +76,7 @@ npm run school:create -- --name "Green Valley School" --code GVS \
 # docker compose run --rm api node scripts/create-school.js …   (same flags)
 ```
 
-It prints a one-hour admin token. Treat it like a password.
+It emails the admin, and prints, a 7-day set-password link: `WEB_APP_URL/set-password?token=…`. The web app posts the token to `POST /api/v1/auth/password-resets`. The admin then signs in with the school code, email and password, and invites everyone else (`POST /api/v1/auth/invitations`).
 
 ## Observability
 
@@ -137,7 +137,9 @@ npm run db:migrate                              # bring an older backup up to th
 
 ## Security checklist
 
-- [ ] `JWT_SECRET` is 32+ random bytes, stored in a secret manager, and rotated by redeploying. All tokens are invalidated; login (Phase 2) will add refresh tokens.
+- [ ] `JWT_SECRET` is 32+ random bytes, stored in a secret manager. Rotating it signs out every access token; refresh tokens keep working, because they are opaque and checked in the database.
+- [ ] `WEB_APP_URL` points at the real web app, so invitation and reset links work. Email (SMTP) is configured.
+- [ ] `REDIS_URL` is set with more than one API instance. Sign-out and revocation markers live in the shared cache.
 - [ ] `ALLOWED_ORIGINS` lists only the real frontends; `TRUST_PROXY_HOPS` matches the load balancer.
 - [ ] TLS is terminated at the load balancer, with HSTS (helmet sends it).
 - [ ] Databases sit on private networks, with TLS in `DATABASE_URL`/`MONGO_URI` (`sslmode=require`, `tls=true`).

@@ -8,7 +8,7 @@ Backend only. **The frontend (web and mobile) is out of scope for now** and will
 |---|---|---|
 | 0 | Make it run | ✅ Done |
 | 1 | Architecture: PostgreSQL + MongoDB, modular structure | ✅ Done |
-| 2 | Authentication and foundation | 🟡 Foundation done; **login not built** (not in the overnight scope, see DECISIONS D-01) |
+| 2 | Authentication and foundation | ✅ Done (round 2: sign-in, refresh rotation, invitations, password reset) |
 | 3 | Core academics | ✅ Done |
 | 4 | Fees and communication | ✅ Done (push notifications later) |
 | 5 | Reports and analytics | ✅ Done |
@@ -34,12 +34,14 @@ Status as of 2026-10-16: **156 end-to-end tests** pass on embedded PostgreSQL 18
 - ✅ Privileged staff roles (PRINCIPAL, ACCOUNTANT, STAFF) with per-action permissions
 - ✅ REST API v1 with one response/error envelope
 
-## Phase 2: Authentication and foundation 🟡
-- ⬜ **Login:** `POST /auth/login`, password hashing, refresh tokens, logout
-- ⬜ Change/forgot/reset password; first-login invitations for admitted students and parents
-- 🟡 **School onboarding:** operator CLI (`npm run school:create`). Self-service sign-up still to do
+## Phase 2: Authentication and foundation ✅
+- ✅ **Login:** `POST /auth/login` (school code + email + password), scrypt hashing, 15-minute access tokens, rotating refresh tokens with reuse detection, logout, device list
+- ✅ Change, forgot and reset password; invitations by email with single-use links
+- ✅ Lockout after repeated failures; strict rate limits on public auth endpoints; sign-ins in the audit trail
+- 🟡 **School onboarding:** operator CLI (`npm run school:create`) with an admin invitation. Self-service sign-up still to do
+- ⬜ Phone + OTP sign-in for parents (needs an SMS provider)
 - ✅ Field whitelisting and Zod validation on every route
-- 🟡 Helmet and global rate limiting ✅; a stricter limit on login comes with login
+- ✅ Helmet, global rate limiting, stricter limits on sign-in
 - ✅ ESLint and Prettier
 - ✅ Structured logging (pino) with request ids
 - ✅ OpenAPI 3.1 generated from the route table, Swagger UI at `/api/docs`, generated [ENDPOINTS.md](ENDPOINTS.md)
@@ -112,15 +114,14 @@ Status as of 2026-10-16: **156 end-to-end tests** pass on embedded PostgreSQL 18
 
 ## Suggested next steps
 
-1. **Phase 2 login** (D-01): password hashing, login, refresh tokens, invitations. The portal and payments are ready for it.
-2. **Row-level security** (D-45), before real schools' data goes in.
-3. **Unicode PDF fonts** (D-37) for the regions you launch in.
-4. Go-live checks:
+1. **Row-level security** (D-45), before real schools' data goes in.
+2. **Unicode PDF fonts** (D-37) for the regions you launch in.
+3. Go-live checks:
    - test Razorpay with real test keys (D-20)
    - run a restore drill (D-44)
    - choose a host and registry (D-42)
-5. **Frontend** (web portals, then mobile).
-6. Product extensions:
+4. **Frontend** (web portals, then mobile).
+5. Product extensions:
    - push notifications
    - transport fees on invoices
    - a LIBRARIAN role

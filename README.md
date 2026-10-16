@@ -19,12 +19,12 @@ npm install
 npm run dev:memory
 ```
 
-It seeds a demo school and admin, and prints a 12-hour admin token. Send it as `Authorization: Bearer <token>` to `http://localhost:3000/api/v1/...`.
+It seeds a demo school (code `DEMO`) and an admin who can sign in: `POST /api/v1/auth/login {"schoolCode":"DEMO","email":"admin@demo.school","password":"Admin12345"}`. It also prints a 12-hour admin token. Send the access token as `Authorization: Bearer <token>`.
 
 **Against real databases:**
 
 ```bash
-cp .env.example .env     # set DATABASE_URL, MONGO_URI, JWT_SECRET
+cp .env.example .env     # set DATABASE_URL, MONGO_URI, JWT_SECRET, WEB_APP_URL
 npm run db:migrate       # create/upgrade PostgreSQL tables
 npm run dev              # or: npm start
 ```
@@ -40,7 +40,7 @@ docker compose run --rm api node scripts/create-school.js --name "Demo School" -
   --admin-email admin@demo.school --admin-first Demo --admin-last Admin
 ```
 
-> There is no login endpoint yet (roadmap Phase 2). Until then, tokens come from `dev:memory` or `school:create`.
+`school:create` prints and emails a set-password invitation for the school's first admin.
 
 | Script | Does |
 |---|---|

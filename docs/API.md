@@ -1,6 +1,7 @@
 # API Guide (v1)
 
-Base URL: `/api/v1`. Every endpoint needs `Authorization: Bearer <token>`, except:
+Base URL: `/api/v1`. Every endpoint needs `Authorization: Bearer <access token>` (see [Authentication](#authentication)), except:
+- sign-in, token refresh and the password-link endpoints under `/auth`
 - `GET /health` and `GET /ready`
 - the API docs
 - signed file downloads
@@ -12,11 +13,36 @@ Base URL: `/api/v1`. Every endpoint needs `Authorization: Bearer <token>`, excep
 
 ## Contents
 
+- [Authentication](#authentication)
 - [Conventions](#conventions)
 - [Responses and errors](#responses-and-errors)
 - [Roles](#roles)
 - [Modules](#modules)
 - [Workflows](#workflows)
+
+---
+
+## Authentication
+
+| Step | Request | Notes |
+|---|---|---|
+| Sign in | `POST /auth/login { schoolCode, email, password }` → 201 | Returns `accessToken` (JWT, 15 min), `refreshToken` (30 days), `user` and `school` |
+| Call the API | `Authorization: Bearer <accessToken>` | |
+| Stay signed in | `POST /auth/refresh { refreshToken }` → 200 | Returns a **new** refresh token every time. Store it and discard the old one: re-using an old one ends the session |
+| Sign out | `POST /auth/logout` | This device. `GET /auth/sessions` lists devices; `DELETE /auth/sessions/:id` signs one out |
+| First password | `POST /auth/invitations { userIds }` (staff), then the person opens the emailed link → `POST /auth/password-resets { token, password }` | Links work once. Invitations last 7 days, resets 1 hour |
+| Forgot password | `POST /auth/password-reset-requests { schoolCode, email }` → always 202 | The same answer whether or not the account exists |
+| Change password | `PATCH /auth/password { currentPassword, newPassword }` | Signs out your other devices |
+
+**Passwords:** 8–128 characters, with at least one letter and one digit.
+
+**Wrong credentials:** every kind (school, email or password) gets the same 401: "The school code, email or password is incorrect".
+
+**Lockout and limits:**
+- After 5 failures the account is locked for 15 minutes (429).
+- Sign-in and reset requests are rate-limited per IP and email.
+
+**Revocation:** an access token stops working at once when you sign out, reset your password, or an administrator deactivates the account.
 
 ---
 
@@ -38,7 +64,7 @@ Base URL: `/api/v1`. Every endpoint needs `Authorization: Bearer <token>`, excep
 | **Files** | Uploads are checked for type, size and content signature. Downloads are never direct: endpoints return a **signed link valid for 15 minutes** (`…/download-url`). |
 | **Exports** | Report and list exports take `?format=xlsx` (default) or `?format=csv`. CSV is UTF-8 with a BOM, with spreadsheet-formula injection neutralised. Report cards, receipts and payslips are available as PDF (`…/pdf`). |
 | **Tracing** | Every response carries `X-Request-Id`, and you may send your own. Error bodies repeat it, so support can find the log line. |
-| **Rate limits** | 300 requests per 15 minutes per IP by default. See the `RateLimit` headers. |
+| **Rate limits** | 300 requests per 15 minutes per IP by default; stricter limits on sign-in and reset requests. See the `RateLimit` headers. |
 
 ---
 
@@ -78,12 +104,12 @@ Base URL: `/api/v1`. Every endpoint needs `Authorization: Bearer <token>`, excep
 |---|---|---|
 | 400 | `BAD_REQUEST` | Malformed request (invalid JSON, bad header, file of the wrong type) |
 | 400 | `VALIDATION_ERROR` | Body, query or params fail validation; `details` lists each problem |
-| 401 | `UNAUTHORIZED` | Missing, invalid or expired token |
-| 403 | `FORBIDDEN` | Your role may not do this, or a teacher acts outside the sections they teach |
+| 401 | `UNAUTHORIZED` | Missing, invalid, expired or revoked token; wrong credentials at sign-in |
+| 403 | `FORBIDDEN` | Your role may not do this, a teacher acts outside the sections they teach, or the attendance register is locked |
 | 404 | `NOT_FOUND` | The resource in the URL does not exist, belongs to another school, or is not visible to you (for example, another family's child). Also returned for unknown routes |
 | 409 | `CONFLICT` | Duplicate, or the resource's state forbids it: already exists, already graded, already finalized, archived year, seat or bed taken |
 | 422 | `UNPROCESSABLE_ENTITY` | Valid input that breaks a business rule ("Route R1 is full (40 of 40 seats)") |
-| 429 | `TOO_MANY_REQUESTS` | Rate limit exceeded |
+| 429 | `TOO_MANY_REQUESTS` | Rate limit exceeded, or the account is temporarily locked after failed sign-ins |
 | 500 | `INTERNAL_ERROR` | Unexpected failure. No internal details are returned; quote the `requestId` |
 
 Clients should branch on `error.code` and `details[].field`, and display `message`. Messages are in English; localising by code is described in [OPERATIONS.md](OPERATIONS.md#design-note-languages-i18n).
@@ -92,7 +118,7 @@ Clients should branch on `error.code` and `details[].field`, and display `messag
 
 ## Roles
 
-A token carries `{ userId, tenantId, role }`. Each endpoint allows a fixed set of roles, listed in [ENDPOINTS.md](ENDPOINTS.md). Some data is also limited to the records a person is linked to.
+An access token carries `{ userId, tenantId, role, sid }`. Each endpoint allows a fixed set of roles, listed in [ENDPOINTS.md](ENDPOINTS.md). Some data is also limited to the records a person is linked to.
 
 | Role | Who | Scope |
 |---|---|---|
@@ -114,6 +140,7 @@ Self-service lives under `/api/v1/me` (portal), plus `my-…` endpoints in libra
 |---|---|---|
 | Users | `/users` | Accounts, staff, teachers, parents, students. Admission in one step (account, profile, parents, enrollment) |
 | Academics | `/academics` | Years (with archiving), classes, subjects, sections, teacher assignments, enrollments and promotion, calendar, attendance, timetable, grade scales, exams and papers, marks, report cards, homework |
+| Auth | `/auth` | Sign-in, refresh, sign-out, devices, invitations, password reset and change |
 | Portal | `/me` | Student, parent and teacher self-service, and the notification inbox |
 | Administration | `/administration` | School settings and logo, CSV imports, audit log |
 | Finance | `/finance` | Fee heads, structures with installments and late fees, concessions, invoices, payments (counter and online), receipts, statements |
@@ -148,10 +175,12 @@ Self-service lives under `/api/v1/me` (portal), plus `my-…` endpoints in libra
 
 The student code (`STU26-1-000001`) and roll number are generated.
 
-For many students:
-1. `GET /administration/imports/students/template` downloads the CSV template.
-2. `POST /administration/imports/students` (multipart) returns **202** and runs the import in the background.
-3. `GET /administration/imports/:importId` shows progress and per-row errors.
+For many students (any spreadsheet layout, saved as CSV):
+1. `POST /administration/imports/students` (multipart `file`) → **201**. Nothing is imported yet; the status is `MAPPING`. The response lists the sheet's columns with sample values, the form fields with the column each was matched to, any required fields still unmatched, and a dry-run check of the first 20 rows.
+2. Optionally, `PATCH /administration/imports/:importId { "mapping": { "admissionNumber": "Pupil Code" } }` corrects the matching (`null` unmaps a field).
+3. `POST /administration/imports/:importId/start` → **202**: the import runs in the background. `GET /administration/imports/:importId` shows progress and per-row errors. `DELETE` cancels before the start.
+
+`GET /administration/imports/students/template` downloads a CSV whose headers match the fields exactly.
 
 ### Setting up a year
 

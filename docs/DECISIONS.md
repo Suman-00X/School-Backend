@@ -2,7 +2,7 @@
 
 Design decisions made while building roadmap phases 3–7 without you. Each entry says what I chose, why, and what you might want to change.
 
-**Legend:** 🔴 needs your input before production · 🟡 worth a look · 🟢 FYI, low risk
+**Legend:** 🔴 needs your input before production · 🟡 worth a look · 🟢 FYI, low risk · ✅ resolved after your review
 
 ## Start here (morning summary)
 
@@ -43,34 +43,46 @@ Design decisions made while building roadmap phases 3–7 without you. Each entr
 
 ## Scope
 
-### 🔴 D-01: Phase 2 (login) was not built
-You asked for phases 3–7, so there is still **no login endpoint**. Tokens come from `npm run dev:memory` or are signed by hand.
-
-Everything else already assumes standard JWT bearer tokens carrying `{ userId, tenantId, role }`, so login only needs to *issue* such tokens:
-- the student/parent portal (D-12)
-- payment checkout
-- notifications
-
-**Recommendation:** Phase 2 next:
-1. bcrypt password hashing
-2. `POST /api/v1/auth/login` and refresh-token rotation
-3. invitation emails using the messaging layer built tonight (`common/messaging`)
-
----
+### ✅ D-01: Login is built (round 2)
+You asked for it after the overnight review. Sign-in is `POST /api/v1/auth/login` with `{ schoolCode, email, password }`.
+- **Tokens:**
+  - The access token is a JWT valid for 15 minutes.
+  - The refresh token is valid for 30 days and **rotates on every use**. Replaying an old refresh token ends that session.
+  - `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/sessions` (your devices) and `DELETE /auth/sessions/:id`.
+- **Passwords:**
+  - Hashed with scrypt, built into Node, so there is no new dependency.
+  - Policy: 8–128 characters, with at least one letter and one digit.
+  - `PATCH /auth/password` changes it and signs out your other devices.
+  - Forgot password: `POST /auth/password-reset-requests` always answers the same, so it reveals nothing. The link it emails is good for 1 hour and works once.
+- **Invitations:** `POST /auth/invitations` emails a 7-day set-password link.
+  - ADMIN, PRINCIPAL and STAFF can invite.
+  - Only ADMIN can invite privileged staff.
+  - `npm run school:create` now sends the first admin an invitation.
+- **Protection:**
+  - After 5 wrong passwords the account is locked for 15 minutes.
+  - Sign-in and reset requests are rate-limited per IP and email.
+  - Logout, password reset and deactivation end tokens immediately, through revocation markers.
+  - Sign-ins are recorded in the audit trail.
+  - Password and token hashes are stripped from every response, and the tests fail if one ever appears.
+- **🟡 For you:**
+  - Should invitations go out automatically on admission? Today the office sends them, in bulk of up to 500.
+  - Is phone-number + OTP sign-in needed for parents? It would need an SMS provider.
 
 ## Platform and infrastructure
 
 ### 🟡 D-02: Redis is optional
 BullMQ (jobs) and the cache both use Redis when `REDIS_URL` is set. Without it they fall back to in-process drivers, so `npm run dev`, tests and single-instance deployments need nothing extra.
 
-**Production with more than one API instance must set `REDIS_URL`**, and run `npm run worker`.
+**Production with more than one API instance must set `REDIS_URL`**, and run `npm run worker`. Sign-out and token revocation also rely on the shared cache.
 
-The in-process job queue loses queued jobs on restart.
+**Your answer:** you will provide the Redis URL. Set it as `REDIS_URL`; nothing else changes.
 
-### 🟢 D-03: Background jobs use one queue
+### 🟢 D-03: Background jobs use one queue (kept, as you asked)
 All jobs go to one BullMQ queue (`school-jobs`) with per-job retry settings.
 
-If one job type grows heavy (e.g. bulk SMS), it can get its own queue later without API changes.
+**Your question: should each service get its own queue?** Not yet. One queue with per-job retries is simpler to run and monitor at this size.
+
+Split when one kind of work starts delaying the others, for example bulk SMS during result day slowing fee receipts. Job names are already prefixed by module (`communication.deliver`, `finance.applyLateFees`, `library.overdueReminders`). Moving to one queue per module, each with its own concurrency, is then a change inside `common/jobs/bullmq.driver.js`, with no change to module code.
 
 ### 🟢 D-04: OpenAPI is generated, not hand-written
 `createRouter()` records every route. The generator reads the Zod schemas passed to `validate()` and the permissions passed to `authorize()`.
@@ -99,7 +111,9 @@ The Sentry path itself is untested (no DSN here). Try it once on staging.
 
 ## Phase 3: core academics
 
-### 🟡 D-07: How attendance percentage is calculated
+### 🟡 D-07: How attendance percentage is calculated (students)
+**Your question:** this is about **student** attendance. Staff attendance (HR) feeds payroll's loss-of-pay rules instead (D-57).
+
 | Status | Counts as |
 |---|---|
 | `LATE` | present |
@@ -109,10 +123,13 @@ The Sentry path itself is untested (no DSN here). Try it once on staging.
 
 Working days are the days in the range, minus weekly off days and HOLIDAY/VACATION calendar events. Days with no register taken are reported as `unmarked` and don't count as absent.
 
-Schools differ on these rules (e.g. some count LATE as half). The weights live in one constant, `ATTENDANCE_WEIGHT` (`academics/shared/constants`), and could become a per-school setting.
+The weights live in one constant (`ATTENDANCE_WEIGHT`). They can become a per-school setting next to the attendance lock (D-08) if schools differ, for example counting LATE as half. Say if you want that.
 
-### 🟡 D-08: Attendance can be edited for any past date
-Future dates, holidays and weekly off days are rejected, but there is no "lock after N days" window. Many schools want registers frozen after a day or two, which would be a per-school setting.
+### ✅ D-08: Attendance registers lock; admins can still change them (round 2)
+- **Edit window:** each school sets one (`GET`/`PATCH /academics/attendance/policy`, ADMIN). A register can be taken or changed until N days after its date; the default is 2, and 0 means the same day only.
+- **After the window:** the register is **locked**. Teachers get a 403 saying who can change it.
+- **Overrides:** the override roles (ADMIN by default; the school may add PRINCIPAL) can still change a locked register, but they must give an `overrideReason`. The reason, the person and the time are stored on the register and shown in the register view, and the change is in the audit trail.
+- **Late first entry:** taking a register for the first time after the window also counts as a change.
 
 ### 🟡 D-09: Report-card result rules
 - **PASS** only if every paper is passed, meaning marks ≥ the paper's pass marks *and* the grade band is passing.
@@ -133,23 +150,54 @@ A teacher can act on a section if they are its **class teacher** or are **assign
 - a subject teacher can take whole-day attendance;
 - marks are limited to the teacher's own subjects; class teachers can record marks for any subject in their section.
 
-If whole-day attendance should be **class-teacher-only**, it's a one-word change: `teachingScope.assertSection(..., { classTeacherOnly: true })`.
+**What teachers can do today, as you asked**, so you can choose:
 
-### 🔴 D-12: The portal needs logins
-`/api/v1/me/*` works for STUDENT, PARENT and TEACHER tokens, but those people have no way to sign in until Phase 2 (D-01).
+| Area | Teacher can | Limited to |
+|---|---|---|
+| Attendance | take and retake registers, view registers and summaries | their sections; locked registers excluded (D-08) |
+| Marks | record and update marks, single or bulk | their subjects (class teacher: all subjects of their section) |
+| Homework | create, edit and delete homework, add attachments, see submissions, grade or return work | their sections and subjects |
+| Report cards | view, and download as PDF | their sections |
+| Timetable | view their own and their sections' timetables | — |
+| Academics (read) | years, classes, subjects, sections, enrollments, exams, grade scales, periods | — |
+| Students (read) | list and view students | currently **all** students of the school |
+| HR self-service | apply for and cancel own leave, see own attendance, leave balance and payslips | themselves |
+| Read-only elsewhere | transport routes and assignments, hostel rooms and allocations, vehicles | — |
+
+**Options to consider:**
+1. Whole-day attendance for the **class teacher only**. This is a one-word change.
+2. Limit the student list and student profiles to students in their sections.
+3. Hide transport and hostel data from teachers. This includes the parent phone numbers on rosters (D-51).
+4. Let teachers publish results, or create exams, for their subjects. Today only ADMIN and PRINCIPAL can.
+5. Let class teachers approve leave notes from parents. This is a new feature.
+
+### ✅ D-12: The portal works with real sign-in (round 2)
+Students, parents and teachers now sign in (D-01) and use `/api/v1/me/*` with their JWT access token. A test signs a parent in and opens their children's portal.
 
 A parent sees only children linked to them. A student sees only themselves. Other students return 404, not 403, so their existence isn't confirmed.
 
-### 🟢 D-13: CSV import semantics
-- Each row is admitted in its **own** transaction, so good rows succeed even when others fail. The report lists failures by line number.
-- An existing parent with the same email is linked rather than duplicated, so siblings share parents.
-- Imports are **not** retried automatically, because a retry would re-admit rows that already succeeded.
+### ✅ D-13: CSV import: columns are matched to fields first (round 2)
+**Your request:** match the form fields to the sheet's columns before importing.
+1. **Upload.** The file is stored and nothing is imported yet; the status is `MAPPING`. The response gives:
+   - each column header with sample values
+   - the 15 form fields (6 required), each with the column it was matched to
+   - a dry-run check of the first 20 rows: format errors, unknown class or section
+   - matching that ignores case and punctuation, with common names such as "Adm No", "Surname", "Grade", "Div" and "Father's Email"
+2. **Correct.** `PATCH /administration/imports/:id { mapping: { admissionNumber: "Pupil Code" } }` changes the mapping, and the preview updates. A column cannot feed two fields, and unknown columns are rejected.
+3. **Start.** `POST …/:id/start` refuses (422) until every required field has a column, then queues the import (202). `DELETE …/:id` cancels it.
+
+A mapping can also be sent with the upload, for integrations.
+
+**Unchanged:**
+- Each row is admitted in its own transaction, so good rows succeed even when others fail.
+- An existing parent with the same email is linked rather than duplicated.
+- Imports are not retried automatically.
 - Limits: 5,000 rows and 5 MB.
 
-Row errors and failure reasons go through the same error mapping as HTTP responses, so they never contain SQL.
-
 ### 🟢 D-14: Timetable teacher
-If `teacherId` is omitted, the teacher assigned to that subject in the section is used. Any existing teacher can be set explicitly (e.g. a substitute). The DB still blocks that teacher being in two places at once.
+If `teacherId` is omitted, the teacher assigned to that subject in the section is used. Any existing teacher can be set explicitly (e.g. a substitute). The database still blocks a teacher from being in two places at once.
+
+**Your question:** nothing is needed from you. This was only for your information.
 
 ### 🟢 D-15: Migrations are incremental from now on
 `0000_init` was regenerated while nothing was deployed. Every change since then is a new numbered migration (`0001_core_academics`, …). Never edit an applied migration.
@@ -219,8 +267,8 @@ Reminders go out 3 days before the due date, on the due date, and every 7 days w
 
 Duplicate sends are blocked with once-only claims (D-27).
 
-### 🟢 D-24: No push notifications yet
-FCM/APNs needs device tokens registered by the mobile app (out of scope). The notification model already has per-channel delivery state, so adding `PUSH` is a new channel driver plus a device-token table.
+### 🟢 D-24: Push notifications belong to the mobile app
+**Your answer:** push is for the mobile app only. When the app exists, it registers device tokens. The notification model already tracks delivery per channel, so `PUSH` becomes one more channel driver plus a device-token table.
 
 ### 🟢 D-25: Announcement audiences are resolved at send time
 The audience is a role list, optionally narrowed by class or section for students and parents. It becomes a snapshot of recipients when sending. The delivery report counts SENT/FAILED/SKIPPED per channel from the notifications.
