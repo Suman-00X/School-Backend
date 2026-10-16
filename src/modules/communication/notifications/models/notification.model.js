@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { tenantModel } from "../../../../common/database/mongo.js";
 import { CHANNELS, DELIVERY_STATUSES, NOTIFICATION_TYPES } from "../../shared/constants/communication.constants.js";
 
 /* One message to one person, with its delivery state per channel */
@@ -31,4 +32,4 @@ const notificationSchema = new mongoose.Schema(
 notificationSchema.index({ tenantId: 1, userId: 1, createdAt: -1 });
 notificationSchema.index({ tenantId: 1, userId: 1, readAt: 1 });
 
-export const Notification = mongoose.model("Notification", notificationSchema);
+export const Notification = tenantModel("Notification", notificationSchema);

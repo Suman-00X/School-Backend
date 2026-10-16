@@ -1,8 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { cache } from "../cache/cache.js";
 import { db } from "../database/postgres.js";
 import { tenants } from "../database/platform.schema.js";
 import { todayIn } from "../utils/date.util.js";
+import { platformDb, refreshTenantRecord, tenantRecordByCode } from "./context.js";
+import { platformTenants } from "./registry.schema.js";
 
 const TTL_SECONDS = 300;
 const key = tenantId => `tenant:${tenantId}:profile`;
@@ -14,22 +16,23 @@ export const getTenant = tenantId =>
     return tenant ?? null;
   });
 
-/* For sign-in: an active school by its code (case-insensitive), or null */
+/* For sign-in (no school context yet): an active school by its code, from the platform
+   registry -> { id, code, name } or null */
 export const findTenantByCode = async code => {
-  const [tenant] = await db
-    .select()
-    .from(tenants)
-    .where(and(eq(tenants.code, String(code).trim().toUpperCase()), eq(tenants.isActive, true)))
-    .limit(1);
-  return tenant ?? null;
+  const record = await tenantRecordByCode(code);
+  return record?.status === "ACTIVE" ? { id: record.id, code: record.code, name: record.name } : null;
 };
 
 export const invalidateTenant = tenantId => cache.del(key(tenantId));
 
-/* Update the school's profile and drop the cached copy */
+/* Update the school's profile and drop the cached copy; the registry keeps its name */
 export const updateTenant = async (tenantId, changes) => {
   const [tenant] = await db.update(tenants).set(changes).where(eq(tenants.id, tenantId)).returning();
   await invalidateTenant(tenantId);
+  if (tenant && changes.name) {
+    await platformDb().update(platformTenants).set({ name: tenant.name }).where(eq(platformTenants.id, tenantId));
+    await refreshTenantRecord(tenantId);
+  }
   return tenant ?? null;
 };
 

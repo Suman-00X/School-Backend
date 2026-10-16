@@ -1,3 +1,4 @@
+import { runInTenant } from "../tenancy/context.js";
 import AuditLog from "./auditLog.model.js";
 
 const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -32,18 +33,21 @@ export const auditTrail = (req, res, next) => {
   res.on("finish", () => {
     if (!req.context || res.statusCode >= 400) return;
 
-    AuditLog.create({
-      tenantId: req.context.tenantId,
-      userId: req.context.userId,
-      role: req.context.role,
-      permission: res.locals.permission,
-      entityId: entityIdOf(res),
-      method: req.method,
-      path: req.originalUrl,
-      statusCode: res.statusCode,
-      payload: sanitize(req.body),
-      ipAddress: req.ip
-    }).catch(() => {});
+    /* In the school's own database (the request's context may be gone by now) */
+    runInTenant(req.context.tenantId, () =>
+      AuditLog.create({
+        tenantId: req.context.tenantId,
+        userId: req.context.userId,
+        role: req.context.role,
+        permission: res.locals.permission,
+        entityId: entityIdOf(res),
+        method: req.method,
+        path: req.originalUrl,
+        statusCode: res.statusCode,
+        payload: sanitize(req.body),
+        ipAddress: req.ip
+      })
+    ).catch(() => {});
   });
 
   next();

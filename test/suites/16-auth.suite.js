@@ -134,7 +134,7 @@ describe("auth: sign-in and sessions", () => {
 
     /* Later, an old token means theft: the whole session ends */
     await h.pool.query("UPDATE auth_sessions SET last_used_at = now() - interval '5 minutes' WHERE id = $1", [
-      first.refreshToken.split(".")[0]
+      first.refreshToken.split(".")[1]
     ]);
     const replay = await request("POST", `${AUTH}/refresh`, { as: null, body: { refreshToken: first.refreshToken } });
     assert.equal(replay.status, 401);
@@ -174,15 +174,15 @@ describe("auth: sign-in and sessions", () => {
     const devices = await get(`${AUTH}/sessions`, { as: laptop.accessToken });
     assert.equal(devices.data.length, 2);
     assert.equal(devices.data.filter(d => d.current).length, 1);
-    assert.equal(devices.data.find(d => d.current).id, laptop.refreshToken.split(".")[0]);
+    assert.equal(devices.data.find(d => d.current).id, laptop.refreshToken.split(".")[1]);
     assert.equal(devices.data[0].refreshHash, undefined);
 
-    const phoneId = phone.refreshToken.split(".")[0];
+    const phoneId = phone.refreshToken.split(".")[1];
     await del(`${AUTH}/sessions/${phoneId}`, { as: laptop.accessToken });
     assert.equal((await request("GET", "/api/v1/me", { as: phone.accessToken })).status, 401);
     await del(`${AUTH}/sessions/${phoneId}`, { as: laptop.accessToken }, 404);
     /* Someone else's session is not found, not forbidden */
-    await del(`${AUTH}/sessions/${laptop.refreshToken.split(".")[0]}`, { as: h.tokens.admin }, 404);
+    await del(`${AUTH}/sessions/${laptop.refreshToken.split(".")[1]}`, { as: h.tokens.admin }, 404);
 
     const out = await post(`${AUTH}/logout`, {}, { as: laptop.accessToken }, 200);
     assert.equal(out.message, "Signed out");

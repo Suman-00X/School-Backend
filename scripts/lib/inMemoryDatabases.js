@@ -1,16 +1,12 @@
-/* Dev/test only: throwaway PostgreSQL (embedded binary) + MongoDB (in-memory),
-   with migrations applied. Nothing persists after stop(). */
+/* Dev/test only: throwaway PostgreSQL (embedded binary) + MongoDB (in-memory).
+   One PostgreSQL server holds the platform database (school registry) and, once schools
+   are provisioned, one database per school; MongoDB likewise. Nothing persists after stop(). */
 import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import EmbeddedPostgres from "embedded-postgres";
 import { MongoMemoryServer } from "mongodb-memory-server";
-import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
-
-export const migrationsFolder = path.resolve(import.meta.dirname, "../../migrations");
 
 const freePort = () =>
   new Promise((resolve, reject) => {
@@ -38,19 +34,15 @@ export const startInMemoryDatabases = async () => {
   });
   await postgres.initialise();
   await postgres.start();
-  await postgres.createDatabase("school");
-
-  const databaseUrl = `postgres://postgres:postgres@localhost:${port}/school`;
-
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
-  await migrate(drizzle({ client: pool }), { migrationsFolder });
-  await pool.end();
+  await postgres.createDatabase("school_platform");
 
   const mongo = await MongoMemoryServer.create();
 
   return {
-    databaseUrl,
-    mongoUri: mongo.getUri("school"),
+    /* The platform database; schools' databases are created next to it */
+    databaseUrl: `postgres://postgres:postgres@localhost:${port}/school_platform`,
+    adminUrl: `postgres://postgres:postgres@localhost:${port}/postgres`,
+    mongoUri: mongo.getUri("school_platform"),
     stop: async () => {
       await mongo.stop();
       await postgres.stop();

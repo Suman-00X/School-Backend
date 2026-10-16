@@ -1,5 +1,6 @@
 import { createRouter } from "../../../../common/http/router.js";
 import { authorize } from "../../../../common/auth/authorize.middleware.js";
+import { tenantFromParam } from "../../../../common/tenancy/tenantContext.middleware.js";
 import { validate } from "../../../../common/validation/validate.middleware.js";
 import { paymentController as controller } from "../controllers/payment.controller.js";
 import { PAYMENT_PERMISSIONS as can } from "../permissions/payment.permissions.js";
@@ -49,4 +50,9 @@ refundRoutes.post(
 
 /* /api/v1/public/payments/razorpay/:tenantId/webhook (no token: signed with the school's webhook secret) */
 export const paymentWebhookRoutes = createRouter();
-paymentWebhookRoutes.post("/razorpay/:tenantId/webhook", validate(rules.webhook), controller.webhook);
+paymentWebhookRoutes.post(
+  "/razorpay/:tenantId/webhook",
+  validate(rules.webhook),
+  tenantFromParam("tenantId"),
+  controller.webhook
+);

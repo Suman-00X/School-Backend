@@ -267,7 +267,7 @@ describe("finance: general ledger, integrity in the database", () => {
     assert.equal(await scalar("SELECT count(*) AS value FROM journal_entries WHERE id = $1", [entryId]), 0);
   });
 
-  it("refuses lines that use another school's accounts", async () => {
+  it("cannot even reach another school's accounts: each school's books are in its own database", async () => {
     const cash = await byCode("1000");
     /* The other school's chart exists once it is first read */
     const other = (await get(`${L}/accounts?limit=100`, { as: h.tokens.otherAdmin })).data.find(a => a.code === "1010");
@@ -280,11 +280,15 @@ describe("finance: general ledger, integrity in the database", () => {
          VALUES ($1, $2, 999998, 'JE-999998', current_date, 'Cross-school', 'MANUAL', $1, 'posted', 10)`,
         [entryId, h.tenant.id]
       );
-      await client.query(
-        `INSERT INTO journal_lines (tenant_id, entry_id, account_id, debit, credit) VALUES ($1, $2, $3, 10, 0), ($1, $2, $4, 0, 10)`,
-        [h.tenant.id, entryId, cash.id, other.id]
+      /* The other school's account id does not exist in this school's database */
+      await assert.rejects(
+        client.query(
+          `INSERT INTO journal_lines (tenant_id, entry_id, account_id, debit, credit) VALUES ($1, $2, $3, 10, 0), ($1, $2, $4, 0, 10)`,
+          [h.tenant.id, entryId, cash.id, other.id]
+        ),
+        { code: "23503" }
       );
-      await assert.rejects(client.query("COMMIT"), { code: "ZA422" });
+      await client.query("ROLLBACK");
     } finally {
       client.release();
     }
@@ -304,13 +308,19 @@ describe("finance: general ledger, integrity in the database", () => {
         { account: { accountCode: "4810" }, credit: 50, memo: "Late return" }
       ]
     };
-    const first = await ledgerService.post(ctx, entry);
+    const first = await h.inSchool(() => ledgerService.post(ctx, entry));
     assert.equal(first.total, 50);
-    const again = await ledgerService.post(ctx, entry);
+    const again = await h.inSchool(() => ledgerService.post(ctx, entry));
     assert.deepEqual([again.id, again.duplicate], [first.id, true]);
     assert.equal(await scalar("SELECT count(*) AS value FROM journal_entries WHERE source_id = $1", [fine]), 1);
     await assert.rejects(
-      ledgerService.post(ctx, { ...entry, event: "other", lines: [entry.lines[0], { ...entry.lines[1], credit: 40 }] }),
+      h.inSchool(() =>
+        ledgerService.post(ctx, {
+          ...entry,
+          event: "other",
+          lines: [entry.lines[0], { ...entry.lines[1], credit: 40 }]
+        })
+      ),
       { message: "The journal entry does not balance: debits 50.00, credits 40.00" }
     );
     /* The unique key holds in the database too */

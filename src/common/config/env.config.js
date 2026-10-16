@@ -20,6 +20,17 @@ const list = key =>
 
 const nodeEnv = str("NODE_ENV", "development");
 
+/* "postgres://u:p@host/platform?x" -> "postgres://u:p@host/{database}?x" */
+const withDatabasePlaceholder = url => {
+  try {
+    const parsed = new URL(url);
+    parsed.pathname = "/__SCHOOL_DATABASE__";
+    return parsed.toString().replace("__SCHOOL_DATABASE__", "{database}");
+  } catch {
+    return url;
+  }
+};
+
 /* The mock gateway accepts any keys and invents payments: never in production */
 if (nodeEnv === "production" && str("PAYMENT_PROVIDER") === "mock") {
   throw new Error("PAYMENT_PROVIDER=mock is not allowed in production. Remove it (Razorpay is the default).");
@@ -39,9 +50,26 @@ export default {
   slowRequestMs: num("SLOW_REQUEST_MS", 1000),
   slowQueryMs: num("SLOW_QUERY_MS", 500),
 
+  /* The PLATFORM database: the registry of schools (see tenancy/context.js) */
   databaseUrl: str("DATABASE_URL"),
   pgPoolMax: num("PG_POOL_MAX", 10),
+  /* The MongoDB server (cluster) the schools' databases live on */
   mongoUri: str("MONGO_URI"),
+
+  /* Database per school (D-45). By default each school's databases are on the same servers
+     as DATABASE_URL / MONGO_URI, named school_<code>: one string per server is enough.
+     The templates can point elsewhere (e.g. Neon's pooled host); a school can also be given
+     its own connection strings when it is created. */
+  tenancy: {
+    databaseUrlTemplate: str("TENANT_DATABASE_URL_TEMPLATE", withDatabasePlaceholder(str("DATABASE_URL"))),
+    mongoUrlTemplate: str("TENANT_MONGO_URI_TEMPLATE", withDatabasePlaceholder(str("MONGO_URI"))),
+    /* Allowed to CREATE DATABASE (Neon: the project owner's direct, non-pooled string) */
+    postgresAdminUrl: str("POSTGRES_ADMIN_URL", str("DATABASE_URL")),
+    databasePrefix: str("TENANT_DATABASE_PREFIX", "school_"),
+    /* Connection pools kept open per process, and connections per school */
+    maxOpenTenants: num("TENANT_MAX_OPEN", 50),
+    poolMaxPerTenant: num("TENANT_POOL_MAX", 5)
+  },
   /* Optional. Without it, jobs and cache run in-process (fine for dev, single instance) */
   redisUrl: str("REDIS_URL"),
 

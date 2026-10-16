@@ -363,7 +363,7 @@ describe("finance: payments", () => {
 
   it("applies the school's default late-fee rule to overdue invoices, idempotently", async () => {
     for (let run = 0; run < 2; run++) {
-      await h.modules.jobs.enqueue("finance.applyLateFees");
+      await h.modules.jobs.enqueue("finance.applyLateFees", { tenantId: h.tenant.id });
       await settleJobs();
     }
     const open = (await get(`${F}/invoices?status=ISSUED`)).data;
@@ -475,7 +475,7 @@ describe("communication", () => {
 
     const s3Token = (await import("../helpers/harness.js")).tokenFor(world.s3.userId, "STUDENT");
     for (let run = 0; run < 2; run++) {
-      await h.modules.jobs.enqueue("communication.feeReminders");
+      await h.modules.jobs.enqueue("communication.feeReminders", { tenantId: h.tenant.id });
       await settleJobs();
     }
     const reminders = await inbox(s3Token, "FEE_REMINDER");

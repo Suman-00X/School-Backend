@@ -743,7 +743,7 @@ describe("results: publication and report snapshots", () => {
     await get(`${A}/report-cards/snapshots/0123456789abcdef01234567`, {}, 404);
     await get(`${A}/report-cards/snapshots/not-an-id`, {}, 400);
 
-    const { ReportSnapshot } = await import("../../src/modules/academics/report-cards/models/reportSnapshot.model.js");
+    const ReportSnapshot = h.model("ReportSnapshot");
     await assert.rejects(
       ReportSnapshot.updateOne({ _id: mine.id }, { $set: { "report.result": "FAIL" } }),
       /write-once/
@@ -778,12 +778,12 @@ describe("results: publication and report snapshots", () => {
       versions.data.map(v => v.version),
       [1]
     );
-    const { ReportSnapshot } = await import("../../src/modules/academics/report-cards/models/reportSnapshot.model.js");
+    const ReportSnapshot = h.model("ReportSnapshot");
     assert.equal(await ReportSnapshot.countDocuments({ tenantId: h.tenant.id, sourceId: t.term2.id }), 7);
   });
 
   it("recovers from snapshots left behind by a publication that never committed", async () => {
-    const { ReportSnapshot } = await import("../../src/modules/academics/report-cards/models/reportSnapshot.model.js");
+    const ReportSnapshot = h.model("ReportSnapshot");
     /* What a crash between the Mongo insert and the PostgreSQL commit leaves behind */
     await ReportSnapshot.collection.insertOne({
       tenantId: h.tenant.id,
@@ -1007,7 +1007,7 @@ describe("results: tamper-proof report snapshots", () => {
   });
 
   it("detects a report card edited directly in the database and never shows it", async () => {
-    const { ReportSnapshot } = await import("../../src/modules/academics/report-cards/models/reportSnapshot.model.js");
+    const ReportSnapshot = h.model("ReportSnapshot");
     const version = await currentTerm1();
     const target = await ReportSnapshot.findOne({
       tenantId: h.tenant.id,
@@ -1058,7 +1058,7 @@ describe("results: tamper-proof report snapshots", () => {
   });
 
   it("detects deleted and forged report cards", async () => {
-    const { ReportSnapshot } = await import("../../src/modules/academics/report-cards/models/reportSnapshot.model.js");
+    const ReportSnapshot = h.model("ReportSnapshot");
     const version = await currentTerm1();
     const docs = await ReportSnapshot.find({ tenantId: h.tenant.id, sourceId: t.term1.id, version }).lean();
     const [gone, template] = docs;

@@ -3,13 +3,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import jwt from "jsonwebtoken";
+import pg from "pg";
 import { startInMemoryDatabases } from "../../scripts/lib/inMemoryDatabases.js";
 
 /* One running API + databases shared by every suite (see test/e2e.test.js) */
 export const h = {
   /* filled by startHarness() */
   base: null,
-  db: null,
   pool: null,
   schema: null,
   tenant: null,
@@ -33,6 +33,7 @@ export const startHarness = async () => {
   Object.assign(process.env, {
     NODE_ENV: "test",
     DATABASE_URL: databases.databaseUrl,
+    POSTGRES_ADMIN_URL: databases.adminUrl,
     MONGO_URI: databases.mongoUri,
     JWT_SECRET: "test-secret",
     EMAIL_DRIVER: "memory",
@@ -49,34 +50,64 @@ export const startHarness = async () => {
   const { startInfrastructure } = await import("../../src/bootstrap.js");
   await startInfrastructure();
 
-  const postgres = await import("../../src/common/database/postgres.js");
-  h.db = postgres.db;
-  h.pool = postgres.db.$client;
+  /* The platform registry, then two schools, each with its own databases */
+  const tenancy = await import("../../src/common/tenancy/context.js");
+  const provisioning = await import("../../src/common/tenancy/provisioning.js");
+  await provisioning.migratePlatformDatabase();
+  const tst = await provisioning.provisionTenant({ code: "TST", name: "Test School" });
+  const oth = await provisioning.provisionTenant({ code: "OTH", name: "Other School" });
+  h.tenant = tst.profile;
+  h.otherTenant = oth.profile;
+  h.inSchool = fn => tenancy.runInTenant(h.tenant.id, fn);
+  /* Raw SQL against the test school's own database */
+  h.pool = new pg.Pool({ connectionString: tenancy.databaseUrlFor(tst.record), max: 4 });
+  h.otherPool = new pg.Pool({ connectionString: tenancy.databaseUrlFor(oth.record), max: 2 });
   h.schema = await import("../../src/database.schema.js");
   h.modules.jobs = await import("../../src/common/jobs/queue.js");
   h.modules.outbox = (await import("../../src/common/messaging/outbox.js")).outbox;
   h.modules.gateway = await import("../../src/common/payments/gateway.js");
-  h.modules.AuditLog = (await import("../../src/common/audit/auditLog.model.js")).default;
+  await import("../../src/common/audit/auditLog.model.js");
 
   const app = (await import("../../src/app.js")).default;
   server = app.listen(0, "127.0.0.1");
   await new Promise(resolve => server.once("listening", resolve));
   h.base = `http://127.0.0.1:${server.address().port}`;
 
-  const { tenants, users } = h.schema;
-  [h.tenant] = await h.db.insert(tenants).values({ name: "Test School", code: "TST" }).returning();
-  [h.otherTenant] = await h.db.insert(tenants).values({ name: "Other School", code: "OTH" }).returning();
-  [h.admin] = await h.db
-    .insert(users)
-    .values({ tenantId: h.tenant.id, firstName: "Ada", lastName: "Admin", email: "admin@test.school", role: "ADMIN" })
-    .returning();
+  /* Mongoose models on the test school's own MongoDB database (tests read them directly) */
+  const { modelOn } = await import("../../src/common/database/mongo.js");
+  const schoolMongo = await h.inSchool(() => tenancy.tenantMongo());
+  h.model = name => modelOn(schoolMongo, name);
+  h.modules.AuditLog = h.model("AuditLog");
+
+  const { db } = await import("../../src/common/database/postgres.js");
+  [h.admin] = await h.inSchool(() =>
+    db
+      .insert(h.schema.users)
+      .values({ tenantId: h.tenant.id, firstName: "Ada", lastName: "Admin", email: "admin@test.school", role: "ADMIN" })
+      .returning()
+  );
 
   h.tokens.admin = tokenFor(h.admin.id, "ADMIN");
-  h.tokens.otherAdmin = tokenFor(h.admin.id, "ADMIN", h.otherTenant.id);
+  /* The other school's administrator lives in the other school's own database */
+  const [otherAdmin] = await tenancy.runInTenant(h.otherTenant.id, () =>
+    db
+      .insert(h.schema.users)
+      .values({
+        tenantId: h.otherTenant.id,
+        firstName: "Otto",
+        lastName: "Admin",
+        email: "admin@other.school",
+        role: "ADMIN"
+      })
+      .returning()
+  );
+  h.tokens.otherAdmin = tokenFor(otherAdmin.id, "ADMIN", h.otherTenant.id);
 };
 
 export const stopHarness = async () => {
   server?.close();
+  await h.pool?.end();
+  await h.otherPool?.end();
   const { stopInfrastructure } = await import("../../src/bootstrap.js");
   await stopInfrastructure();
   await databases?.stop();

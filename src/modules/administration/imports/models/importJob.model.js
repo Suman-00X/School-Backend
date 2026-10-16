@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { tenantModel } from "../../../../common/database/mongo.js";
 
 export const IMPORT_TYPES = ["STUDENTS"];
 /* MAPPING: uploaded, waiting for the user to confirm which column is which field */
@@ -35,4 +36,4 @@ const importJobSchema = new mongoose.Schema(
 
 importJobSchema.index({ tenantId: 1, createdAt: -1 });
 
-export const ImportJob = mongoose.model("ImportJob", importJobSchema);
+export const ImportJob = tenantModel("ImportJob", importJobSchema);

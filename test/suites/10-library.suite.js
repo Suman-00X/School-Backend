@@ -33,7 +33,10 @@ describe("library: policy and catalogue", () => {
       reads.map(r => r.status),
       [200, 200, 200]
     );
-    const rows = await h.pool.query("SELECT count(*) FROM library_policies WHERE tenant_id = $1", [h.otherTenant.id]);
+    /* (in the other school's own database) */
+    const rows = await h.otherPool.query("SELECT count(*) FROM library_policies WHERE tenant_id = $1", [
+      h.otherTenant.id
+    ]);
     assert.equal(Number(rows.rows[0].count), 1);
 
     await patch(`${L}/policy`, { fineGraceDays: 1 }, { as: h.tokens.teacher }, 403);
@@ -525,7 +528,7 @@ describe("library: circulation", () => {
     const s3Token = tokenFor(world.s3.userId, "STUDENT");
 
     for (let run = 0; run < 2; run++) {
-      await h.modules.jobs.enqueue("library.overdueReminders");
+      await h.modules.jobs.enqueue("library.overdueReminders", { tenantId: h.tenant.id });
       await settleJobs();
     }
     const inbox = async token =>

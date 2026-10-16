@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { tenantModel } from "../database/mongo.js";
 
 /* Once-only side effects across retries, duplicate events and concurrent workers:
 
@@ -11,7 +12,7 @@ const claimSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 * 90 }
 });
 
-const JobClaim = mongoose.models.JobClaim ?? mongoose.model("JobClaim", claimSchema);
+const JobClaim = tenantModel("JobClaim", claimSchema);
 
 export const claimOnce = async key => {
   try {

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { tenantModel } from "../../../../common/database/mongo.js";
 import { FILE_CATEGORIES, OWNER_TYPES } from "../../shared/constants/file.constants.js";
 
 /* Metadata of an uploaded file; the bytes live in object storage under storageKey */
@@ -21,4 +22,4 @@ const storedFileSchema = new mongoose.Schema(
 
 storedFileSchema.index({ tenantId: 1, ownerType: 1, ownerId: 1, createdAt: -1 });
 
-export const StoredFile = mongoose.model("StoredFile", storedFileSchema);
+export const StoredFile = tenantModel("StoredFile", storedFileSchema);

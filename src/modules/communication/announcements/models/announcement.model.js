@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { tenantModel } from "../../../../common/database/mongo.js";
 import { ANNOUNCEMENT_STATUSES, AUDIENCE_ROLES, CHANNELS } from "../../shared/constants/communication.constants.js";
 
 /* A circular/announcement to an audience; publishing fans it out as notifications */
@@ -24,4 +25,4 @@ const announcementSchema = new mongoose.Schema(
 
 announcementSchema.index({ tenantId: 1, status: 1, createdAt: -1 });
 
-export const Announcement = mongoose.model("Announcement", announcementSchema);
+export const Announcement = tenantModel("Announcement", announcementSchema);

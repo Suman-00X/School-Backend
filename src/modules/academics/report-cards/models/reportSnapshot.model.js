@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { tenantModel } from "../../../../common/database/mongo.js";
 import { PUBLICATION_KINDS } from "../../shared/constants/academic.constants.js";
 
 /* A student's report card exactly as published: one document per student per
@@ -65,4 +66,4 @@ reportSnapshotSchema.pre("save", function () {
   if (!this.isNew) refuse();
 });
 
-export const ReportSnapshot = mongoose.models.ReportSnapshot ?? mongoose.model("ReportSnapshot", reportSnapshotSchema);
+export const ReportSnapshot = tenantModel("ReportSnapshot", reportSnapshotSchema);

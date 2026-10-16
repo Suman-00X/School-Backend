@@ -615,7 +615,7 @@ describe("finance: concessions on invoices (D-18)", () => {
 describe("finance: late-fee slabs and waivers (D-19)", () => {
   it("applies each structure's rule by days overdue, idempotently", async () => {
     for (let run = 0; run < 2; run++) {
-      await h.modules.jobs.enqueue("finance.applyLateFees");
+      await h.modules.jobs.enqueue("finance.applyLateFees", { tenantId: h.tenant.id });
       await settleJobs();
     }
     const today = todayIn("Asia/Kolkata");
@@ -642,7 +642,7 @@ describe("finance: late-fee slabs and waivers (D-19)", () => {
     assert.equal(waived.data.lateFeeWaiver.amount, 500);
     assert.equal(waived.data.lateFeeWaiver.reason, "Hospitalised in July");
 
-    await h.modules.jobs.enqueue("finance.applyLateFees");
+    await h.modules.jobs.enqueue("finance.applyLateFees", { tenantId: h.tenant.id });
     await settleJobs();
     assert.equal((await get(`${F}/invoices/${t.st32Q1.id}`)).data.lateFee, 0, "the daily job leaves it alone");
     const twice = await request("POST", url, { body: { reason: "again" } });

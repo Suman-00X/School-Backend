@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { tenantModel } from "../database/mongo.js";
 
 /* Append-only trail of every successful write. IDs reference PostgreSQL rows (UUIDs). */
 const auditLogSchema = new mongoose.Schema(
@@ -30,4 +31,4 @@ auditLogSchema.index({ tenantId: 1, userId: 1, createdAt: -1 });
 /* Everything done through one permission */
 auditLogSchema.index({ tenantId: 1, permission: 1, createdAt: -1 });
 
-export default mongoose.model("AuditLog", auditLogSchema);
+export default tenantModel("AuditLog", auditLogSchema);

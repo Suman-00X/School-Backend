@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import mongoose from "mongoose";
 import { createHash, timingSafeEqual } from "node:crypto";
 import env from "./common/config/env.config.js";
-import { db } from "./common/database/postgres.js";
+import { platformDb } from "./common/tenancy/context.js";
 import { httpMetrics } from "./common/observability/httpMetrics.middleware.js";
 import { renderMetrics } from "./common/observability/metrics.js";
 import { requestLogger, requestStart } from "./common/logging/requestLogger.middleware.js";
@@ -54,11 +54,11 @@ app.get("/health", (req, res) => {
   res.json({ success: true, message: "Service is healthy", data: { timestamp: new Date().toISOString() } });
 });
 
-/* Readiness: both databases answer (for load balancers / Kubernetes) */
+/* Readiness: the platform database and the MongoDB server answer (for load balancers / Kubernetes) */
 app.get("/ready", async (req, res) => {
   const checks = { postgres: false, mongo: mongoose.connection.readyState === 1 };
   try {
-    await db.execute(sql`select 1`);
+    await platformDb().execute(sql`select 1`);
     checks.postgres = true;
   } catch {
     /* reported below */

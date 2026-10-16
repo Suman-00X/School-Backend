@@ -1,6 +1,7 @@
 import { createRouter } from "./common/http/router.js";
 import { authenticate } from "./common/auth/authenticate.middleware.js";
 import { auditTrail } from "./common/audit/audit.middleware.js";
+import { tenantContext } from "./common/tenancy/tenantContext.middleware.js";
 import usersModule from "./modules/users/index.js";
 import academicsModule from "./modules/academics/index.js";
 import portalModule from "./modules/portal/index.js";
@@ -26,6 +27,8 @@ v1.use("/public/payments", paymentWebhookRoutes);
 v1.use("/auth", publicAuthRoutes);
 
 v1.use(authenticate);
+/* Database per school: everything below runs in the signed-in user's school databases */
+v1.use(tenantContext);
 v1.use(auditTrail);
 
 v1.use("/auth", authRoutes);
