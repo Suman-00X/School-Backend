@@ -9,6 +9,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.js",
     "db:studio": "drizzle-kit studio",
+    "docs:endpoints": "node scripts/generate-endpoints.js",
     "mongo:sync-indexes": "node scripts/sync-mongo-indexes.js",
     "school:create": "node scripts/create-school.js",
     "backup": "sh scripts/backup.sh",
