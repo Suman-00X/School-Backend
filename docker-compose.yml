@@ -11,8 +11,9 @@ x-app: &app
   env_file: .env
   environment:
     NODE_ENV: production
-    DATABASE_URL: postgres://school:school@postgres:5432/school
-    MONGO_URI: mongodb://mongo:27017/school
+    # The platform registry; each school gets school_<code> on the same servers
+    DATABASE_URL: postgres://school:school@postgres:5432/school_platform
+    MONGO_URI: mongodb://mongo:27017/school_platform
     REDIS_URL: redis://redis:6379
     STORAGE_LOCAL_DIR: /app/storage
   volumes:
@@ -25,11 +26,11 @@ services:
     environment:
       POSTGRES_USER: school
       POSTGRES_PASSWORD: school
-      POSTGRES_DB: school
+      POSTGRES_DB: school_platform
     volumes:
       - postgres:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U school -d school"]
+      test: ["CMD-SHELL", "pg_isready -U school -d school_platform"]
       interval: 5s
       retries: 20
     restart: unless-stopped
@@ -55,7 +56,7 @@ services:
       retries: 20
     restart: unless-stopped
 
-  # One-off: schema migrations and MongoDB indexes, then exits
+  # One-off: migrations and MongoDB indexes for the platform and every school, then exits
   migrate:
     <<: *app
     command: ["sh", "-c", "node scripts/migrate.js && node scripts/sync-mongo-indexes.js"]

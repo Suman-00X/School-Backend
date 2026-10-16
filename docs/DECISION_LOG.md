@@ -318,12 +318,19 @@ A trigger can raise SQLSTATE `ZA` + HTTP status (for example `ZA409`). The error
   - **Run one real restore drill on staging before launch** (steps in OPERATIONS.md).
 - Confirm the targets match what you promise schools.
 
-### 🔴 D-45: Row-level security is designed, not built
-Tenant isolation today is one layer: every repository query filters `tenant_id`, and there is a cross-tenant test.
-
-PostgreSQL row-level security would be a second layer, but it changes the request lifecycle: one transaction and one connection per request. The design and cost (3–5 days) are in OPERATIONS.md.
-
-**Recommendation:** build it right after Phase 2, before the first real school's data goes in.
+### ✅ D-45: A database per school (round 5: "separate database per tenant… in one string")
+Decided: no token-based row filtering as the isolation mechanism; **every school has its own PostgreSQL database and its own MongoDB database**. Built:
+- **One string per server:** `DATABASE_URL` (Neon, pooled) and `MONGO_URI` (official Atlas `mongodb+srv://` string) name the **platform registry**, `platform_tenants`. School `GVS` lives in `school_gvs` on the same servers. A school may also get its own strings (stored encrypted).
+- **Requests:** the token's school picks the databases. `db`, `transaction()` and every MongoDB model resolve to the current school through AsyncLocalStorage, so no module code changed. Suspended schools get 403.
+- **Jobs:** every job runs in its school. Daily schedules fan out to every active school.
+- **Tokens:** refresh tokens and password links carry the school id.
+- **Operations:**
+  - `school:create` creates and migrates the database.
+  - `db:migrate` covers the platform and every school.
+  - Backups and restore work per school; one school can be restored alone.
+  - The MongoDB role is applied per school (`--all`).
+- **Tests:** two schools on separate databases. A suite checks the registry, that no rows cross between databases, the suspended-school lockout, and the per-school schedules.
+- **Earlier design:** row-level security on shared tables (the earlier proposal) is no longer needed. The `tenant_id` columns and filters stay as a second net. See OPERATIONS.md › A database per school.
 
 ### 🔴 D-47: A lost book costs its price plus the late fine
 - The charge is the copy's price plus the late fine up to the day it is reported lost. A copy with no price adds 0.
@@ -385,6 +392,9 @@ The spec gave TEACHER read access, and rosters list the primary parent's phone. 
 
 ### 🟢 D-60: The stock ledger is append-only, enforced in the database
 Movements are never edited or deleted; a correction is an ADJUSTMENT movement (ADMIN only). At merge I added a trigger that rejects UPDATE and DELETE on `stock_movements`.
+
+### ✅ D-62: The general ledger starts from zero (round 5: "start from 0")
+Every school's books start empty on the day it starts using the system. There is no backfill of earlier invoices and no opening-balance entry. Fees, payments, refunds and concessions recorded from then on are posted automatically.
 
 ## Fixed during the night (for your information)
 

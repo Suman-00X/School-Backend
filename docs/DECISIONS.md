@@ -8,15 +8,15 @@ Only **open** items are here: things that need your decision, or that you may wa
 
 | | Item |
 |---|---|
-| 🔴 | D-45: build row-level security now, or later? |
-| 🟡 | D-11: what teachers can do (you said you will come back to it) |
-| 🟡 | The fee and result choices to confirm (D-17 to D-21, D-09/D-10) |
-| 🔴 | D-62: ledger opening balances for a school that starts mid-year |
-| 🟡 | D-63 refunds and ledger, D-64 hostel: choices to confirm; library decisions added when it is merged |
+| 🟡 | D-63: refunds, now in plain words (six short questions) |
+| 🔴 | D-65: library choices (two need you: borrowing blocks, holiday calendar) |
+| 🟡 | D-64 hostel; the fee and result choices to confirm (D-17 to D-21, D-09/D-10) |
+| Building | D-11 teacher scope, the three attendance modes, module owners and operators (round 5) |
 | Later | D-44: restore drill, once there is drill data |
 
 **Before go-live** (checklist; details in OPERATIONS.md):
-- **Configuration:** `DATA_ENCRYPTION_KEY`, `REDIS_URL` (you will provide it), `TRUST_PROXY_HOPS`, `METRICS_TOKEN`, `WEB_APP_URL` + SMTP, and the MongoDB app role (`npm run mongo:app-role`).
+- **Configuration:** `DATA_ENCRYPTION_KEY`, `REDIS_URL` (you will provide it), `TRUST_PROXY_HOPS`, `METRICS_TOKEN`, `WEB_APP_URL` + SMTP, and the MongoDB app role (`npm run mongo:app-role -- --all --dry-run`, then create it in Atlas).
+- **Databases:** `DATABASE_URL` = the Neon **pooled** string to `school_platform`; `POSTGRES_ADMIN_URL` = the Neon **direct** string, used only when creating schools; `MONGO_URI` = the Atlas string to `school_platform`. Check your Neon plan's database limit per branch.
 - **Razorpay:** each school's keys and webhooks. The test-mode run is yours (D-20).
 - **Hosting:** host and registry (D-42). Try Sentry on staging if you use it.
 
@@ -24,44 +24,47 @@ Only **open** items are here: things that need your decision, or that you may wa
 
 ## Needs your decision
 
-### 🔴 D-62: Ledger opening balances when a school starts with existing fees
-The general ledger starts empty, and invoices or payments made before it existed have no entries. For a school that moves to this system mid-year, choose one:
-- **(a)** A one-off backfill script that posts every open invoice and credit balance on the cut-over day.
-- **(b)** An opening journal entry against *3000 Opening balance equity*.
+### 🔴 D-65: Library: choices made while building it (D-47 to D-50)
+Built as a full library system: circulation rules, holds, stock-taking, lost and found, reports. Two choices need you:
+- 🔴 **Borrowing blocks are on by default.**
+  - A borrower cannot take a book while their unpaid fines are above **100**, or while they have any overdue book.
+  - Each school can change both in the library policy, or switch them off.
+  - Is that the right default?
+- 🔴 **Holidays between academic years.**
+  - Fines skip the days the library is closed. Inside an academic year, that means the school calendar (weekly offs, holidays, vacations).
+  - **Between two years** (for example a summer gap with no year defined), only the weekly off days are skipped, so a book due before summer collects fines over the break.
+  - Is that acceptable, or should the gap count as closed?
 
-Today manual entries cannot touch receivables or student credit, by design, so (a) would be a script. For brand-new schools nothing is needed.
-
-### 🔴 D-45: Tenant isolation: what exists, and row-level security
-**Your question: is RLS, or any multi-tenant isolation, implemented?** Isolation is implemented **in the application, everywhere**. Database-level row-level security (RLS) is **not**.
-
-**What exists today:**
-- **Sign-in and tokens:** sign-in is scoped by school code. Every access token carries its school (`tenantId`), and the token is signed.
-- **PostgreSQL:** every repository query adds `tenant_id = <token's school>` (`createRepository`, `scoped()`), for reads, writes and soft deletes.
-  - Raw SQL (dashboards, exports, analytics) filters `tenant_id` explicitly.
-  - Every unique index includes `tenant_id`, or a tenant-scoped parent.
-- **MongoDB:** every query (audit, notifications, files, snapshots, imports) filters `tenantId`. File storage keys start with the school id.
-- **Webhooks:** each school has its own URL, verified with that school's own secret.
-- **Testing:**
-  - A cross-tenant test reads another school's records through the API and gets 404.
-  - Three security reviews found no cross-tenant leak.
-
-**What RLS would add:** a second, independent layer. Even a bug that forgot the filter could not read another school's rows. The design and cost (3–5 days) are in OPERATIONS.md › row-level security.
-
-**Recommendation:** build it before the first real school's data goes in. **Your call:** whether to do it now.
+The rest stays as built unless you say otherwise:
+- 🟡 **Loan terms are fixed at issue.** The loan period, fine per day and renewal limit are copied onto the loan when the book is issued. A later rule change does not alter books already out.
+- 🟡 **Which rule applies:** a rule for the borrower's **class** beats one for their **role**, which beats "anyone". Then a rule for a specific item type (reference, magazine) beats "any item".
+- 🟡 **Late fines only go up.**
+  - A fine shown on a date is never lowered later, even if a holiday is added afterwards. Lowering it is a waiver.
+  - A fine never exceeds the book's price (`capFineAtPrice`).
+- 🟡 **Lost books:**
+  - The charge is the larger of (price + processing fee) and the minimum charge, plus the late fine so far.
+  - Money already paid on a lost book stays paid.
+  - If the book turns up within **30 days**, the replacement charge is reversed. Anything already paid becomes library credit.
+- 🟡 **Holds:**
+  - A reader may hold up to **5** titles.
+  - A returned copy goes to the first reader in the queue, who has **3 days** to collect it; then it passes to the next.
+  - Readers are told when their copy is ready.
+- 🟢 **Notifications** go out as general messages with a library tag. Separate notification types (due soon, overdue, hold ready) are an easy follow-up if the app wants its own icons.
+- 🟢 **A student who leaves** has their holds cancelled automatically; their loans stay open until returned or written off.
 
 ---
 
 ## Worth a look
 
-### 🟡 D-63: Refunds and the ledger: points to confirm
-- **Approvals:**
-  - An accountant's refund needs an **administrator's** approval, at any amount.
-  - An **admin's own** refund needs nobody: it is recorded as approved by them.
-  - Alternatives: an amount below which an accountant refunds alone, or a second admin for admin refunds.
-- **Credit paid back** from the student-credit screen (`POST /finance/students/:id/credit-refunds`) does not need approval yet. Should it follow the same request-and-approve flow?
-- **Refund numbers** are taken at request time, so rejected requests leave gaps. Accountants cannot withdraw their own request; an admin rejects it.
-- **Gateway settlements:** Razorpay payouts into the bank, and their fees, are entered as manual journal entries (Dr Bank, Dr charges / Cr Gateway clearing). The alternative is importing them automatically from Razorpay's settlement API.
-- **Concessions are posted gross:** fee income per fee head, plus a *Concessions* contra-income account. This maps one-to-one to Tally or Zoho Books. The alternative is posting net, but then concessions disappear from the books.
+### 🟡 D-63: Refunds, in plain words
+Refunds work as you asked: the accountant requests, the admin approves, a refund receipt is printed, and the books (double-entry ledger) are updated. Six small questions remain. Reply with the numbers you want changed; the rest stays as it is.
+
+1. **Small refunds.** Today every refund an accountant asks for waits for an admin, even ₹50. *Option:* an amount (say ₹500) below which the accountant can refund alone. **As built: always the admin.**
+2. **Who checks the admin?** When an admin makes a refund themselves, nobody else approves it. *Option:* a second admin must approve. **As built: the admin alone.**
+3. **Paying back extra money.** When a parent pays too much, the extra is kept as credit for the student. Handing that credit back as cash happens at once, without approval. *Option:* the same request-and-approve step as refunds. **My recommendation: yes, add it.**
+4. **Gaps in refund numbers.** A refund gets its number (for example RF-0005) when it is requested. If the admin rejects it, that number is never used. *Option:* give the number only on approval, so there are no gaps. **As built: numbered at request.**
+5. **Razorpay money reaching the bank.** Razorpay sends online fee payments to the school's bank a few days later, minus its fee. Today the accountant records that deposit in the books by hand. *Option:* fetch it from Razorpay automatically. **My recommendation: by hand now, automatic later.**
+6. **Concessions in the books.** A ₹10,000 fee with a ₹1,000 concession is recorded as ₹10,000 income and ₹1,000 concession, not as ₹9,000 income. This is what accountants and Tally expect. **My recommendation: keep it.**
 
 ### 🟡 D-64: Hostel, flexible assignments: points to confirm
 - **Pre-booking:** a student with an active enrollment in any year can be booked, so next year's room can be booked in March. Leavers' bookings are cancelled automatically.
@@ -186,9 +189,12 @@ The alternative was "archive = move rows to cold storage". It isn't needed at sc
 The engines field is now Node ≥ 22, because Node 20 reached end of life in April 2026.
 
 ### 🟡 D-43: Schools are onboarded by an operator CLI
-`npm run school:create -- --name … --code … --admin-email …` creates the school and its first admin, and prints a one-hour token.
+`npm run school:create -- --name … --code … --admin-email …`:
+- creates the school's databases and migrates them;
+- registers the school;
+- invites its first admin with a 7-day set-password link.
 
-Self-service sign-up and invitations belong to Phase 2 (D-01).
+Self-service sign-up (a school registering itself) is not built.
 
 ### 🟡 D-46: API messages stay English; clients localise by error code
 Every error has a stable `error.code` and field-level details. Localising server messages is only worth it for notification templates (SMS and email to parents). The plan is in OPERATIONS.md › languages.

@@ -1,6 +1,6 @@
 # Data Model
 
-The backend uses two databases, each for the kind of data it handles best.
+The backend uses two kinds of database, each for the kind of data it handles best. **Every school has its own PostgreSQL database and its own MongoDB database** (`school_<code>`). A small platform database lists the schools (see [OPERATIONS.md › A database per school](OPERATIONS.md#a-database-per-school)).
 
 | | PostgreSQL | MongoDB |
 |---|---|---|
@@ -19,7 +19,7 @@ The backend uses two databases, each for the kind of data it handles best.
 
 - Each submodule owns its tables in `src/modules/<module>/<submodule>/models/*.schema.js`. MongoDB models are in `models/*.model.js`.
 - Enums used in several submodules of a module live in `src/modules/<module>/shared/constants`.
-- Platform tables used by the framework (`tenants`, `serial_counters`) are in `src/common/database/platform.schema.js`.
+- Framework tables in every school's database (`tenants`, `serial_counters`) are in `src/common/database/platform.schema.js`. The registry of schools is in `src/common/tenancy/registry.schema.js`.
 - `src/database.schema.js` registers every table with the ORM.
 - Generated SQL lives in [`migrations/`](../migrations/). It also holds hand-written triggers, such as the archived-year guard.
 
@@ -29,7 +29,7 @@ The backend uses two databases, each for the kind of data it handles best.
   - `id uuid DEFAULT gen_random_uuid()`
   - `tenant_id → tenants.id`
   - `is_active`, `created_at`, `updated_at`
-- **Tenancy:** the base repository scopes every query to the tenant from the JWT, so one school never sees another's rows. Raw SQL (the reports read model) filters `tenant_id` explicitly. Row-level security as a second layer is designed in [OPERATIONS.md](OPERATIONS.md#design-note-postgresql-row-level-security).
+- **Tenancy:** each school's rows are in that school's own database; a request can only reach the database of the school in its token. The `tenant_id` column and the repository's `tenant_id` filter stay as a second safety net (raw SQL filters it too).
 - **Soft delete:** `is_active = false`, and reads only return active rows. Where a soft-deleted row could block re-creating it, the unique index is **partial** (`WHERE is_active = true`).
 - **Types:**
   - **Dates without time** (dob, due dates, attendance dates) use `date`, returned as `"YYYY-MM-DD"`. "Today" is the school's time zone (`tenants.timezone`).
@@ -44,7 +44,17 @@ The backend uses two databases, each for the kind of data it handles best.
 
 ## PostgreSQL tables
 
-### Platform: `common/database/platform.schema.js`
+### Platform registry: `common/tenancy/registry.schema.js`
+
+In the platform database (`DATABASE_URL`) only, with its own migrations in `migrations-platform/`.
+
+| Table | Purpose | Key constraints |
+|---|---|---|
+| `platform_tenants` | One row per school: code, name, ACTIVE/SUSPENDED, its PostgreSQL and MongoDB database names, and optional encrypted connection strings for a school on its own servers | `code` and `database_name` unique; `id` equals the school's `tenants.id` |
+
+### School basics: `common/database/platform.schema.js`
+
+In every school's database.
 
 | Table | Purpose | Key constraints |
 |---|---|---|

@@ -1,6 +1,6 @@
 # School-Backend
 
-Multi-tenant school management API: Express 5, **PostgreSQL** (Drizzle ORM) for relational data, **MongoDB** (Mongoose) for document data.
+Multi-tenant school management API: Express 5, **PostgreSQL** (Drizzle ORM) for relational data, **MongoDB** (Mongoose) for document data. Each school has its own PostgreSQL and MongoDB databases, reached from one connection string per server (Neon and MongoDB Atlas work as-is).
 
 Covers academics (attendance, timetable, exams, report cards, homework), fees with online payments, communication, reports, a student and parent portal, library, transport, hostel, HR and payroll, and inventory. There are 300+ endpoints, all role-checked and tenant-isolated, verified by an end-to-end suite against real databases.
 
@@ -24,8 +24,10 @@ It seeds a demo school (code `DEMO`) and an admin who can sign in: `POST /api/v1
 **Against real databases:**
 
 ```bash
-cp .env.example .env     # set DATABASE_URL, MONGO_URI, JWT_SECRET, WEB_APP_URL
-npm run db:migrate       # create/upgrade PostgreSQL tables
+cp .env.example .env     # set DATABASE_URL, MONGO_URI (the platform database), JWT_SECRET, WEB_APP_URL
+npm run db:migrate       # create/upgrade the platform database and every school's
+npm run school:create -- --name "Demo School" --code DEMO \
+  --admin-email admin@demo.school --admin-first Demo --admin-last Admin   # creates school_demo
 npm run dev              # or: npm start
 ```
 
@@ -46,12 +48,12 @@ docker compose run --rm api node scripts/create-school.js --name "Demo School" -
 |---|---|
 | `npm test` | End-to-end suite on embedded PostgreSQL 18 + in-memory MongoDB (about 10 s) |
 | `npm run lint`, `npm run format` | ESLint, Prettier |
-| `npm run db:generate -- --name <change>` | Writes a SQL migration from model changes |
-| `npm run db:migrate` | Applies pending migrations |
-| `npm run db:studio` | Browse PostgreSQL in Drizzle Studio |
-| `npm run mongo:sync-indexes` | Builds MongoDB indexes (production) |
+| `npm run db:generate -- --name <change>` | Writes a SQL migration from school-table changes (`db:generate:platform` for the registry) |
+| `npm run db:migrate` | Applies pending migrations to the platform database and every school |
+| `npm run db:studio` | Browse PostgreSQL in Drizzle Studio (set `DATABASE_URL` to a school's database) |
+| `npm run mongo:sync-indexes` | Builds MongoDB indexes in every school's database (production) |
 | `npm run worker` | Background job worker (with `REDIS_URL`) |
-| `npm run school:create -- …` | Onboards a school and its first admin |
+| `npm run school:create -- …` | Creates a school's databases, migrates them, and invites its first admin |
 | `npm run backup`, `npm run restore -- <dir>` | Portable backups (see OPERATIONS.md) |
 | `npm run docs:endpoints` | Regenerates docs/ENDPOINTS.md |
 

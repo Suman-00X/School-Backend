@@ -106,7 +106,7 @@ Status as of 2026-10-16: **156 end-to-end tests** pass on embedded PostgreSQL 18
 - 🟡 Backups:
   - ✅ `npm run backup` / `npm run restore`, with checksums and retention, plus the runbook
   - ⬜ a real restore drill (D-44)
-- 🟡 PostgreSQL row-level security: designed, not built (D-45)
+- ✅ A database per school, PostgreSQL and MongoDB, from one connection string per server (D-45)
 - ✅ Caching of hot reads: the current year and the school profile
 - ✅ Prometheus metrics, alert rules, and an error-reporting hook (Sentry optional)
 - ✅ Read-only archiving of past academic years, enforced by database triggers

@@ -5,6 +5,7 @@ How to run, deploy, observe, back up and restore the backend. Decisions behind t
 ## Contents
 
 - [Environments](#environments)
+- [A database per school](#a-database-per-school)
 - [Processes](#processes)
 - [Deployment pipeline](#deployment-pipeline)
 - [Migrations](#migrations)
@@ -14,7 +15,6 @@ How to run, deploy, observe, back up and restore the backend. Decisions behind t
 - [Backups and restore](#backups-and-restore)
 - [Academic-year archiving](#academic-year-archiving)
 - [Security checklist](#security-checklist)
-- [Design notes: row-level security](#design-note-postgresql-row-level-security)
 - [Design notes: languages](#design-note-languages-i18n)
 
 ---
@@ -31,6 +31,37 @@ How to run, deploy, observe, back up and restore the backend. Decisions behind t
 
 Configuration is environment variables only; see `.env.example`. Production must set at least: `NODE_ENV=production`, `DATABASE_URL`, `MONGO_URI`, `REDIS_URL`, `JWT_SECRET` (32+ random bytes), `DATA_ENCRYPTION_KEY` (32 bytes; keep it with the backups, encrypted fields are unreadable without it), `APP_URL`, `ALLOWED_ORIGINS`, `TRUST_PROXY_HOPS` (behind a load balancer), `STORAGE_DRIVER=s3` + bucket settings, email/SMS drivers, payment keys, `METRICS_TOKEN`.
 
+## A database per school
+
+Every school's data is in **its own PostgreSQL database and its own MongoDB database**. No table or collection holds two schools' rows, so a missed filter cannot show one school another's data. A school can be backed up, restored, moved or deleted on its own.
+
+**One connection string per server.** `DATABASE_URL` and `MONGO_URI` point at the **platform registry**: a small database whose only table, `platform_tenants`, lists the schools. Each school's database is the same string with the database name swapped for `school_<code>`. For example, `GVS` becomes `school_gvs`.
+
+| | PostgreSQL on Neon | MongoDB Atlas |
+|---|---|---|
+| `DATABASE_URL` / `MONGO_URI` | The **pooled** string (host has `-pooler`), database `school_platform`: `postgres://app:…@ep-x-pooler.ap-southeast-1.aws.neon.tech/school_platform?sslmode=require` | The official `mongodb+srv://` string with the database before the `?`: `mongodb+srv://app:…@cluster0.abcde.mongodb.net/school_platform?retryWrites=true&w=majority` |
+| Creating a school's database | `POSTGRES_ADMIN_URL`: the **direct** (non-pooled) string of a role that may create databases. Roles made in the Neon console can. | Nothing to do. MongoDB creates the database on first write |
+| Database user rights | The role owns the databases it creates | The Atlas user needs read/write on `school_*` databases (or on any database) |
+| Connections | One pool per school, opened on first use. At most `TENANT_MAX_OPEN` (50) pools per process, `TENANT_POOL_MAX` (5) connections each; the least recently used pool closes first. Neon's pooler absorbs this | One connection pool per process, shared by every school's database |
+| Limits to check | Your plan's databases-per-branch limit | None in practice |
+
+**How a request finds its school:**
+1. The signed-in user's token carries their school's id.
+2. After authentication, `tenantContext` looks the school up in the registry (cached for 60 s).
+3. The request then runs inside that school. Repositories, transactions and MongoDB models all use the school's own databases without any code change (`db`, `tenantModel`).
+4. A suspended school gets `403 This school's account is suspended`. Its users cannot sign in.
+
+Sign-in uses the school code. Refresh tokens and password links carry the school id, so they work without a school code.
+
+**Jobs:** every job runs in the school it was queued for. Daily schedules (late fees, reminders, library sweeps) fan out: one run per active school, each in that school's databases.
+
+**A school on its own servers:** pass `--database-url` and `--mongo-url` to `school:create`. The strings are stored encrypted with `DATA_ENCRYPTION_KEY`, and that school ignores the templates. This is useful for a large school, or one that requires data residency.
+
+**Moving a school:**
+1. Dump its two databases (see [Backups](#backups-and-restore)).
+2. Restore them on the new servers.
+3. Point its registry row at the new strings.
+
 ## Processes
 
 One image, three commands:
@@ -39,9 +70,9 @@ One image, three commands:
 |---|---|---|
 | API | `node src/server.js` (default) | Horizontally; stateless when `REDIS_URL` is set |
 | Worker | `node src/worker.js` | 1+; BullMQ shares the work. Runs schedules (late fees, fee reminders) |
-| One-off | `node scripts/migrate.js`, `node scripts/sync-mongo-indexes.js` (all models), `node scripts/mongo-app-role.js …`, `node scripts/create-school.js …` | Run before rolling out a release |
+| One-off | `node scripts/migrate.js` and `node scripts/sync-mongo-indexes.js` (platform and every school), `node scripts/mongo-app-role.js …`, `node scripts/create-school.js …` | Run before rolling out a release |
 
-Health: `GET /health` (liveness, no dependencies) and `GET /ready` (PostgreSQL and MongoDB answer; use for load-balancer readiness). The API drains connections for up to 15 s on `SIGTERM`.
+Health: `GET /health` (liveness, no dependencies) and `GET /ready` (the platform PostgreSQL database and MongoDB answer; use for load-balancer readiness). The API drains connections for up to 15 s on `SIGTERM`.
 
 ## Deployment pipeline
 
@@ -59,7 +90,13 @@ Health: `GET /health` (liveness, no dependencies) and `GET /ready` (PostgreSQL a
 
 ## Migrations
 
-- `npm run db:generate` creates SQL from model changes; commit the file. `npm run db:migrate` applies pending ones (safe to re-run).
+- Two migration sets:
+  - `migrations/` holds the school schema, applied to every school's database.
+  - `migrations-platform/` holds the registry, applied to the platform database.
+- `npm run db:generate` (school tables) or `npm run db:generate:platform` (registry) creates SQL from model changes; commit the file.
+- `npm run db:migrate` applies pending migrations: first the platform database, then each school in turn. It is safe to re-run. If a school fails, it carries on with the others, prints which school failed, and exits with code 1. Fix the cause and run it again.
+- New schools get every migration when they are created.
+- On Neon, migrations run fine through the pooled string. The school migrations need the `btree_gist` extension (hostel bed bookings), which Neon supports.
 - Releases must be **backwards compatible for one version** (expand → migrate → contract), because old and new API instances run side by side during a rolling deploy. Examples:
   - Add a column as nullable or with a default.
   - Backfill in a job.
@@ -69,11 +106,12 @@ Health: `GET /health` (liveness, no dependencies) and `GET /ready` (PostgreSQL a
 
 ## Onboarding a school
 
-Schools are created by an operator (self-service sign-up is not built):
+Schools are created by an operator (self-service sign-up is not built). The script creates the school's PostgreSQL database, runs all migrations on it, registers the school, and creates its first admin:
 
 ```sh
 npm run school:create -- --name "Green Valley School" --code GVS \
   --admin-email principal@gvs.edu --admin-first Asha --admin-last Rao --timezone Asia/Kolkata
+# its own servers: add --database-url "postgres://…" --mongo-url "mongodb+srv://…"
 # docker compose run --rm api node scripts/create-school.js …   (same flags)
 ```
 
@@ -86,7 +124,7 @@ It emails the admin, and prints, a 7-day set-password link: `WEB_APP_URL/set-pas
   - `school_http_requests_total{method,route,status}` and `school_http_request_duration_seconds` (route = template such as `/api/v1/academics/sections/:sectionId`, never raw ids)
   - `school_jobs_total{job,outcome=completed|retried|failed}` and `school_job_duration_seconds`
   - `school_unexpected_errors_total{source=http|job}`
-  - `school_pg_pool_connections{state}`, memory, uptime, `school_event_loop_delay_p99_seconds`
+  - `school_pg_pool_connections{state}` (all pools in the process), `school_tenant_databases_open`, memory, uptime, `school_event_loop_delay_p99_seconds`
 - **Alerts:** starting rules in `ops/prometheus/alerts.yml`. They cover API down, 5xx rate above 2%, p95 latency, failed jobs, PostgreSQL pool saturation and a blocked event loop.
 - **Error tracking:** every unexpected error goes through one function, `reportError`. That covers HTTP 500s and jobs that fail their last attempt. Each is logged and counted. To also send them to Sentry, set `SENTRY_DSN` and `npm install @sentry/node`. Personal data is not sent (`sendDefaultPii: false`, no request bodies).
 
@@ -134,7 +172,7 @@ Every process (API and worker) writes **one JSON object per line to stdout**: no
 1. **Managed PostgreSQL point-in-time recovery** (primary). Turn it on with 14–35 days of retention.
 2. **Managed MongoDB snapshots** (audit log, notifications, announcements, file metadata).
 3. **Portable nightly dump** with `npm run backup`. It keeps the data restorable even if you change provider.
-   - Contents: `pg_dump` in custom format, `mongodump` as a gzip archive, the local-storage files when `STORAGE_DRIVER=local`, and SHA-256 checksums.
+   - Contents: for the platform and **each school**, `<name>.postgres.dump` (`pg_dump`, custom format) and `<name>.mongo.archive.gz` (`mongodump`). Also the local-storage files when `STORAGE_DRIVER=local`, and SHA-256 checksums.
    - Location: `$BACKUP_DIR/<UTC timestamp>/`, copied off-site when `BACKUP_S3_URI` is set.
    - Retention: `BACKUP_KEEP_DAYS` (default 14).
    - Tools: needs `pg_dump` at the server's major version or newer (18), plus `mongodump`.
@@ -143,7 +181,8 @@ Every process (API and worker) writes **one JSON object per line to stdout**: no
 **Restore** (stop the API and workers first):
 
 ```sh
-npm run restore -- ./backups/20261016T020000Z   # verifies checksums, asks you to type "restore"
+npm run restore -- ./backups/20261016T020000Z       # everything; verifies checksums, asks you to type "restore"
+npm run restore -- ./backups/20261016T020000Z GVS   # one school only, the others are untouched
 npm run db:migrate                              # bring an older backup up to the current schema
 ```
 
@@ -176,8 +215,9 @@ npm run db:migrate                              # bring an older backup up to th
 - [ ] `ALLOWED_ORIGINS` lists only the real frontends; `TRUST_PROXY_HOPS` matches the load balancer.
 - [ ] TLS is terminated at the load balancer, with HSTS (helmet sends it).
 - [ ] Databases sit on private networks, with TLS in `DATABASE_URL`/`MONGO_URI` (`sslmode=require`, `tls=true`).
-- [ ] The app's database user owns nothing it does not need. Migrations run as a separate owner role; see the row-level security note.
-- [ ] The application's MongoDB user has the `school_app` role from `npm run mongo:app-role -- --db <db> --user <user> --password …`, run with `MONGO_ADMIN_URI`. Published report cards are then insert-only even for the application. Run it again after releases that add collections.
+- [ ] The app's database user owns nothing it does not need, and cannot create databases.
+- [ ] The application's MongoDB user has the `school_app` role, so published report cards are insert-only even for the application. Self-hosted: `npm run mongo:app-role -- --all --user <user> --password …` with `MONGO_ADMIN_URI`. Atlas does not allow creating roles from the driver: run `npm run mongo:app-role -- --all --dry-run` and create the printed custom role in the Atlas UI. Run it again after releases that add collections, and after adding a school.
+- [ ] `POSTGRES_ADMIN_URL` (the role that creates databases) is used only by operators, not set on the API and worker.
 - [ ] Razorpay webhooks are configured for each school: `payment.captured`, `refund.processed`, `refund.failed`, all pointing at `POST /api/v1/public/payments/razorpay/<schoolId>/webhook`.
 - [ ] The S3 bucket is private. Downloads always go through short-lived signed URLs.
 - [ ] Mock gateway is off (`PAYMENT_PROVIDER` unset or `razorpay` in production). Each school enters its own Razorpay keys and points its webhook at the URL shown in `GET /finance/payment-settings`. `DATA_ENCRYPTION_KEY` is backed up: without it the stored keys cannot be read.
@@ -186,35 +226,18 @@ npm run db:migrate                              # bring an older backup up to th
 
 ---
 
-## Design note: PostgreSQL row-level security
+## Design note: why not row-level security
 
-**Today:**
-- Every query is tenant-scoped in one place: `createRepository` adds `tenant_id = $tenant` to every read and write.
-- Raw SQL (dashboards, analytics) filters `tenant_id` explicitly.
-- A test checks cross-tenant isolation through the API.
+A database per school was chosen over shared tables with row-level security (D-45):
+- **Isolation by construction.** The application code has no way to name another school's rows. A missing `tenant_id` filter cannot leak data.
+- **Simpler operations per school:** back up, restore, move or delete one school with standard tools.
+- **No per-request transaction pinning.** Row-level security would hold one connection for the whole request.
 
-**Proposed second layer:** PostgreSQL row-level security, so that a missed filter cannot leak another school's data.
+**Cost:**
+- Migrations run once per school. That takes minutes with hundreds of schools; `migrate.js` reports each school.
+- The open connection pools are capped and evicted per process (`TENANT_MAX_OPEN`).
 
-1. Two roles:
-   - `school_owner` runs the migrations.
-   - `school_app` (NOBYPASSRLS) runs the API and worker.
-2. On every table with `tenant_id`, apply:
-   ```sql
-   ALTER TABLE t ENABLE ROW LEVEL SECURITY; ALTER TABLE t FORCE ROW LEVEL SECURITY;
-   CREATE POLICY tenant_isolation ON t
-     USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
-     WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
-   ```
-3. Every request runs its database work in a transaction that starts with `SELECT set_config('app.tenant_id', $1, true)`.
-   - The transaction is carried by `AsyncLocalStorage`, so repositories stay unchanged.
-   - `transaction()` joins it.
-4. Cross-tenant jobs loop per tenant. Examples: the late-fee sweep and fee reminders.
-
-**Cost and risk:**
-- Each request holds one pooled connection for its whole duration, so `PG_POOL_MAX` must be sized for concurrency. PgBouncer in transaction mode works with `set_config(…, true)`.
-- About 3–5 days of work, including running the whole test suite as `school_app`.
-
-**Recommendation:** do it right after Phase 2 (login), before the first paying school. It is listed for your decision in DECISIONS.md.
+The `tenant_id` column and repository filter remain as a second safety net.
 
 ## Design note: languages (i18n)
 
