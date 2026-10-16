@@ -4,6 +4,41 @@ Design decisions made while building roadmap phases 3–7 without you. Each entr
 
 **Legend:** 🔴 needs your input before production · 🟡 worth a look · 🟢 FYI, low risk
 
+## Start here (morning summary)
+
+**What was built overnight:**
+- Phases 3–6 complete, and Phase 7 production work.
+- 13 modules and 300+ endpoints ([ENDPOINTS.md](ENDPOINTS.md)).
+
+**State of the code:**
+- 156 end-to-end tests pass on real PostgreSQL 18 and MongoDB.
+- Lint is clean.
+- A fresh clone passes everything.
+- Every change is a local git commit; nothing was pushed.
+
+**Decisions that need you (🔴):**
+
+| # | Decision | Area |
+|---|---|---|
+| D-01 / D-12 | Phase 2 login is not built; the portal and payments are waiting for it | Scope |
+| D-20 | Verify Razorpay with real test keys before go-live | Fees |
+| D-37 | PDFs cannot print non-Latin names yet; choose the fonts for your regions | Reports |
+| D-44 | Confirm backup targets and run one real restore drill | Ops |
+| D-45 | Row-level security: designed, build it before the first real school | Security |
+| D-47, D-48, D-49 | Library: lost-book charge, when fines are paid, due dates in the past | Library |
+| D-51, D-52 | Transport: teachers see parent phones; seats survive year-end and leaving | Transport |
+| D-54 | Hostel: one bed per student across years | Hostel |
+
+**Untested here because the tools are missing:**
+- the Docker image and compose stack (no Docker on this machine; CI builds the image)
+- a real `pg_dump`/`mongodump` round trip
+- the Sentry path (no DSN)
+
+**Also set before production:**
+- `DATA_ENCRYPTION_KEY` (D-56)
+- `METRICS_TOKEN`
+- a host and image registry (D-42)
+
 ---
 
 ## Scope
@@ -339,3 +374,156 @@ PostgreSQL row-level security would be a second layer, but it changes the reques
 
 ### 🟡 D-46: API messages stay English; clients localise by error code
 Every error has a stable `error.code` and field-level details. Localising server messages is only worth it for notification templates (SMS and email to parents). The plan is in OPERATIONS.md › languages.
+
+---
+
+## Phase 6: operations modules
+
+Built by parallel sub-agents against one brief: the same framework, rules and test harness. I reviewed and merged each one, then tightened two things noted below.
+
+### Library
+
+#### 🔴 D-47: A lost book costs its price plus the late fine
+- The charge is the copy's price plus the late fine up to the day it is reported lost. A copy with no price adds 0.
+- **Alternatives:** a minimum replacement charge in the library policy, or no late fine on lost books.
+
+#### 🔴 D-48: Fines are settled after the return
+Fines can be paid or waived only once the book is back (422 while it is out). Open loans show `fineAccrued` so far. The alternative is part-payment while the book is still out.
+
+#### 🔴 D-49: Librarians can set a due date in the past
+- This lets staff record loans after the fact, up to 365 days ahead. It also lets them create overdue loans at will.
+- **Alternative:** an explicit `issuedOn`, plus the rule due ≥ issue.
+
+#### 🟡 D-50: Library loan rules
+- **Renewals:**
+  - An overdue loan cannot be renewed.
+  - A renewal must actually extend the due date: the new due date is today + the loan days.
+- **Waivers:** a waiver clears the whole remaining fine. There are no partial waivers.
+- **Copies per borrower:** one copy of the same book at a time.
+- **Unpaid fines:** they do **not** block borrowing. A "block above X" policy setting is easy to add.
+- **Reminders:** overdue reminders go to the borrower only, in-app. Parents are not told.
+- **Who reads what:**
+  - Librarians are ADMIN and STAFF; there is no LIBRARIAN role yet.
+  - The principal can see all loans.
+  - The catalogue, including copy price and condition notes, is readable by every role, students and parents included.
+
+### Transport
+
+#### 🔴 D-51: Teachers see parents' phone numbers on route rosters
+The spec gave TEACHER read access, and rosters list the primary parent's phone. Alternatives: a roster permission for ADMIN and STAFF only, or hide the phone column from teachers.
+
+#### 🔴 D-52: Year-end and leavers do not touch transport seats
+- Assignments are per year. Last year's rows don't use this year's seats, but nothing ends them or copies them forward.
+- A student who leaves mid-year keeps their seat until staff end it.
+- **Proposal:**
+  - a subscriber that ends transport and hostel rows when an enrollment closes
+  - a "copy to next year" action
+
+#### 🟡 D-53: Transport capacity rules
+- A route with no vehicle takes no assignments, because capacity is unknown.
+- Pick-up-only and drop-only riders take a full seat.
+- Ending an assignment frees the seat at once, even with a future end date.
+- Registration numbers are compared without spaces or hyphens.
+- Stop fees are stored but **do not create invoices**. Linking them to finance's Transport fee head is a natural next step.
+
+### Hostel
+
+#### 🔴 D-54: One bed per student at a time, across years
+- A student must be vacated or transferred before getting another bed, even in the next year. Beds are physical.
+- At merge I made this a **unique index**, which closes a race between two years.
+- **Alternative:** beds per year, with overlaps allowed during the changeover.
+
+#### 🟡 D-55: Hostel rules
+- **Transfers:** a transfer closes the old allocation and creates a new one linked to it (201), which keeps a full residence history.
+- **Dates:** no future dates, so beds cannot be pre-booked for next year.
+- **Gender:**
+  - BOYS takes only MALE, and GIRLS only FEMALE.
+  - OTHER is refused by both.
+  - A student with no recorded gender is allowed.
+- **Rooms:**
+  - MAINTENANCE keeps residents but takes no new ones.
+  - CLOSED requires an empty room.
+  - Occupancy ignores the academic year.
+- **Wardens** can be ADMIN, PRINCIPAL, STAFF or TEACHER.
+
+### HR and payroll
+
+#### 🟢 D-56: Bank account and PAN are encrypted at rest (fixed at merge)
+- The module stored them in plain text but always returned them masked. At merge I added framework field encryption (`common/crypto`, AES-256-GCM, versioned format), and these fields now use it.
+- **🟡 Your action:**
+  - set `DATA_ENCRYPTION_KEY` in production (startup fails without it)
+  - keep the key with your backups; the data is unreadable without it
+
+#### 🟡 D-57: How loss of pay (LOP) is calculated
+- **The charge:** gross pay (basic plus every earning line, including HRA as a percent of basic) ÷ days in the month × LOP days.
+  - The alternative is basic plus fixed components only, a one-line change in `payrollMath.util.js`.
+- **Absent and half days:** they cost the unworked part, minus any approved paid leave.
+- **Leave:** approved unpaid leave costs pay. A LEAVE mark entered by hand with no request costs nothing.
+- **Unmarked working days cost nothing.**
+  - The alternative is to treat them as absent.
+
+#### 🟡 D-58: Payroll and leave rules
+- **Finalized month:**
+  - Once a month's payroll is finalized, that month is closed: attendance and leave changes touching it are refused.
+  - Finalization does not recompute; recalculate first.
+  - Later corrections would be arrears (not built).
+- **Salary revisions:**
+  - They start on the 1st of a month.
+  - No pro-rating for joiners or changes mid-month.
+  - A revision cannot be edited; you add a new one.
+- **Leave quotas:**
+  - Quotas are per calendar year, so a request must stay inside one.
+  - There is no unlimited leave type (use a large quota).
+  - Days outside any academic year count as calendar days.
+- **Net pay** cannot go below 0. A deduction larger than pay is not carried forward.
+- **Who decides:**
+  - Nobody approves their own leave.
+  - Rejecting needs a note.
+  - Applicants can cancel while the request is pending; ADMIN can cancel after approval.
+
+### Inventory
+
+#### 🟡 D-59: Inventory rules
+- **Discontinued items:** "inactive" from the spec became `discontinued`, because `isActive` means soft-deleted here. Discontinued items stay visible and issuable, take no receipts, and are left out of low-stock.
+- **Valuation:** average cost is kept to 2 decimals, so valuation can be a few paise off. The alternative is a running stock value.
+- **Movements:**
+  - An ISSUE needs a recipient (a user or free text).
+  - A RETURN is not linked to an issue and not capped at what was issued.
+  - A RECEIPT may have no vendor (donations, opening stock).
+- **Low stock:** an item is low when stock ≤ its reorder level. The `inventory.item.lowStock` event fires only when an item crosses that level. **No subscriber sends a message for it yet.**
+- **GSTIN:** checked for format only, when the school's country is IN.
+- **Unit:** whole units (PCS, BOX…) take whole quantities, and an item's unit cannot change once it has stock movements.
+
+#### 🟢 D-60: The stock ledger is append-only, enforced in the database
+Movements are never edited or deleted; a correction is an ADJUSTMENT movement (ADMIN only). At merge I added a trigger that rejects UPDATE and DELETE on `stock_movements`.
+
+### Cross-cutting
+
+#### 🟢 D-61: Action endpoints are named in two styles
+- **Older modules** use nouns: `/result-publication`, `/cancellation`, `/finalization`, `/archival`.
+- **Some new ones** use verbs: `/loans/:id/return`, `/allocations/:id/vacate`, `/assignments/:id/end`.
+- Both are common REST practice, and all are `POST` returning 200 or 201. I left them as built rather than churn the API.
+- If you want one style, it's a mechanical rename. It is breaking, so do it before any client exists.
+
+---
+
+## Fixed during the night (for your information)
+
+A review agent audited tonight's code. Every finding was fixed and covered by a test:
+- **Files:**
+  - `/files` could list and serve homework, submission and logo files to any staff role. It now serves only student, staff and general files.
+  - A teacher could reach another section's submission file through their own homework URL.
+- **Submissions:**
+  - A rejected upload wiped an earlier submission's text.
+  - A resubmission racing with grading could erase the grade. Both paths now lock the row.
+  - Students who had left could still submit.
+- **Error reporting and metrics:**
+  - Sentry would have received database query values (personal data). They are scrubbed now.
+  - `/metrics` returned a 500 for some tokens.
+- **Archiving:**
+  - Archiving is refused while students are still active in the year.
+  - Homework attachments of an archived year are frozen.
+- **Smaller fixes:** the logo link's content type, deleting replaced logos, and backup pruning that could touch other folders.
+- **Repository hygiene:**
+  - `.gitignore` had `storage/` and `.env.*`. These silently left `src/common/storage/` and `.env.example` **out of git**, so a fresh clone could not start.
+  - Both are fixed, and a fresh clone now passes all tests.
