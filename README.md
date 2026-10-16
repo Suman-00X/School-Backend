@@ -78,7 +78,7 @@ src/
     sequences/           per-tenant number sequences (for generated codes)
     jobs/  events/       background jobs (BullMQ or in-process), domain events, once-only claims
     cache/  storage/     cache (Redis or memory), file storage (S3 or local) with signed links
-    messaging/  payments/  email/SMS drivers, payment gateway (Razorpay or mock)
+    messaging/  payments/  email/SMS drivers, payment gateway (Razorpay or mock; each school's own keys per call)
     money/  export/  import/  money in paise; CSV/XLSX/PDF exporters, branding; CSV import
     openapi/             OpenAPI 3.1 generated from the route table
     observability/       Prometheus metrics, error reporting
@@ -95,7 +95,8 @@ src/
                          report-cards assessment-schemes homework
     portal/              /me: profile, learning, fees, homework (students, parents, teachers)
     administration/      settings, imports, audit-logs
-    finance/             fee-heads fee-structures concessions invoices payments
+    finance/             fee-heads installment-plans late-fee-rules fee-structures concessions invoices
+                         payments credits payment-settings
     communication/       notifications announcements subscribers (event → message)
     reports/             dashboards exports
     files/               documents

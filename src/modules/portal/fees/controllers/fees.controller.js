@@ -17,16 +17,20 @@ export const feesController = {
       "Invoice retrieved successfully"
     ),
 
-  startPayment: async (req, res) =>
-    created(
-      res,
-      await feesService.startPayment(req.context, req.params.studentId, req.params.invoiceId),
-      "Payment order created"
-    ),
+  startPayment: async (req, res) => {
+    const order = await feesService.startPayment(req.context, req.params.studentId, req.params.invoiceId, req.body);
+    return created(res, order, `Payment order created for ${order.amount.toFixed(2)} of ${order.invoiceNumber}`);
+  },
 
   confirmPayment: async (req, res) => {
     const payment = await feesService.confirmPayment(req.context, req.body);
-    return ok(res, payment, `Payment confirmed. Receipt ${payment.receiptNumber}`);
+    const credit = Number(payment.excessAmount);
+    return ok(
+      res,
+      payment,
+      `Payment confirmed. Receipt ${payment.receiptNumber}` +
+        (credit > 0 ? `. ${credit.toFixed(2)} more than the balance is kept as credit` : "")
+    );
   },
 
   receipt: async (req, res) => {

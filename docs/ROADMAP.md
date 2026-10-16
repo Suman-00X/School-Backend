@@ -69,6 +69,7 @@ Status as of 2026-10-16: **156 end-to-end tests** pass on embedded PostgreSQL 18
 - ✅ Notifications: in-app inbox, email (SMTP), SMS (HTTP provider); announcements to audiences
 - ⬜ Push notifications (D-24)
 - ✅ Background jobs (BullMQ with Redis, or in-process), domain events, exactly-once side effects
+- ✅ Installment plans per student, annual concessions on every bill, late-fee slabs and waivers, schools' own Razorpay keys, partial online payments with credit for overpayments (D-17 to D-21)
 - ⬜ Verify Razorpay with real test keys before go-live (D-20)
 
 ## Phase 5: Reports and analytics ✅

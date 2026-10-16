@@ -145,7 +145,7 @@ npm run db:migrate                              # bring an older backup up to th
 - [ ] Databases sit on private networks, with TLS in `DATABASE_URL`/`MONGO_URI` (`sslmode=require`, `tls=true`).
 - [ ] The app's database user owns nothing it does not need. Migrations run as a separate owner role; see the row-level security note.
 - [ ] The S3 bucket is private. Downloads always go through short-lived signed URLs.
-- [ ] Payment webhook secret is set; mock provider is off (`PAYMENT_PROVIDER=razorpay`).
+- [ ] Mock gateway is off (`PAYMENT_PROVIDER` unset or `razorpay` in production). Each school enters its own Razorpay keys and points its webhook at the URL shown in `GET /finance/payment-settings`. `DATA_ENCRYPTION_KEY` is backed up: without it the stored keys cannot be read.
 - [ ] `METRICS_TOKEN` is set, and `/metrics` is reachable only from the monitoring network.
 - [ ] Backups are encrypted at rest (bucket encryption), and a restore drill is done.
 

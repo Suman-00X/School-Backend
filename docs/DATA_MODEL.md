@@ -95,14 +95,24 @@ The backend uses two databases, each for the kind of data it handles best.
 | Submodule | Table | Purpose | Key constraints |
 |---|---|---|---|
 | fee-heads | `fee_heads` | Fee categories (Tuition, Transport…) | Partial unique code and name |
-| fee-structures | `fee_structures` | What a class pays in a year, plus the late-fee rule | Partial unique (year, class, name). CHECK late fee ≥ 0 |
-| fee-structures | `fee_structure_items` | Amount per fee head | Unique (structure, head). CHECK amount > 0 |
-| fee-structures | `fee_installments` | How the year's fee is split (share %, due date) | Unique (structure, name). CHECK 0 < share ≤ 100 |
-| concessions | `concessions` | Reusable discounts (percent or fixed, optionally for one head) | Partial unique name. CHECK value > 0 and percent ≤ 100 |
+| installment-plans | `installment_plans` | A year's ways of paying: Annual, Quarterly, Monthly… | Partial unique (year, name) |
+| installment-plans | `plan_installments` | A plan's due dates and shares (the last absorbs rounding) | Unique (plan, sequence) and (plan, name). CHECK 0 < share ≤ 100. Shares add up to 100 (API) |
+| installment-plans | `student_installment_plans` | The plan a student pays by in a year (null = each structure's default). Also the row locked to serialise billing, plan changes and concession changes | Unique (tenant, student, year) |
+| late-fee-rules | `late_fee_rules` | Predefined late fees: grace days, optional maximum, school default | Partial unique name. **At most one default** (partial unique). CHECK grace 0–365, max > 0 |
+| late-fee-rules | `late_fee_slabs` | Delay ranges with a FIXED or PER_DAY charge | Unique (rule, from day). CHECK from ≥ 1, to ≥ from, amount > 0. Contiguous from day 1 (API) |
+| fee-structures | `fee_structures` | What a class pays in a year (annual amounts), whether it charges late fees, and its rule (none = school default) | Partial unique (year, class, name). CHECK no rule when it charges no late fee |
+| fee-structures | `fee_structure_items` | Annual amount per fee head | Unique (structure, head). CHECK amount > 0 |
+| fee-structures | `fee_structure_plans` | The plans a structure offers | Unique (structure, plan). **One default per structure** (partial unique) |
+| concessions | `concessions` | Discount templates: percent, or fixed per year; category | Partial unique name. CHECK value > 0 and percent ≤ 100 |
+| concessions | `concession_fee_heads` | The fee heads a concession is limited to (none = all) | Unique (concession, head) |
 | concessions | `student_concessions` | A concession granted to a student for a year | Partial unique (student, concession, year) |
-| invoices | `invoices` | One bill per student per installment: total, paid, **generated `balance`**, status, late fee | Unique number. Partial unique (student, installment) unless cancelled. CHECK amounts consistent |
-| invoices | `invoice_lines` | Bill lines per fee head, after concessions | |
-| payments | `payments` | Cash or online payments; one receipt each; gateway ids | Unique receipt number. **Unique gateway order and gateway payment id**, which makes webhooks idempotent. CHECK amount > 0 |
+| invoices | `invoices` | One bill per student, structure and plan installment: gross, concessions, late fee (and waiver), total, paid, **generated `balance`**, status | Unique number. Partial unique (student, structure, installment) unless cancelled. **CHECK total = gross − concessions + late fee, and paid ≤ total** |
+| invoices | `invoice_lines` | Bill lines per fee head: gross, concession, net | CHECK net = gross − concession, concession ≤ gross |
+| invoices | `invoice_line_concessions` | Which concession took how much off a line (name copied for receipts) | CHECK amount > 0 |
+| payments | `payments` | Cash or online payments; one receipt each; gateway ids; the part kept as credit; balance after | Unique receipt number. **Unique (tenant, gateway order) and (tenant, gateway payment id)**, which makes webhooks idempotent. CHECK amount > 0, 0 ≤ excess ≤ amount |
+| credits | `student_credit_balances` | A student's unused credit (overpayments), across years | Unique (tenant, student). **CHECK balance ≥ 0**; spent with a conditional update |
+| credits | `student_credit_entries` | Credit history: OVERPAYMENT, APPLIED (to an invoice), REFUNDED | CHECK amount > 0; overpayments name their payment, applications their invoice |
+| payment-settings | `payment_gateway_accounts` | The school's own Razorpay key id, **key secret and webhook secret encrypted at rest** | Partial unique tenant. Secrets never returned |
 
 ### Operations modules
 
@@ -193,12 +203,20 @@ erDiagram
   students ||--o{ homework_submissions : ""
 
   fee_structures ||--o{ fee_structure_items : ""
-  fee_structures ||--o{ fee_installments : ""
-  fee_installments ||--o{ invoices : ""
+  fee_structures ||--o{ fee_structure_plans : ""
+  installment_plans ||--o{ fee_structure_plans : ""
+  installment_plans ||--o{ plan_installments : ""
+  plan_installments ||--o{ invoices : ""
+  students ||--o{ student_installment_plans : ""
+  late_fee_rules ||--o{ late_fee_slabs : ""
+  late_fee_rules ||--o{ fee_structures : ""
   students ||--o{ invoices : ""
   invoices ||--o{ invoice_lines : ""
   invoices ||--o{ payments : ""
   concessions ||--o{ student_concessions : ""
+  invoice_lines ||--o{ invoice_line_concessions : ""
+  students ||--o| student_credit_balances : ""
+  payments ||--o{ student_credit_entries : ""
 ```
 
 `tenant_id` on every table is omitted from the diagram for readability.

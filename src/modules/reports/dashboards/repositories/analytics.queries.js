@@ -56,7 +56,12 @@ export const analyticsQueries = {
         coalesce(sum(balance) FILTER (WHERE status IN ('ISSUED', 'PARTIALLY_PAID')), 0) AS outstanding,
         coalesce(sum(balance) FILTER (WHERE status IN ('ISSUED', 'PARTIALLY_PAID') AND due_date < ${today}::date), 0) AS overdue,
         count(*) FILTER (WHERE status IN ('ISSUED', 'PARTIALLY_PAID') AND due_date < ${today}::date) AS "overdueInvoices",
-        coalesce(sum(total) FILTER (WHERE status <> 'CANCELLED'), 0) AS billed
+        coalesce(sum(total) FILTER (WHERE status <> 'CANCELLED'), 0) AS billed,
+        coalesce(sum(discount) FILTER (WHERE status <> 'CANCELLED'), 0) AS concessions,
+        coalesce(sum(late_fee) FILTER (WHERE status <> 'CANCELLED'), 0) AS "lateFees",
+        coalesce(sum(late_fee_waived_amount) FILTER (WHERE status <> 'CANCELLED'), 0) AS "lateFeesWaived",
+        (SELECT coalesce(sum(balance), 0) FROM student_credit_balances
+          WHERE tenant_id = ${tenantId} AND is_active) AS "creditHeld"
       FROM invoices WHERE tenant_id = ${tenantId} AND academic_year_id = ${academicYearId} AND is_active`);
     return Object.fromEntries(Object.entries(row).map(([k, v]) => [k, num(v)]));
   },
@@ -154,7 +159,7 @@ export const analyticsQueries = {
     (
       await rows(sql`
         SELECT c.id AS "classId", c.class_name AS "className",
-               sum(i.total) AS billed, sum(i.amount_paid) AS collected, sum(i.balance) AS outstanding
+               sum(i.total) AS billed, sum(i.discount) AS concessions, sum(i.amount_paid) AS collected, sum(i.balance) AS outstanding
         FROM invoices i
         JOIN student_enrollments e ON e.student_id = i.student_id AND e.academic_year_id = i.academic_year_id AND e.is_active
         JOIN sections s ON s.id = e.section_id
@@ -165,9 +170,23 @@ export const analyticsQueries = {
       classId: r.classId,
       className: r.className,
       billed: num(r.billed),
+      concessions: num(r.concessions),
       collected: num(r.collected),
       outstanding: num(r.outstanding)
     })),
+
+  /* Concessions given on a year's live invoices, by why they were given */
+  concessionsByCategory: async (tenantId, academicYearId) =>
+    (
+      await rows(sql`
+        SELECT c.category, sum(ilc.amount) AS amount, count(DISTINCT i.student_id) AS students
+        FROM invoice_line_concessions ilc
+        JOIN invoices i ON i.id = ilc.invoice_id
+        JOIN concessions c ON c.id = ilc.concession_id
+        WHERE ilc.tenant_id = ${tenantId} AND ilc.is_active AND i.is_active
+          AND i.academic_year_id = ${academicYearId} AND i.status <> 'CANCELLED'
+        GROUP BY c.category ORDER BY amount DESC`)
+    ).map(r => ({ category: r.category, amount: num(r.amount), students: num(r.students) })),
 
   /* Students with overdue balances, largest first */
   defaulters: async (tenantId, academicYearId, today, { limit }) =>

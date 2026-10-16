@@ -18,7 +18,7 @@ router.get(
 router.post(
   "/students/:studentId/invoices/:invoiceId/payment-orders",
   authorize(can.pay),
-  validate(rules.invoice),
+  validate(rules.startPayment),
   controller.startPayment
 );
 router.post("/payments/confirmations", authorize(can.pay), validate(rules.confirm), controller.confirmPayment);

@@ -79,11 +79,9 @@ export default {
     senderId: str("SMS_SENDER_ID", "SCHOOL")
   },
 
+  /* Each school brings its own gateway keys (stored encrypted); mock = no real gateway */
   payments: {
-    provider: str("PAYMENT_PROVIDER", "mock"), // razorpay | mock
-    razorpayKeyId: str("RAZORPAY_KEY_ID"),
-    razorpayKeySecret: str("RAZORPAY_KEY_SECRET"),
-    razorpayWebhookSecret: str("RAZORPAY_WEBHOOK_SECRET")
+    provider: str("PAYMENT_PROVIDER", nodeEnv === "production" ? "razorpay" : "mock") // razorpay | mock
   },
 
   sentryDsn: str("SENTRY_DSN"),

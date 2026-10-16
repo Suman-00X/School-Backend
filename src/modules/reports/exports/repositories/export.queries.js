@@ -36,7 +36,7 @@ export const exportQueries = {
   feeCollections: (tenantId, from, to, timezone) =>
     rows(sql`
       SELECT p.receipt_number AS "receiptNumber", (p.paid_at AT TIME ZONE ${timezone})::date::text AS "paidOn",
-             p.amount::float AS amount, p.method, p.reference, i.invoice_number AS "invoiceNumber",
+             p.amount::float AS amount, p.excess_amount::float AS "keptAsCredit", p.method, p.reference, i.invoice_number AS "invoiceNumber",
              st.admission_number AS "admissionNumber", u.first_name || ' ' || u.last_name AS "studentName"
       FROM payments p
       JOIN invoices i ON i.id = p.invoice_id

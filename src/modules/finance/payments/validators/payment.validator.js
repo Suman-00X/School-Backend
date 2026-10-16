@@ -5,13 +5,14 @@ import {
   PAYMENT_METHODS,
   PAYMENT_STATUSES
 } from "../../shared/constants/finance.constants.js";
+import { amount } from "../../shared/validators/finance.validators.js";
 
 export const paymentValidators = {
   recordOffline: {
     params: idParams("invoiceId"),
     body: z
       .object({
-        amount: z.number().positive().max(100_000_000).multipleOf(0.01),
+        amount: amount(),
         method: z.enum(OFFLINE_PAYMENT_METHODS),
         reference: optionalText(100),
         paidAt: date().optional(),
@@ -22,7 +23,8 @@ export const paymentValidators = {
         message: "is required for non-cash payments"
       })
   },
-  createOrder: { params: idParams("invoiceId") },
+  /* Online: any amount up to the balance (default: the whole balance) */
+  createOrder: { params: idParams("invoiceId"), body: z.object({ amount: amount().optional() }) },
   confirm: { body: z.object({ orderId: text(100), paymentId: text(100), signature: text(256) }) },
   list: {
     query: listQuery({
@@ -33,5 +35,6 @@ export const paymentValidators = {
       to: date().optional()
     })
   },
-  getById: { params: idParams("paymentId") }
+  getById: { params: idParams("paymentId") },
+  webhook: { params: idParams("tenantId") }
 };

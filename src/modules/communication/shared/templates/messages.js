@@ -23,9 +23,14 @@ export const messages = {
     sms: `Fee invoice ${invoiceNumber} of ${money(total, currency)} for ${studentName} is due on ${dueDate}.`
   }),
 
-  paymentReceived: ({ studentName, amount, receiptNumber, currency }) => ({
+  /* credit: the part that was more than the invoice's balance, kept for later fees */
+  paymentReceived: ({ studentName, amount, receiptNumber, credit = 0, currency }) => ({
     title: `Payment received (${receiptNumber})`,
-    body: `We received ${money(amount, currency)} towards ${studentName}'s fees. Receipt ${receiptNumber}.`,
+    body:
+      `We received ${money(amount, currency)} towards ${studentName}'s fees. Receipt ${receiptNumber}.` +
+      (credit > 0
+        ? ` ${money(credit, currency)} of it was more than the balance and is kept as credit for later fees.`
+        : ""),
     sms: `Received ${money(amount, currency)} for ${studentName}. Receipt ${receiptNumber}. Thank you.`
   }),
 

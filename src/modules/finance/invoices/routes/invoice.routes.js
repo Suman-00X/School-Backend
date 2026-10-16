@@ -9,11 +9,23 @@ import { invoiceValidators as rules } from "../validators/invoice.validator.js";
 /* /api/v1/finance/invoices */
 export const invoiceRoutes = createRouter();
 
-/* Issuing creates invoices in bulk for an installment */
+/* Issuing creates invoices in bulk, scheduled by each student's installment plan */
 invoiceRoutes.post("/generation", authorize(can.issue), validate(rules.generate), controller.generate);
 invoiceRoutes.get("/", authorize(can.read), validate(rules.list), inYear, controller.list);
 invoiceRoutes.get("/:invoiceId", authorize(can.read), validate(rules.getById), controller.getById);
 invoiceRoutes.post("/:invoiceId/cancellation", authorize(can.cancel), validate(rules.cancel), controller.cancel);
+invoiceRoutes.post(
+  "/:invoiceId/late-fee-waiver",
+  authorize(can.waiveLateFee),
+  validate(rules.waiveLateFee),
+  controller.waiveLateFee
+);
+invoiceRoutes.delete(
+  "/:invoiceId/late-fee-waiver",
+  authorize(can.waiveLateFee),
+  validate(rules.reinstateLateFee),
+  controller.reinstateLateFee
+);
 
 /* /api/v1/finance/students/:studentId/statement */
 export const statementRoutes = createRouter();

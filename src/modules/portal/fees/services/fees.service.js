@@ -22,9 +22,9 @@ export const feesService = {
     return invoiceService.getById(ctx, invoiceId);
   },
 
-  startPayment: async (ctx, studentId, invoiceId) => {
+  startPayment: async (ctx, studentId, invoiceId, { amount } = {}) => {
     await ownInvoice(ctx, studentId, invoiceId);
-    return paymentService.createOnlineOrder(ctx, invoiceId);
+    return paymentService.createOnlineOrder(ctx, invoiceId, { amount });
   },
 
   confirmPayment: async (ctx, body) => {

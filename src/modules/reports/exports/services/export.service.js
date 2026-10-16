@@ -88,7 +88,8 @@ export const exportService = {
         { key: "studentName", header: "Student", width: 24 },
         { key: "method", header: "Method" },
         { key: "reference", header: "Reference", width: 18 },
-        { key: "amount", header: "Amount" }
+        { key: "amount", header: "Amount" },
+        { key: "keptAsCredit", header: "Kept as credit", width: 14 }
       ]
     };
   },

@@ -27,6 +27,6 @@ paymentRoutes.get("/", authorize(can.read), validate(rules.list), controller.lis
 paymentRoutes.get("/:paymentId", authorize(can.read), validate(rules.getById), controller.getById);
 paymentRoutes.get("/:paymentId/receipt", authorize(can.read), validate(rules.getById), controller.receipt);
 
-/* /api/v1/public/payments/webhook (no token: the gateway signs the body) */
+/* /api/v1/public/payments/razorpay/:tenantId/webhook (no token: signed with the school's webhook secret) */
 export const paymentWebhookRoutes = createRouter();
-paymentWebhookRoutes.post("/webhook", controller.webhook);
+paymentWebhookRoutes.post("/razorpay/:tenantId/webhook", validate(rules.webhook), controller.webhook);

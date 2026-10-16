@@ -11,7 +11,9 @@ export const paymentMethod = pgEnum("payment_method", PAYMENT_METHODS);
 export const paymentStatus = pgEnum("payment_status", PAYMENT_STATUSES);
 
 /* Money received against an invoice. Online payments start PENDING with a
-   gateway order and become SUCCEEDED when the gateway confirms them. */
+   gateway order and become SUCCEEDED when the gateway confirms them.
+   amount is what was received; excess_amount of it was more than the invoice's
+   balance at that moment and went to the student's credit (D-21). */
 export const payments = pgTable(
   "payments",
   {
@@ -23,6 +25,9 @@ export const payments = pgTable(
       .notNull()
       .references(() => students.id),
     amount: money("amount").notNull(),
+    excessAmount: money("excess_amount").notNull().default(0),
+    /* The invoice's balance right after this payment (printed on the receipt) */
+    balanceAfter: money("balance_after"),
     method: paymentMethod("method").notNull(),
     status: paymentStatus("status").notNull().default("PENDING"),
     receiptNumber: text("receipt_number"),
@@ -37,11 +42,11 @@ export const payments = pgTable(
   },
   t => [
     uniqueIndex("payments_tenant_receipt_uq").on(t.tenantId, t.receiptNumber),
-    uniqueIndex("payments_gateway_order_uq").on(t.gatewayProvider, t.gatewayOrderId),
-    uniqueIndex("payments_gateway_payment_uq").on(t.gatewayProvider, t.gatewayPaymentId),
+    uniqueIndex("payments_gateway_order_uq").on(t.tenantId, t.gatewayProvider, t.gatewayOrderId),
+    uniqueIndex("payments_gateway_payment_uq").on(t.tenantId, t.gatewayProvider, t.gatewayPaymentId),
     index("payments_invoice_idx").on(t.invoiceId),
     index("payments_paid_at_idx").on(t.tenantId, t.status, t.paidAt),
-    check("payments_amount_chk", sql`${t.amount} > 0`)
+    check("payments_amount_chk", sql`${t.amount} > 0 AND ${t.excessAmount} >= 0 AND ${t.excessAmount} <= ${t.amount}`)
   ]
 );
 

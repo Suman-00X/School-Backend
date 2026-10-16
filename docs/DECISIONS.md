@@ -21,7 +21,7 @@ Design decisions made while building roadmap phases 3–7 without you. Each entr
 | # | Decision | Area |
 |---|---|---|
 | D-01 / D-12 | Phase 2 login is not built; the portal and payments are waiting for it | Scope |
-| D-20 | Verify Razorpay with real test keys before go-live | Fees |
+| D-20 | Each school brings its own Razorpay keys; verify one school in Razorpay test mode before go-live | Fees |
 | D-37 | PDFs cannot print non-Latin names yet; choose the fonts for your regions | Reports |
 | D-44 | Confirm backup targets and run one real restore drill | Ops |
 | D-45 | Row-level security: designed, build it before the first real school | Security |
@@ -232,41 +232,52 @@ If `teacherId` is omitted, the teacher assigned to that subject in the section i
 
 Stripe-style integer minor units in the API would be stricter, but they're awkward for school admin screens. Changing later would be a breaking API change, so decide before launch.
 
-### 🟡 D-17: How installments split a fee
-Each installment takes `sharePercent` of every fee line, and the shares must add up to 100%. The **last** installment absorbs rounding, so installments always sum exactly to the annual amount.
+### 🟡 D-17: Installment plans, one per student per year (built after review)
+> Product owner: "Installments can be configurable and each student can get any one the configured installments and fee will be scheduled accordingly."
 
-Alternative not built: explicit amounts per installment per head (more flexible, more data entry).
+- **Plans** (`/finance/installment-plans`): "Annual" 1×, "Quarterly" 4×, "Monthly" 10×… Each holds ordered installments with a due date and a share. Shares must add up to exactly 100% and due dates must ascend inside the year.
+- **Rounding:** every installment but the last is rounded **down** to the paisa; the last takes the remainder. Parts always add up exactly and none is ever negative.
+- **Plans belong to an academic year**, not reusable with year-relative dates. Due dates are real dates that schools move every year (holidays, exam weeks), fee structures are per year anyway, and a plan that has invoices is frozen without affecting other years. Alternative: one plan with "month 1, day 10" offsets, reused every year (less typing, less control).
+- **Fee structures** list the plans they allow and a default. Amounts on a structure are annual.
+- **Assignment** (`/finance/plan-assignments`, also `/bulk` for a section, a class or a list): one plan per student per year; `null` = each structure's default. A plan can only be assigned if some fee structure of the student's class offers it; a structure that doesn't offer the student's plan uses its own default.
+- **Billing:** `POST /finance/invoices/generation { feeStructureId, throughDate? }` issues each student's installments due on or before `throughDate` (default: the whole year) under *their* plan. Idempotent per student, structure and installment.
+- **Changing a plan** is allowed only while nothing of that year is paid (any invoice with money on it, including applied credit): otherwise **409**. While nothing is paid, the change **cancels the unpaid invoices and re-issues** them under the new plan: the new plan's installments due by the latest cancelled due date (at least its first). A waived late fee on a cancelled invoice is not carried over.
+- **Concurrency:** one row per student and year (`student_installment_plans`) is locked by billing, plan changes and concession changes, so they cannot interleave; the student's invoices are locked next, so a payment and a plan change on the same invoice cannot both succeed (tested with a held row lock).
 
-### 🟡 D-18: Concession rules
-- `PERCENT` takes a percentage off each matching line.
-- `FIXED` takes **that amount off each matching line of each invoice**, not once per year.
-- Several concessions stack, but a line's discount never exceeds the line.
-- Concessions are applied when the invoice is issued. Granting one later doesn't change existing invoices: cancel and re-issue unpaid ones.
+### 🟡 D-18: Concessions: templates, annual fixed amounts, shown on every bill (built after review)
+> Product owner: "…each student can get any one the configured [concessions] and fee will be calculated accordingly and this will be mentioned in the fee receipt also."
 
-### 🟡 D-19: Late fees
-Each structure has a late-fee rule: `NONE`, `FIXED`, or `PER_DAY` with a grace period and an optional cap.
-- A daily job (00:30 UTC) recomputes `lateFee`, and so `total`, on open overdue invoices. It is idempotent.
-- Paid invoices never get late fees.
+- **Templates:** `PERCENT` or `FIXED`, a category (`SIBLING`, `STAFF_WARD`, `MERIT`, `SCHOLARSHIP`, `FINANCIAL_AID`, `OTHER`), optionally limited to several fee heads. Type, value and heads are frozen once granted (409); name, category and description can change.
+- **FIXED is an amount per year**, split over the matching fee heads in proportion to what is left of them, then over the student's installments by the plan's shares. (It used to come off every line of every invoice.)
+- **Several concessions stack**: percentages are taken from the gross and add up (10% + 20% = 30%, not compounded), then fixed amounts; a fee head never goes below zero. Alternative: allow one concession per student per year, or "best of".
+- **Invoices** show gross, each concession by name, and net per line, plus a per-invoice summary. The statement lists the year's grants and how much each took off. The **receipt PDF prints the lines and the concessions applied**.
+- **Granting or revoking** recalculates the student's invoices of that year **that have nothing paid**. Invoices with any payment are never touched, so a concession granted mid-year only lowers the remaining installments; it is not refunded on paid ones. Alternative: spread the whole annual amount over the remaining installments.
 
-Not built: waiving a late fee for one student (today: cancel and re-issue).
+### 🟡 D-19: Late-fee rules with slabs, and waivers (built after review)
+> Product owner: "Late fees, also pre defined and auto assigned according to the delay duration."
 
-### 🔴 D-20: Online payments must be verified with real Razorpay before go-live
-I implemented Razorpay from its documented API without keys:
-- order creation;
-- checkout signature `HMAC(order_id|payment_id)`;
-- webhook signature `HMAC(raw body)`.
+- **Rules** (`/finance/late-fee-rules`): a grace period, an optional maximum, and slabs by delay that start at day 1 and follow each other without gaps (the last may be open-ended). One rule can be the school's **default**.
+- **The delay is counted from the end of the grace period.** A `FIXED` slab's amount *is* the fee (1–7 days 50, 8–30 days 200, 31+ days 500); a `PER_DAY` slab adds its amount for each of its days on top of what was owed when it began (tiers, like tax brackets). Alternative: count slab days from the due date and use grace only as a "free" window.
+- **Structures** use their own rule, or the school default, or none (`chargesLateFee: false`). Rules are read when the daily job runs, so a rule edit applies to open invoices from the next run.
+- **The daily job** recomputes each open overdue invoice from scratch under its row lock: idempotent, and safe against a payment arriving at the same moment. A late fee never drops below the part of it already paid.
+- **Waiver:** `POST /finance/invoices/:id/late-fee-waiver { reason }` (ADMIN, ACCOUNTANT) removes the late fee now and for good; the amount, reason and who are kept. Refused when part of the late fee is already paid (422) or the invoice is paid (409). `DELETE` on the same path reinstates it. Partial waivers are not built.
 
-Everything is tested end to end against the `mock` gateway, which follows the same contract. To go live:
-1. Set `PAYMENT_PROVIDER=razorpay` and `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET`.
-2. Point the Razorpay webhook (`payment.captured`) at `POST /api/v1/public/payments/webhook`.
-3. Test in Razorpay **test mode**.
+### 🔴 D-20: Each school brings its own Razorpay keys (built after review); verify with real test keys before go-live
+> Product owner: "We will provide BYOK system in which the school will provide their razorpay ids for fee payment and we will use that."
 
-Also needs a decision:
-- **Refunds** are not implemented.
-- **Overpayment** is possible: if a counter payment and an online payment for the same invoice are in flight together, both are recorded (balance goes negative, i.e. a credit). You need a refund/credit policy.
+- **Keys:** `PUT /finance/payment-settings { keyId, keySecret, webhookSecret }` (ADMIN only). The secrets are encrypted at rest (AES-256-GCM, `DATA_ENCRYPTION_KEY`), never returned (reads show `****` + last 4) and never written to the audit trail. `DELETE` removes them; `POST …/connection-test` asks Razorpay whether it accepts the keys (in tests the call is stubbed).
+- **No keys, no online payments:** order and confirmation endpoints return 422 "Online payments are not set up for this school". Counter payments are unaffected.
+- **Webhooks are per school:** `POST /api/v1/public/payments/razorpay/:tenantId/webhook`, verified with that school's webhook secret. The old shared `/public/payments/webhook` is removed: it could not know whose secret to check. The settings response shows the URL to paste into the Razorpay dashboard.
+- The gateway takes the credentials on every call; there are no `RAZORPAY_*` environment variables any more. `PAYMENT_PROVIDER=mock` is still a global switch for development and tests (default: `razorpay` in production, `mock` elsewhere); the mock checks signatures with the school's own secrets, so tests exercise the real verification.
+- **Still to do before go-live:** run one school through Razorpay **test mode** with real keys (order, checkout, webhook). Refunds through Razorpay are not implemented.
 
-### 🟡 D-21: Online payment covers the full balance only
-A payment order is always for the invoice's full outstanding balance. Partial payments are possible only at the counter.
+### 🟡 D-21: Partial online payments; overpayment becomes student credit (built after review)
+> Product owner: "We will allow partial payment online also."
+
+- A payment order takes an optional `amount`, up to the invoice balance (default: all of it). **Minimum 100.00** (in the school's currency), unless the balance itself is smaller, so families aren't charged gateway fees on tiny payments. Alternative: make the minimum a per-school setting.
+- **Overpayment** (two payments in flight, or an invoice cancelled while the family was paying) is handled under the invoice's row lock: the invoice gets at most its balance, and the rest is kept as **student credit** (`excessAmount` on the payment, an `OVERPAYMENT` entry in the credit ledger). `amount_paid <= total` is also a database CHECK. Tested by holding the invoice lock while two confirmations arrive.
+- **Credit** (`GET /finance/students/:id/credits`) is applied by an accountant to a later invoice (`POST /finance/invoices/:id/credit-application`), or recorded as refunded (`POST /finance/students/:id/credit-refunds`). The balance can never go negative, even with concurrent spenders (a conditional update plus a CHECK). Alternative: apply credit automatically to the next invoice issued.
+- Receipts, statements, dashboards and the fee-collections export show the part kept as credit; collections still count money received.
 
 ### 🟡 D-22: Which events send which messages
 | Event | Channels |

@@ -35,10 +35,14 @@ export * from "./modules/academics/homework/models/homework.schema.js";
 
 /* finance */
 export * from "./modules/finance/fee-heads/models/feeHead.schema.js";
+export * from "./modules/finance/installment-plans/models/installmentPlan.schema.js";
+export * from "./modules/finance/late-fee-rules/models/lateFeeRule.schema.js";
 export * from "./modules/finance/fee-structures/models/feeStructure.schema.js";
 export * from "./modules/finance/concessions/models/concession.schema.js";
 export * from "./modules/finance/invoices/models/invoice.schema.js";
 export * from "./modules/finance/payments/models/payment.schema.js";
+export * from "./modules/finance/credits/models/studentCredit.schema.js";
+export * from "./modules/finance/payment-settings/models/paymentGatewayAccount.schema.js";
 
 /* hostel */
 export * from "./modules/hostel/hostels/models/hostel.schema.js";

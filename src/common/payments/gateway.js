@@ -3,10 +3,15 @@ import env from "../config/env.config.js";
 
 /* Online payment gateway. Amounts are in minor units (paise).
 
-   gateway.createOrder({ amountMinor, currency, receipt, notes }) -> { orderId, amountMinor, currency, keyId }
-   gateway.verifyPayment({ orderId, paymentId, signature })      -> boolean (checkout callback)
-   gateway.verifyWebhook(rawBody, signatureHeader)               -> boolean
-   gateway.parseWebhook(body)                                    -> { event, orderId, paymentId, amountMinor, captured } | null */
+   Keys are never read from the environment: each call takes the credentials of the
+   account being charged, { keyId, keySecret, webhookSecret } (bring your own keys).
+
+   gateway.createOrder(credentials, { amountMinor, currency, receipt, notes }) -> { orderId, amountMinor, currency, keyId }
+   gateway.verifyPayment(credentials, { orderId, paymentId, signature })      -> boolean (checkout callback)
+   gateway.verifyWebhook(credentials, rawBody, signatureHeader)               -> boolean
+   gateway.parseWebhook(body)                     -> { event, orderId, paymentId, amountMinor, captured } | null
+   gateway.testConnection(credentials)            -> { ok, status? }  (are the keys accepted?)
+   gateway.modeOf(keyId)                          -> "test" | "live" */
 
 const hmacHex = (secret, data) => createHmac("sha256", secret).update(data).digest("hex");
 
@@ -16,81 +21,97 @@ const safeEqual = (a, b) => {
   return x.length === y.length && timingSafeEqual(x, y);
 };
 
-const razorpay = ({ razorpayKeyId, razorpayKeySecret, razorpayWebhookSecret }) => {
-  if (!razorpayKeyId || !razorpayKeySecret) {
-    throw new Error("PAYMENT_PROVIDER=razorpay requires RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET");
-  }
-  const auth = `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString("base64")}`;
+const requireKeys = credentials => {
+  if (!credentials?.keyId || !credentials?.keySecret)
+    throw new Error("Gateway credentials (keyId, keySecret) are required");
+  return credentials;
+};
 
+const verifyCheckout = (credentials, { orderId, paymentId, signature }) =>
+  Boolean(credentials?.keySecret) && safeEqual(hmacHex(credentials.keySecret, `${orderId}|${paymentId}`), signature);
+
+const verifyBody = (credentials, rawBody, signature) =>
+  Boolean(credentials?.webhookSecret && rawBody) && safeEqual(hmacHex(credentials.webhookSecret, rawBody), signature);
+
+const modeOf = keyId => (String(keyId ?? "").startsWith("rzp_live_") ? "live" : "test");
+
+/* Razorpay's payment.captured / payment.authorized webhook payload */
+const parseRazorpayWebhook = body => {
+  const payment = body?.payload?.payment?.entity;
+  if (!payment) return null;
   return {
-    name: "razorpay",
-
-    createOrder: async ({ amountMinor, currency, receipt, notes }) => {
-      const response = await fetch("https://api.razorpay.com/v1/orders", {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: auth },
-        body: JSON.stringify({ amount: amountMinor, currency, receipt, notes })
-      });
-      if (!response.ok) throw new Error(`Razorpay order creation failed (${response.status})`);
-      const order = await response.json();
-      return { orderId: order.id, amountMinor: order.amount, currency: order.currency, keyId: razorpayKeyId };
-    },
-
-    verifyPayment: ({ orderId, paymentId, signature }) =>
-      safeEqual(hmacHex(razorpayKeySecret, `${orderId}|${paymentId}`), signature),
-
-    verifyWebhook: (rawBody, signature) =>
-      Boolean(razorpayWebhookSecret) && safeEqual(hmacHex(razorpayWebhookSecret, rawBody), signature),
-
-    parseWebhook: body => {
-      const payment = body?.payload?.payment?.entity;
-      if (!payment) return null;
-      return {
-        event: body.event,
-        orderId: payment.order_id,
-        paymentId: payment.id,
-        amountMinor: payment.amount,
-        captured: body.event === "payment.captured" || payment.status === "captured"
-      };
-    }
+    event: body.event,
+    orderId: payment.order_id,
+    paymentId: payment.id,
+    amountMinor: payment.amount,
+    captured: body.event === "payment.captured" || payment.status === "captured"
   };
 };
 
-/* Development/test gateway with the same contract. Signatures use MOCK_SECRET,
-   so tests (and a dev frontend) can simulate a successful checkout. */
-export const MOCK_SECRET = "mock-gateway-secret";
+const RAZORPAY_API = "https://api.razorpay.com/v1";
 
-const mock = () => ({
+const basicAuth = ({ keyId, keySecret }) => `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
+
+export const razorpayGateway = {
+  name: "razorpay",
+  modeOf,
+
+  createOrder: async (credentials, { amountMinor, currency, receipt, notes }) => {
+    requireKeys(credentials);
+    const response = await fetch(`${RAZORPAY_API}/orders`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: basicAuth(credentials) },
+      body: JSON.stringify({ amount: amountMinor, currency, receipt, notes })
+    });
+    if (!response.ok) throw new Error(`Razorpay order creation failed (${response.status})`);
+    const order = await response.json();
+    return { orderId: order.id, amountMinor: order.amount, currency: order.currency, keyId: credentials.keyId };
+  },
+
+  verifyPayment: verifyCheckout,
+  verifyWebhook: verifyBody,
+  parseWebhook: parseRazorpayWebhook,
+
+  /* A cheap authenticated read: 200 = keys accepted, 401 = rejected */
+  testConnection: async credentials => {
+    requireKeys(credentials);
+    try {
+      const response = await fetch(`${RAZORPAY_API}/orders?count=1`, {
+        headers: { authorization: basicAuth(credentials) }
+      });
+      return { ok: response.ok, status: response.status };
+    } catch {
+      return { ok: false, status: null };
+    }
+  }
+};
+
+/* Development/test gateway with the same contract and the same signature checks
+   (HMAC with the account's own secrets), but no network: orders are made up and
+   every key pair "connects". Sign like it with gatewaySignature(secret, data). */
+export const mockGateway = {
   name: "mock",
-  createOrder: async ({ amountMinor, currency }) => ({
+  modeOf,
+  createOrder: async (credentials, { amountMinor, currency }) => ({
     orderId: `order_mock_${randomUUID().replaceAll("-", "").slice(0, 14)}`,
     amountMinor,
     currency,
-    keyId: "mock_key"
+    keyId: requireKeys(credentials).keyId
   }),
-  verifyPayment: ({ orderId, paymentId, signature }) =>
-    safeEqual(hmacHex(MOCK_SECRET, `${orderId}|${paymentId}`), signature),
-  verifyWebhook: (rawBody, signature) => safeEqual(hmacHex(MOCK_SECRET, rawBody), signature),
+  verifyPayment: verifyCheckout,
+  verifyWebhook: verifyBody,
   parseWebhook: body => {
-    const payment = body?.payload?.payment?.entity;
-    return payment
-      ? {
-          event: body.event,
-          orderId: payment.order_id,
-          paymentId: payment.id,
-          amountMinor: payment.amount,
-          captured: body.event === "payment.captured"
-        }
-      : null;
+    const event = parseRazorpayWebhook(body);
+    return event && { ...event, captured: body.event === "payment.captured" };
+  },
+  testConnection: async credentials => {
+    requireKeys(credentials);
+    return { ok: true, status: 200 };
   }
-});
-
-/* Sign like the mock gateway would (tests and dev tooling) */
-export const mockSign = data => hmacHex(MOCK_SECRET, data);
-
-let instance = null;
-
-export const paymentGateway = () => {
-  if (!instance) instance = env.payments.provider === "razorpay" ? razorpay(env.payments) : mock();
-  return instance;
 };
+
+/* HMAC-SHA256 hex signature, as the gateways compute it (tests and dev tooling) */
+export const gatewaySignature = (secret, data) => hmacHex(secret, data);
+
+/* PAYMENT_PROVIDER=mock is a global override for development and tests */
+export const paymentGateway = () => (env.payments.provider === "mock" ? mockGateway : razorpayGateway);

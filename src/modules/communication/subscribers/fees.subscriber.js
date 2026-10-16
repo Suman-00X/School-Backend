@@ -50,6 +50,7 @@ subscribe(PAYMENT_RECEIVED, "communication.paymentReceived", async ({ tenantId, 
       studentName: nameOf(payment.student),
       amount: payment.amount,
       receiptNumber: payment.receiptNumber,
+      credit: payment.excessAmount,
       currency: tenant?.currency
     }),
     data: { paymentId, invoiceId: payment.invoiceId, studentId: payment.studentId },

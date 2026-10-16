@@ -67,13 +67,21 @@ export const dashboardService = {
     const year = yearOf(ctx);
     const { from, to, today } = await rangeOf(ctx, query);
     const timezone = (await getTenant(ctx.tenantId))?.timezone ?? "UTC";
-    const [byMonth, byMethod, byClass, defaulters] = await Promise.all([
+    const [byMonth, byMethod, byClass, concessionsByCategory, defaulters] = await Promise.all([
       q.collectionsByMonth(ctx.tenantId, from, to, timezone),
       q.collectionsByMethod(ctx.tenantId, from, to, timezone),
       q.feesByClass(ctx.tenantId, year.id),
+      q.concessionsByCategory(ctx.tenantId, year.id),
       q.defaulters(ctx.tenantId, year.id, today, { limit: query.defaulterLimit })
     ]);
-    return { from, to, collections: { byMonth, byMethod }, byClass, defaulters };
+    return {
+      from,
+      to,
+      collections: { byMonth, byMethod },
+      byClass,
+      concessions: { byCategory: concessionsByCategory },
+      defaulters
+    };
   },
 
   /* Result analysis of one exam across every section that sat it, under each section's result policy */

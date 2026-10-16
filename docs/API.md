@@ -5,7 +5,7 @@ Base URL: `/api/v1`. Every endpoint needs `Authorization: Bearer <access token>`
 - `GET /health` and `GET /ready`
 - the API docs
 - signed file downloads
-- the payment webhook, which is verified by signature
+- the payment webhook (one per school), verified with that school's webhook secret
 
 - **All endpoints** (generated from the code, always current): [ENDPOINTS.md](ENDPOINTS.md). There are 300+, each with its roles.
 - **Request and response schemas:** `GET /api/v1/openapi.json` (OpenAPI 3.1), or interactively at **`/api/docs`**.
@@ -53,7 +53,7 @@ Base URL: `/api/v1`. Every endpoint needs `Authorization: Bearer <access token>`
 | **Versioning** | The version is in the path (`/api/v1`). Breaking changes go to `/api/v2`, and v1 keeps working. |
 | **Resources** | Plural nouns in kebab-case (`/academic-years`, `/teacher-assignments`), grouped by module (`/users/…`, `/academics/…`, `/finance/…`). |
 | **Nesting** | Only for records that belong to one parent: `/academics/exams/:examId/papers`, `/library/books/:bookId/copies`. Records looked up from several sides are top-level, with filters (`/academics/enrollments?sectionId=`). |
-| **Methods** | `GET` reads · `POST` creates · `PATCH` updates partially · `DELETE` removes or deactivates. `PUT` replaces a singleton; it is used only for the school logo (`PUT /administration/settings/logo`). |
+| **Methods** | `GET` reads · `POST` creates · `PATCH` updates partially · `DELETE` removes or deactivates. `PUT` replaces a singleton as a whole: the school logo (`PUT /administration/settings/logo`) and the school's Razorpay keys (`PUT /finance/payment-settings`). |
 | **Actions** | State changes that are not plain edits are `POST`s to an action sub-resource: `/exams/:id/result-publication`, `/invoices/:id/cancellation`, `/payroll-runs/:id/finalization`, `/loans/:id/return`. They return **200** with the updated resource. **201** is returned only when a new record is created (a payment, a transfer that creates a new allocation). Undoing an action is `DELETE` on the same sub-resource (`DELETE …/result-publication`, `DELETE …/archival`). |
 | **IDs** | UUIDs. Invalid IDs are rejected with `400` before any lookup. |
 | **Lists** | Paginated: `?page=` (default 1) and `?limit=` (default 20, max 100), plus filters per resource. `meta` holds the totals. |
@@ -143,7 +143,7 @@ Self-service lives under `/api/v1/me` (portal), plus `my-…` endpoints in libra
 | Auth | `/auth` | Sign-in, refresh, sign-out, devices, invitations, password reset and change |
 | Portal | `/me` | Student, parent and teacher self-service, and the notification inbox |
 | Administration | `/administration` | School settings and logo, CSV imports, audit log |
-| Finance | `/finance` | Fee heads, structures with installments and late fees, concessions, invoices, payments (counter and online), receipts, statements |
+| Finance | `/finance` | Fee heads, installment plans and per-student assignment, structures, late-fee rules and waivers, concessions, invoices, payments (counter and online, partial), student credit, receipts, statements, the school's own Razorpay keys |
 | Communication | `/communication` | Notifications (in-app, email, SMS) and announcements to audiences |
 | Reports | `/reports` | Dashboards (overview, attendance, fees, academics) and exports |
 | Files | `/files` | Student, staff and general documents |
@@ -202,15 +202,22 @@ For many students (any spreadsheet layout, saved as CSV):
 
 ### Fees
 
-1. **Set up:** fee heads, then `POST /finance/fee-structures` (items, installments, late-fee rule), then concessions and concession grants.
-2. **Bill:** `POST /finance/invoices/generation` bills a class or section for an installment. This is idempotent: students already billed are skipped. A daily job adds late fees.
-3. **Collect at the counter:** `POST /finance/invoices/:id/payments` records the payment, then `GET /finance/payments/:id/receipt` gives the receipt PDF.
-4. **Collect online (parent):**
-   - `POST /me/students/:id/invoices/:invoiceId/payment-orders` returns the gateway order.
+1. **Set up:**
+   - fee heads;
+   - installment plans for the year (`POST /finance/installment-plans`: "Annual", "Quarterly", "Monthly"…, shares adding up to 100%);
+   - late-fee rules (`POST /finance/late-fee-rules`: grace days, slabs by delay, optional cap, one school default);
+   - `POST /finance/fee-structures` (annual items, the plans it offers and its default plan, its late-fee rule);
+   - concessions (percent, or a fixed amount per year; category; fee heads) and concession grants.
+2. **Choose plans:** `POST /finance/plan-assignments { studentId, installmentPlanId }`, or `/plan-assignments/bulk` for a section, a class or a list. Students without one pay by each structure's default. While nothing of the year is paid, a change cancels and re-issues the unpaid invoices; after that it is refused (409).
+3. **Bill:** `POST /finance/invoices/generation { feeStructureId, throughDate? }` issues every student's installments due by `throughDate` (default: the whole year) under their own plan. Idempotent. Each line shows gross, concessions (by name) and net. Granting or revoking a concession recalculates invoices with nothing paid.
+4. **Late fees:** a daily job applies each structure's rule by days overdue. `POST /finance/invoices/:id/late-fee-waiver { reason }` waives it for one invoice; `DELETE` reinstates it.
+5. **Collect at the counter:** `POST /finance/invoices/:id/payments` records the payment, then `GET /finance/payments/:id/receipt` gives the receipt PDF (lines, concessions, late fee, amount kept as credit).
+6. **Collect online (parent):** the school first saves its own Razorpay keys (ADMIN, `PUT /finance/payment-settings`); without them online endpoints return 422.
+   - `POST /me/students/:id/invoices/:invoiceId/payment-orders { amount? }` returns the gateway order (any amount up to the balance, at least 100.00 unless the balance is smaller).
    - The app opens the gateway checkout.
    - `POST /me/payments/confirmations` sends the signed result.
-   - The gateway also calls `POST /public/payments/webhook`.
-   - Both paths are idempotent, so a payment is recorded once.
+   - Razorpay also calls `POST /public/payments/razorpay/:tenantId/webhook` (the URL is shown in the payment settings).
+   - Both paths are idempotent, so a payment is recorded once. Money beyond the balance (two payments in flight) becomes student credit, applied later with `POST /finance/invoices/:id/credit-application` or refunded with `POST /finance/students/:id/credit-refunds`.
 
 ### Year end
 

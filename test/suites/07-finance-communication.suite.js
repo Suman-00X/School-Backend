@@ -1,37 +1,30 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { todayIn } from "../../src/common/utils/date.util.js";
-import { h, world, request, get, post, patch, settleJobs } from "../helpers/harness.js";
+import { h, world, request, call, get, post, patch, settleJobs } from "../helpers/harness.js";
 
 const F = "/api/v1/finance";
 const ME = "/api/v1/me";
 const C = "/api/v1/communication";
 
+/* The school's own Razorpay secrets (BYOK); the mock gateway checks signatures with them */
+const KEY_SECRET = "school-one-key-secret-7Hq2";
+const WEBHOOK_SECRET = "school-one-webhook-secret-Zp4";
+const webhookUrl = tenantId => `/api/v1/public/payments/razorpay/${tenantId}/webhook`;
+
 const inbox = async (token, type) =>
   (await get(`${ME}/notifications?limit=100${type ? `&type=${type}` : ""}`, { as: token })).data;
 
 describe("finance: structures, concessions, invoices", () => {
-  it("defines fee heads and a structure with installments", async () => {
+  it("defines fee heads, an installment plan, a late-fee rule and a structure", async () => {
     world.tuition = (await post(`${F}/fee-heads`, { name: "Tuition", code: "tuition" })).data;
     world.transport = (await post(`${F}/fee-heads`, { name: "Transport", code: "TRANSPORT" })).data;
     assert.equal(world.tuition.code, "TUITION");
     await post(`${F}/fee-heads`, { name: "Tuition 2", code: "TUITION" }, {}, 409);
 
-    const base = {
-      name: "Class 1 Fees",
-      classId: world.c1.id,
-      lateFeeType: "PER_DAY",
-      lateFeeAmount: 10,
-      lateFeeGraceDays: 5,
-      lateFeeCap: 500,
-      items: [
-        { feeHeadId: world.tuition.id, amount: 10000 },
-        { feeHeadId: world.transport.id, amount: 5000 }
-      ]
-    };
-    const badShares = await request("POST", `${F}/fee-structures`, {
+    const badShares = await request("POST", `${F}/installment-plans`, {
       body: {
-        ...base,
+        name: "Termly",
         installments: [
           { name: "Term 1", dueDate: "2026-07-15", sharePercent: 60 },
           { name: "Term 2", dueDate: "2026-11-15", sharePercent: 30 }
@@ -40,60 +33,109 @@ describe("finance: structures, concessions, invoices", () => {
     });
     assert.equal(badShares.status, 422);
     assert.equal(badShares.body.message, "Installment shares must add up to 100% (they add up to 90%)");
-    await post(
-      `${F}/fee-structures`,
-      { ...base, installments: [{ name: "Term 1", dueDate: "2030-01-01", sharePercent: 100 }] },
-      {},
-      422
-    );
+    const outside = await request("POST", `${F}/installment-plans`, {
+      body: { name: "Termly", installments: [{ name: "Term 1", dueDate: "2030-01-01", sharePercent: 100 }] }
+    });
+    assert.equal(outside.status, 422);
+    assert.equal(outside.body.message, "Term 1 is due 2030-01-01, outside the academic year 2026-27");
 
-    const structure = await post(`${F}/fee-structures`, {
-      ...base,
+    const termly = await post(`${F}/installment-plans`, {
+      name: "Termly",
       installments: [
         { name: "Term 1", dueDate: "2026-07-15", sharePercent: 40 },
         { name: "Term 2", dueDate: "2026-11-15", sharePercent: 35 },
         { name: "Term 3", dueDate: "2027-02-15", sharePercent: 25 }
       ]
     });
+    assert.equal(termly.data.installmentCount, 3);
+    world.termly = termly.data;
+
+    /* The school default: 10 a day after 5 grace days, at most 500 */
+    world.standardLateFee = (
+      await post(`${F}/late-fee-rules`, {
+        name: "Standard",
+        graceDays: 5,
+        maxAmount: 500,
+        isDefault: true,
+        slabs: [{ fromDay: 1, chargeType: "PER_DAY", amount: 10 }]
+      })
+    ).data;
+
+    const base = {
+      name: "Class 1 Fees",
+      classId: world.c1.id,
+      items: [
+        { feeHeadId: world.tuition.id, amount: 10000 },
+        { feeHeadId: world.transport.id, amount: 5000 }
+      ],
+      installmentPlanIds: [termly.data.id],
+      defaultInstallmentPlanId: termly.data.id
+    };
+    const structure = await post(`${F}/fee-structures`, base);
     assert.equal(structure.data.totalAmount, 15000);
+    assert.equal(structure.data.defaultInstallmentPlanId, termly.data.id);
+    assert.deepEqual(
+      structure.data.installmentPlans[0].installments.map(i => [i.sequence, i.name, i.sharePercent]),
+      [
+        [1, "Term 1", 40],
+        [2, "Term 2", 35],
+        [3, "Term 3", 25]
+      ]
+    );
+    assert.equal(structure.data.chargesLateFee, true);
     world.structure = structure.data;
-    world.term1 = structure.data.installments.find(i => i.name === "Term 1");
+    world.term1 = structure.data.installmentPlans[0].installments.find(i => i.name === "Term 1");
     await post(`${F}/fee-structures`, base, { as: h.tokens.office }, 403);
   });
 
   it("grants concessions", async () => {
-    const sibling = (await post(`${F}/concessions`, { name: "Sibling", concessionType: "PERCENT", value: 10 })).data;
+    const sibling = (
+      await post(`${F}/concessions`, { name: "Sibling", category: "SIBLING", concessionType: "PERCENT", value: 10 })
+    ).data;
+    /* FIXED amounts are per year: the whole year's transport */
     const waiver = (
       await post(`${F}/concessions`, {
         name: "Transport waiver",
         concessionType: "FIXED",
-        value: 2000,
-        feeHeadId: world.transport.id
+        value: 5000,
+        feeHeadIds: [world.transport.id]
       })
     ).data;
+    assert.deepEqual(waiver.feeHeadIds, [world.transport.id]);
+    assert.equal(waiver.category, "OTHER");
     await post(`${F}/concessions`, { name: "Too much", concessionType: "PERCENT", value: 150 }, {}, 400);
 
-    await post(`${F}/concession-grants`, { studentId: world.s2.id, concessionId: sibling.id, reason: "Second child" });
+    const granted = await post(`${F}/concession-grants`, {
+      studentId: world.s2.id,
+      concessionId: sibling.id,
+      reason: "Second child"
+    });
+    assert.equal(granted.message, "Sibling (10%) granted to Fstudent2 Lstudent2");
     await post(`${F}/concession-grants`, { studentId: world.s1.id, concessionId: waiver.id });
-    await post(`${F}/concession-grants`, { studentId: world.s2.id, concessionId: sibling.id }, {}, 409);
+    const twice = await request("POST", `${F}/concession-grants`, {
+      body: { studentId: world.s2.id, concessionId: sibling.id }
+    });
+    assert.equal(twice.status, 409);
+    assert.equal(twice.body.message, "Fstudent2 Lstudent2 already has Sibling for 2026-27");
   });
 
-  it("issues invoices for an installment with discounts, exactly once", async () => {
+  it("issues invoices by installment plan with concessions, exactly once", async () => {
     const issued = await post(`${F}/invoices/generation`, {
       feeStructureId: world.structure.id,
-      feeInstallmentId: world.term1.id
+      throughDate: "2026-07-15"
     });
-    assert.equal(issued.data.created, 4, "every active student of Class 1");
+    assert.equal(issued.data.created, 4, "Term 1 for every active student of Class 1");
+    assert.equal(issued.message, "4 invoice(s) issued through 2026-07-15, 0 already invoiced");
     assert.match(issued.data.invoices[0].invoiceNumber, /^INV26-0{5}\d$/);
 
     const again = await post(`${F}/invoices/generation`, {
       feeStructureId: world.structure.id,
-      feeInstallmentId: world.term1.id
+      throughDate: "2026-07-15"
     });
     assert.deepEqual([again.data.created, again.data.skipped], [0, 4]);
 
     const byStudent = id => issued.data.invoices.find(i => i.studentId === id);
-    /* s1: 4000 tuition + 2000 transport - 2000 fixed waiver */
+    /* s1: 4000 tuition + 2000 transport - 40% of the 5000 a year transport waiver */
     assert.equal(byStudent(world.s1.id).total, 4000);
     /* s2: 6000 - 10% */
     assert.equal(byStudent(world.s2.id).total, 5400);
@@ -103,12 +145,16 @@ describe("finance: structures, concessions, invoices", () => {
 
     const detail = await get(`${F}/invoices/${world.inv2.id}`);
     assert.deepEqual(
-      detail.data.lines.map(l => [l.feeHead.code, l.amount, l.discount]),
+      detail.data.lines.map(l => [l.feeHead.code, l.amount, l.discount, l.netAmount, l.concessions.map(c => c.name)]),
       [
-        ["TUITION", 4000, 400],
-        ["TRANSPORT", 2000, 200]
+        ["TUITION", 4000, 400, 3600, ["Sibling"]],
+        ["TRANSPORT", 2000, 200, 1800, ["Sibling"]]
       ]
     );
+    assert.deepEqual(detail.data.concessions, [
+      { concessionId: detail.data.concessions[0].concessionId, name: "Sibling", amount: 600 }
+    ]);
+    assert.deepEqual([detail.data.plan.name, detail.data.installment.name], ["Termly", "Term 1"]);
     assert.equal(detail.data.balance, 5400);
     assert.equal(detail.data.isOverdue, true);
 
@@ -123,12 +169,14 @@ describe("finance: structures, concessions, invoices", () => {
   });
 
   it("cancels unpaid invoices and allows re-issuing", async () => {
-    const ira = world.term1Invoices.find(i => ![world.s1.id, world.s2.id].includes(i.studentId));
+    /* Ira: the Class 1 student who is not one of the mother's children */
+    const children = (await get(`${ME}/students`, { as: h.tokens.mother })).data.map(s => s.id);
+    const ira = world.term1Invoices.find(i => !children.includes(i.studentId));
     await post(`${F}/invoices/${ira.id}/cancellation`, { reason: "Wrong structure" }, {}, 200);
     await post(`${F}/invoices/${ira.id}/cancellation`, { reason: "again" }, {}, 409);
     const reissued = await post(`${F}/invoices/generation`, {
       feeStructureId: world.structure.id,
-      feeInstallmentId: world.term1.id
+      throughDate: "2026-07-15"
     });
     assert.equal(reissued.data.created, 1);
   });
@@ -166,8 +214,25 @@ describe("finance: payments", () => {
     );
   });
 
+  it("needs the school's own Razorpay keys before taking online payments", async () => {
+    const before = await request("POST", `${ME}/students/${world.s2.id}/invoices/${world.inv2.id}/payment-orders`, {
+      as: h.tokens.mother,
+      body: {}
+    });
+    assert.equal(before.status, 422);
+    assert.equal(before.body.message, "Online payments are not set up for this school");
+    assert.equal((await get(`${F}/payment-settings`)).data.configured, false);
+
+    const keys = { keyId: "rzp_test_School1Key", keySecret: KEY_SECRET, webhookSecret: WEBHOOK_SECRET };
+    await call("PUT", `${F}/payment-settings`, { body: keys, as: h.tokens.accountant }, 403);
+    const saved = await call("PUT", `${F}/payment-settings`, { body: keys });
+    assert.equal(saved.message, "Razorpay keys saved (test mode). Online payments are on");
+    assert.equal(saved.data.keySecret, `****${KEY_SECRET.slice(-4)}`);
+    world.gatewayKeys = keys;
+  });
+
   it("takes online payments from the parent portal, idempotently", async () => {
-    const { mockSign } = h.modules.gateway;
+    const { gatewaySignature: sign } = h.modules.gateway;
     const order = await post(
       `${ME}/students/${world.s2.id}/invoices/${world.inv2.id}/payment-orders`,
       {},
@@ -175,6 +240,7 @@ describe("finance: payments", () => {
     );
     assert.equal(order.data.amountMinor, 440000);
     assert.equal(order.data.provider, "mock");
+    assert.equal(order.data.keyId, "rzp_test_School1Key");
 
     await post(
       `${ME}/payments/confirmations`,
@@ -185,7 +251,7 @@ describe("finance: payments", () => {
 
     const confirmed = await post(
       `${ME}/payments/confirmations`,
-      { orderId: order.data.orderId, paymentId: "pay_1", signature: mockSign(`${order.data.orderId}|pay_1`) },
+      { orderId: order.data.orderId, paymentId: "pay_1", signature: sign(KEY_SECRET, `${order.data.orderId}|pay_1`) },
       { as: h.tokens.mother },
       200
     );
@@ -198,20 +264,20 @@ describe("finance: payments", () => {
       event: "payment.captured",
       payload: { payment: { entity: { id: "pay_1", order_id: order.data.orderId, amount: 440000 } } }
     });
-    const hook = await request("POST", "/api/v1/public/payments/webhook", {
+    const hook = await request("POST", webhookUrl(h.tenant.id), {
       as: null,
       raw: body,
-      headers: { "x-webhook-signature": mockSign(body) }
+      headers: { "x-razorpay-signature": sign(WEBHOOK_SECRET, body) }
     });
     assert.equal(hook.status, 200);
     const invoice = await get(`${F}/invoices/${world.inv2.id}`);
     assert.equal(invoice.data.amountPaid, 5400);
     assert.equal(invoice.data.payments.filter(p => p.status === "SUCCEEDED").length, 2);
 
-    const forged = await request("POST", "/api/v1/public/payments/webhook", {
+    const forged = await request("POST", webhookUrl(h.tenant.id), {
       as: null,
       raw: body,
-      headers: { "x-webhook-signature": "nope" }
+      headers: { "x-razorpay-signature": "nope" }
     });
     assert.equal(forged.status, 422);
 
@@ -225,16 +291,16 @@ describe("finance: payments", () => {
   });
 
   it("settles a payment that arrives by webhook first", async () => {
-    const { mockSign } = h.modules.gateway;
+    const { gatewaySignature: sign } = h.modules.gateway;
     const order = await post(`${F}/invoices/${world.inv1.id}/payment-orders`, {}, { as: h.tokens.office });
     const body = JSON.stringify({
       event: "payment.captured",
       payload: { payment: { entity: { id: "pay_2", order_id: order.data.orderId, amount: 400000 } } }
     });
-    const hook = await request("POST", "/api/v1/public/payments/webhook", {
+    const hook = await request("POST", webhookUrl(h.tenant.id), {
       as: null,
       raw: body,
-      headers: { "x-webhook-signature": mockSign(body) }
+      headers: { "x-razorpay-signature": sign(WEBHOOK_SECRET, body) }
     });
     assert.equal(hook.body.data.handled, true);
     assert.equal((await get(`${F}/invoices/${world.inv1.id}`)).data.status, "PAID");
@@ -253,7 +319,22 @@ describe("finance: payments", () => {
     await get(`${ME}/payments/${world.cashPayment.id}/receipt`, { as: h.tokens.student1 }, 404);
 
     const statement = await get(`${F}/students/${world.s2.id}/statement`);
-    assert.deepEqual(statement.data.totals, { billed: 5400, paid: 5400, balance: 0, overdue: 0 });
+    assert.deepEqual(statement.data.totals, {
+      gross: 6000,
+      concessions: 600,
+      lateFees: 0,
+      lateFeesWaived: 0,
+      billed: 5400,
+      paid: 5400,
+      balance: 0,
+      overdue: 0
+    });
+    assert.deepEqual(
+      statement.data.concessions.map(c => [c.name, c.category, c.reason, c.amount]),
+      [["Sibling", "SIBLING", "Second child", 600]]
+    );
+    assert.equal(statement.data.installmentPlan, null, "the structure's default plan");
+    assert.equal(statement.data.credit.balance, 0);
     const portal = await get(`${ME}/students/${world.s2.id}/fees`, { as: h.tokens.mother });
     assert.equal(portal.data.payments.length, 2);
 
@@ -261,9 +342,11 @@ describe("finance: payments", () => {
     assert.equal(cash.meta.total, 1);
   });
 
-  it("applies capped late fees to overdue invoices", async () => {
-    await h.modules.jobs.enqueue("finance.applyLateFees");
-    await settleJobs();
+  it("applies the school's default late-fee rule to overdue invoices, idempotently", async () => {
+    for (let run = 0; run < 2; run++) {
+      await h.modules.jobs.enqueue("finance.applyLateFees");
+      await settleJobs();
+    }
     const open = (await get(`${F}/invoices?status=ISSUED`)).data;
     assert.ok(open.length >= 1);
     for (const invoice of open) {
@@ -354,18 +437,22 @@ describe("communication", () => {
     assert.equal(sent.data.recipients, 1);
 
     /* An invoice due today gets one reminder per day */
+    const once = (
+      await post(`${F}/installment-plans`, {
+        name: "Activity (once)",
+        installments: [{ name: "Once", dueDate: todayIn("Asia/Kolkata"), sharePercent: 100 }]
+      })
+    ).data;
     const dueToday = (
       await post(`${F}/fee-structures`, {
         name: "Activity",
         classId: world.c2.id,
         items: [{ feeHeadId: world.tuition.id, amount: 300 }],
-        installments: [{ name: "Once", dueDate: todayIn("Asia/Kolkata"), sharePercent: 100 }]
+        installmentPlanIds: [once.id],
+        defaultInstallmentPlanId: once.id
       })
     ).data;
-    await post(`${F}/invoices/generation`, {
-      feeStructureId: dueToday.id,
-      feeInstallmentId: dueToday.installments[0].id
-    });
+    await post(`${F}/invoices/generation`, { feeStructureId: dueToday.id });
 
     const s3Token = (await import("../helpers/harness.js")).tokenFor(world.s3.userId, "STUDENT");
     for (let run = 0; run < 2; run++) {
