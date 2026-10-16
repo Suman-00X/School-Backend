@@ -51,3 +51,8 @@ export * from "./modules/library/loans/models/loan.schema.js";
 export * from "./modules/hr/leaves/models/leave.schema.js";
 export * from "./modules/hr/staff-attendance/models/staffAttendance.schema.js";
 export * from "./modules/hr/payroll/models/payroll.schema.js";
+
+/* transport */
+export * from "./modules/transport/vehicles/models/vehicle.schema.js";
+export * from "./modules/transport/routes/models/route.schema.js";
+export * from "./modules/transport/assignments/models/assignment.schema.js";
