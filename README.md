@@ -91,7 +91,8 @@ src/
       shared/            code only the users module needs (constants, validators, services, utils, models)
       accounts/  staff/  teachers/  parents/  students/
     academics/           academic-years classes subjects sections section-subjects teacher-assignments
-                         enrollments calendar attendance timetable grading exams marks report-cards homework
+                         enrollments calendar attendance timetable grading exams marks result-policies
+                         report-cards assessment-schemes homework
     portal/              /me: profile, learning, fees, homework (students, parents, teachers)
     administration/      settings, imports, audit-logs
     finance/             fee-heads fee-structures concessions invoices payments

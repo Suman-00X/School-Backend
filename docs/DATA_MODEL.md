@@ -78,10 +78,15 @@ The backend uses two databases, each for the kind of data it handles best.
 | attendance | `attendance_records` | One student's mark in a register: PRESENT, ABSENT, LATE, HALF_DAY, EXCUSED | Unique (session, student). Indexed by student/date and section/date |
 | timetable | `periods` | The bell schedule for a year | Partial unique (year, period number). CHECK end > start |
 | timetable | `timetable_slots` | Section × weekday × period → subject, teacher, room | Partial uniques stop clashes: one slot per section, one per teacher, one per room, per weekday and period |
-| grading | `grade_scales`, `grade_bands` | Percentage bands → grade and grade point | One default scale per school. Unique grade per scale. CHECK band ranges |
+| grading | `grade_scales`, `grade_bands` | Percentage bands → grade, grade point and descriptor. Templates: CBSE 9-point, CBSE co-scholastic, IB 1–7, US 4.0, UGC 10-point | One default scale per school. Unique grade per scale. CHECK band ranges; bands tile 0–100 without gaps or overlaps (API) |
 | exams | `exams` | An exam in a year, with grade scale and `results_published_at` | Unique (year, exam name). CHECK dates in order |
-| exams | `exam_papers` | A subject a section sits in an exam: date, start/end time, room, max/pass marks | Unique (exam, section, subject). CHECK max > 0, 0 ≤ pass ≤ max |
-| marks | `marks` | A student's result in one paper, with auto grade | Unique (student, paper). CHECK marks ≥ 0 (≤ max is checked by the API) |
+| exams | `exam_papers` | A subject a section sits in an exam: date, start/end time, room, max/pass marks. Optional `component` (THEORY, PRACTICAL…: one paper per component) and `grading_type` (MARKS, or GRADE for subjects graded without marks) | Partial unique (exam, section, subject) for whole papers and (…, component) for components. CHECK MARKS: max > 0, 0 ≤ pass ≤ max; GRADE: no max or pass |
+| marks | `marks` | A student's result in one paper: marks or a grade alone, `grade_is_manual`, absence with `absence_reason` (ABSENT, MEDICAL, EXEMPT) | Unique (student, paper). CHECK marks ≥ 0 (≤ max is checked by the API), reason only when absent |
+| result-policies | `result_policies` | How marks become results: grading mode (MARKS, GRADES, GPA, PASS_FAIL), scales, GPA scale, pass criteria, compartment, grace, best-of-N, absence treatment, ranking, rounding | Partial unique name; one default per school. CHECKs: GPA needs a GPA scale ≤ 10, percents 0–100, grace per subject ≤ total, decimals 0–4, pass/fail never ranks |
+| result-policies | `result_policy_subjects` | Per subject: SCHOLASTIC / CO_SCHOLASTIC, credits, mandatory (best-of), own minimum % | Unique (policy, subject). CHECK credits > 0, co-scholastic never mandatory |
+| result-policies | `result_policy_assignments` | Where a policy applies: an exam in one class, an exam, or a class | CHECK exam or class set. Partial unique per target |
+| assessment-schemes | `assessment_schemes`, `assessment_scheme_exams` | A term or annual result combining exams by weight (Term 1 40% + Term 2 60%), optional own policy, `results_published_at` | Partial unique (year, name). Unique (scheme, exam). CHECK 0 < weight ≤ 100; weights sum to 100 (API). Archived-year guard |
+| report-cards | `result_publications` | One version of an exam's or scheme's published results: who, when, superseded or withdrawn, report count, changed count | Unique (exam or scheme, version). **One current version per exam or scheme** (partial unique). Exam/scheme row locked while publishing. Archived-year guard |
 | homework | `homework_assignments` | Homework for a section and subject: due date, max marks, late policy. Attachments are stored files owned by the homework | CHECK due ≥ assigned, max marks > 0 |
 | homework | `homework_submissions` | A student's submission: text, status SUBMITTED / GRADED / RETURNED, late flag, marks, feedback | Partial unique (homework, student). CHECK marks ≥ 0. Attachments are stored files owned by the submission |
 
@@ -210,6 +215,7 @@ erDiagram
 | `importjobs` | `administration/imports` | CSV import progress and per-row errors | (tenant, time) |
 | `storedfiles` | `files/documents` | Upload metadata: owner, category, type, size, storage key (never returned), uploader | (tenant, owner type, owner id, time) |
 | `jobclaims` | `common/jobs/claims.js` | Once-only side effects (results published, absence alert sent today) | Unique `key`; TTL 90 days |
+| `report_snapshots` | `academics/report-cards` | A student's report card exactly as published, one per publication version: student, policy (with its settings), the report body (subjects, grades, GPA/CGPA, grace, result, ranks). **Immutable**: only `withdrawnAt` ever changes. The portal and its PDFs read these, never live marks | Unique (tenant, kind, source, student, version); (tenant, publication, student); (tenant, student, year, publishedAt) |
 
 IDs in Mongo documents are the **PostgreSQL UUIDs** stored as strings. There are no cross-database foreign keys; PostgreSQL stays the source of truth. File bytes live in object storage (S3 or local disk), never in a database.
 

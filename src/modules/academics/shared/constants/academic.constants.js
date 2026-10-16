@@ -17,3 +17,22 @@ export const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7];
 
 /* Request header naming the academic year a year-scoped request acts on */
 export const ACADEMIC_YEAR_HEADER = "x-academic-year-id";
+
+/* Exam papers: marked out of max marks, or graded only (Art, Conduct) */
+export const PAPER_GRADING_TYPES = ["MARKS", "GRADE"];
+/* Parts of one subject's paper, each with its own max and pass marks */
+export const PAPER_COMPONENTS = ["THEORY", "PRACTICAL", "INTERNAL", "PROJECT", "ORAL"];
+/* Why a student missed a paper (marks.absence_reason) */
+export const ABSENCE_REASONS = ["ABSENT", "MEDICAL", "EXEMPT"];
+
+/* Result policies (see result-policies) */
+export const GRADING_MODES = ["MARKS", "GRADES", "GPA", "PASS_FAIL"];
+export const ABSENCE_TREATMENTS = ["ZERO_FAIL", "EXCLUDE"];
+export const RANKING_METHODS = ["COMPETITION", "DENSE", "NONE"];
+export const RANK_SCOPES = ["SECTION", "CLASS", "BOTH"];
+export const ROUNDING_MODES = ["HALF_UP", "HALF_EVEN", "UP", "DOWN"];
+export const SUBJECT_CATEGORIES = ["SCHOLASTIC", "CO_SCHOLASTIC"];
+export const RESULT_STATUSES = ["PASS", "FAIL", "COMPARTMENT", "INCOMPLETE"];
+
+/* What a result publication (and its report snapshots) is for */
+export const PUBLICATION_KINDS = ["EXAM", "SCHEME"];

@@ -345,14 +345,21 @@ describe("grading, report cards and results", () => {
   });
 
   it("publishes and withdraws results", async () => {
-    assert.equal(
-      (await post(`${A}/exams/${world.exam.id}/result-publication`, {}, {}, 200)).message,
-      "Exam results published successfully"
-    );
+    /* Publishing now freezes a versioned report snapshot per student (D-10) */
+    const published = await post(`${A}/exams/${world.exam.id}/result-publication`, {}, {}, 200);
+    assert.equal(published.message, "Mid Term results published (version 1, 2 report cards)");
+    assert.equal(published.data.publication.status, "CURRENT");
     await post(`${A}/exams/${world.exam.id}/result-publication`, {}, {}, 409);
-    await del(`${A}/exams/${world.exam.id}/result-publication`);
+    const withdrawn = await del(`${A}/exams/${world.exam.id}/result-publication`);
+    assert.equal(
+      withdrawn.message,
+      "Mid Term results withdrawn: version 1 is hidden from students and parents and kept on record"
+    );
     await del(`${A}/exams/${world.exam.id}/result-publication`, {}, 404);
-    await post(`${A}/exams/${world.exam.id}/result-publication`, {}, {}, 200);
+    assert.equal(
+      (await post(`${A}/exams/${world.exam.id}/result-publication`, {}, {}, 200)).data.publication.version,
+      2
+    );
   });
 
   it("schedules papers without clashes and protects recorded marks", async () => {

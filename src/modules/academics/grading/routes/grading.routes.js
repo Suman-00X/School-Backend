@@ -10,6 +10,7 @@ const router = createRouter();
 
 router.post("/", authorize(can.manage), validate(rules.create), controller.create);
 router.get("/", authorize(can.read), validate(rules.list), controller.list);
+router.get("/templates", authorize(can.read), validate(rules.templates), controller.templates);
 router.get("/:gradeScaleId", authorize(can.read), validate(rules.getById), controller.getById);
 router.patch("/:gradeScaleId", authorize(can.manage), validate(rules.update), controller.update);
 router.delete("/:gradeScaleId", authorize(can.manage), validate(rules.remove), controller.remove);

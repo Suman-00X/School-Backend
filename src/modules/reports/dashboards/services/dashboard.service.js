@@ -1,7 +1,7 @@
 import { unprocessable } from "../../../../common/http/errors.js";
 import { getTenant, tenantToday } from "../../../../common/tenancy/tenant.service.js";
 import { minDate } from "../../../../common/utils/date.util.js";
-import { examPaperService, examService } from "../../../academics/exams/index.js";
+import { examService } from "../../../academics/exams/index.js";
 import { reportCardService } from "../../../academics/report-cards/index.js";
 import { sectionService } from "../../../academics/sections/index.js";
 import { analyticsQueries as q } from "../repositories/analytics.queries.js";
@@ -76,12 +76,10 @@ export const dashboardService = {
     return { from, to, collections: { byMonth, byMethod }, byClass, defaulters };
   },
 
-  /* Result analysis of one exam across every section that sat it */
+  /* Result analysis of one exam across every section that sat it, under each section's result policy */
   academics: async (ctx, { examId }) => {
     const exam = await examService.getById(ctx, examId);
-    const sectionIds = [...new Set((await examPaperService.findForExam(ctx, examId)).map(p => p.sectionId))];
-    const sheets = [];
-    for (const sectionId of sectionIds) sheets.push(await reportCardService.forSection(ctx, { sectionId, examId }));
+    const sheets = await reportCardService.forExam(ctx, exam);
 
     const subjects = new Map();
     for (const sheet of sheets) {
@@ -93,17 +91,26 @@ export const dashboardService = {
     }
     const students = sheets.flatMap(sheet => sheet.students.map(st => ({ ...st, section: sheet.section.name })));
     const decided = students.filter(s => s.result !== "INCOMPLETE");
+    const count = result => decided.filter(s => s.result === result).length;
+    const gpas = students.map(s => s.gpa).filter(g => g !== null && g !== undefined);
 
     return {
       exam: { id: exam.id, examName: exam.examName, resultsPublishedAt: exam.resultsPublishedAt },
       overall: {
         students: students.length,
-        passed: decided.filter(s => s.result === "PASS").length,
-        passPercentage: decided.length
-          ? Math.round((decided.filter(s => s.result === "PASS").length / decided.length) * 1000) / 10
-          : null
+        passed: count("PASS"),
+        compartment: count("COMPARTMENT"),
+        failed: count("FAIL"),
+        incomplete: students.length - decided.length,
+        passPercentage: decided.length ? Math.round((count("PASS") / decided.length) * 1000) / 10 : null,
+        averageGpa: gpas.length ? Math.round((gpas.reduce((a, b) => a + b, 0) / gpas.length) * 100) / 100 : null
       },
-      bySection: sheets.map(sheet => ({ section: sheet.section, ...sheet.statistics, subjects: undefined })),
+      bySection: sheets.map(sheet => ({
+        section: sheet.section,
+        policy: { id: sheet.policy.id, name: sheet.policy.name, gradingMode: sheet.policy.gradingMode },
+        ...sheet.statistics,
+        subjects: undefined
+      })),
       bySubject: [...subjects.values()].map(({ subject, averages }) => ({
         subject,
         averageMarks: averages.length
@@ -112,7 +119,7 @@ export const dashboardService = {
       })),
       toppers: students
         .filter(s => s.percentage !== null)
-        .sort((a, b) => b.percentage - a.percentage)
+        .sort((a, b) => (b.gpa ?? 0) - (a.gpa ?? 0) || b.percentage - a.percentage)
         .slice(0, 10)
         .map(s => ({
           studentId: s.studentId,
@@ -120,7 +127,9 @@ export const dashboardService = {
           lastName: s.lastName,
           section: s.section,
           percentage: s.percentage,
-          grade: s.grade
+          grade: s.grade,
+          gpa: s.gpa,
+          result: s.result
         }))
     };
   },

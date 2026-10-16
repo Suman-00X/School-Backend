@@ -58,7 +58,19 @@ export const examPaperService = {
   create: async (
     ctx,
     examId,
-    { sectionId, subjectId, examDate, startTime, endTime, room, maxMarks, passMarks, description }
+    {
+      sectionId,
+      subjectId,
+      gradingType = "MARKS",
+      component,
+      examDate,
+      startTime,
+      endTime,
+      room,
+      maxMarks,
+      passMarks,
+      description
+    }
   ) => {
     const exam = await examService.getById(ctx, examId);
     const placement = await sectionService.getPlacement(ctx, exam.academicYearId, sectionId);
@@ -68,12 +80,26 @@ export const examPaperService = {
     }
     const subject = await subjectService.findById(ctx, subjectId);
 
-    const duplicate = await examPaperRepository.exists(ctx.tenantId, [
-      eq(examPapers.examId, examId),
-      eq(examPapers.sectionId, sectionId),
-      eq(examPapers.subjectId, subjectId)
-    ]);
-    if (duplicate) throw conflict("This exam already has a paper for the subject in the section");
+    /* A subject has one whole paper, or one paper per component, all graded the same way */
+    const siblings = await examPaperRepository.findMany(ctx.tenantId, {
+      conditions: [
+        eq(examPapers.examId, examId),
+        eq(examPapers.sectionId, sectionId),
+        eq(examPapers.subjectId, subjectId)
+      ]
+    });
+    if (siblings.some(p => !p.component || !component || p.component === component)) {
+      throw conflict(
+        component && siblings.some(p => p.component === component)
+          ? `This exam already has a ${component.toLowerCase()} paper for ${subject.subjectName} in the section`
+          : "This exam already has a paper for the subject in the section"
+      );
+    }
+    if (siblings.some(p => p.gradingType !== gradingType)) {
+      throw unprocessable(
+        `${subject.subjectName}'s other components are ${siblings[0].gradingType === "GRADE" ? "graded without marks" : "marked out of marks"}; every component must be graded the same way`
+      );
+    }
 
     const schedule = { sectionId, examDate, startTime: toTime(startTime), endTime: toTime(endTime) };
     await assertNoScheduleClash(ctx, schedule);
@@ -83,7 +109,14 @@ export const examPaperService = {
       examId,
       sectionId,
       subjectId,
-      displayCode: examPaperCode({ subjectCode: subject.subjectCode, examType: exam.examType, ...placement }),
+      component,
+      gradingType,
+      displayCode: examPaperCode({
+        subjectCode: subject.subjectCode,
+        examType: exam.examType,
+        component,
+        ...placement
+      }),
       ...schedule,
       room,
       maxMarks,
@@ -103,6 +136,9 @@ export const examPaperService = {
     };
     if (merged.startTime && merged.endTime && merged.endTime <= merged.startTime) {
       throw unprocessable("endTime must be after startTime");
+    }
+    if (paper.gradingType === "GRADE" && (data.maxMarks !== undefined || data.passMarks !== undefined)) {
+      throw unprocessable("This paper is graded without marks, so it has no max or pass marks");
     }
     if (merged.passMarks !== null && merged.passMarks !== undefined && merged.passMarks > merged.maxMarks) {
       throw unprocessable("passMarks cannot exceed maxMarks");

@@ -5,7 +5,7 @@ import { academicYearService } from "../../../academics/academic-years/index.js"
 import { attendanceService } from "../../../academics/attendance/index.js";
 import { calendarService } from "../../../academics/calendar/index.js";
 import { enrollmentService } from "../../../academics/enrollments/index.js";
-import { reportCardPdfService, reportCardService } from "../../../academics/report-cards/index.js";
+import { reportCardPdfService, reportSnapshotService } from "../../../academics/report-cards/index.js";
 import { sectionService } from "../../../academics/sections/index.js";
 import { teacherAssignmentService } from "../../../academics/teacher-assignments/index.js";
 import { timetableService } from "../../../academics/timetable/index.js";
@@ -65,15 +65,16 @@ export const learningService = {
     return attendanceService.studentAttendance(ctx, studentId, query);
   },
 
-  /* Only exams whose results are published */
+  /* The published version of each exam and assessment scheme, exactly as published (report snapshots) */
   reportCards: async (ctx, studentId, query) => {
     await studentAccess.assert(ctx, studentId);
-    return reportCardService.forStudent(ctx, studentId, { ...query, publishedOnly: true });
+    return reportSnapshotService.forFamily(ctx, studentId, query);
   },
 
-  reportCardPdf: async (ctx, studentId, { examId }) => {
+  /* Rendered from the published snapshot, never from live marks */
+  reportCardPdf: async (ctx, studentId, query) => {
     await studentAccess.assert(ctx, studentId);
-    return reportCardPdfService.render(ctx, studentId, { examId, publishedOnly: true });
+    return reportCardPdfService.renderSnapshot(ctx, await reportSnapshotService.familySnapshot(ctx, studentId, query));
   },
 
   calendar: (ctx, query) => calendarService.list(ctx, query),

@@ -15,6 +15,8 @@ export const nextRollNumber = (tenantId, { yearYY, classSequence, sectionName },
 export const sectionSubjectCode = ({ subjectCode, classSequence, sectionName }) =>
   `${subjectCode}-${classSequence}${sectionName}`;
 
-/* MA01-1A-INTERNAL: a subject paper in an exam */
-export const examPaperCode = ({ subjectCode, classSequence, sectionName, examType }) =>
-  `${subjectCode}-${classSequence}${sectionName}-${examType ?? "EXAM"}`;
+const COMPONENT_CODES = { THEORY: "TH", PRACTICAL: "PR", INTERNAL: "IA", PROJECT: "PJ", ORAL: "OR" };
+
+/* MA01-1A-INTERNAL: a subject paper in an exam; PH01-10A-FINAL-PR for a component */
+export const examPaperCode = ({ subjectCode, classSequence, sectionName, examType, component }) =>
+  `${subjectCode}-${classSequence}${sectionName}-${examType ?? "EXAM"}${component ? `-${COMPONENT_CODES[component]}` : ""}`;

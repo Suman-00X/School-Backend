@@ -1,6 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { transaction } from "../../../../common/database/postgres.js";
 import { notFound, unprocessable } from "../../../../common/http/errors.js";
+import { GRADE_SCALE_TEMPLATES } from "../../shared/constants/gradeScaleTemplates.constants.js";
 import { gradeBands, gradeScales } from "../models/gradeScale.schema.js";
 import { gradeBandRepository, gradeScaleRepository } from "../repositories/gradeScale.repository.js";
 
@@ -12,6 +13,11 @@ const assertBandsCover = bands => {
   const sorted = [...bands].sort((a, b) => a.minPercent - b.minPercent);
   if (sorted[0].minPercent !== 0) throw unprocessable("The lowest band must start at 0%");
   for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].minPercent < sorted[i - 1].maxPercent) {
+      throw unprocessable(
+        `Bands must not overlap: ${sorted[i - 1].grade} ends at ${sorted[i - 1].maxPercent}% but ${sorted[i].grade} starts at ${sorted[i].minPercent}%`
+      );
+    }
     if (sorted[i].minPercent !== sorted[i - 1].maxPercent) {
       throw unprocessable(
         `Bands must be contiguous: ${sorted[i - 1].grade} ends at ${sorted[i - 1].maxPercent}% but ${sorted[i].grade} starts at ${sorted[i].minPercent}%`
@@ -38,7 +44,16 @@ export const gradingService = {
     return scale;
   },
 
-  create: (ctx, { bands, ...data }) => {
+  /* Ready-made scales a school can copy */
+  templates: () => Object.entries(GRADE_SCALE_TEMPLATES).map(([key, template]) => ({ key, ...template })),
+
+  /* From explicit bands, or a copy of a template ({ templateKey }) */
+  create: (ctx, { bands, templateKey, ...data }) => {
+    const template = templateKey && GRADE_SCALE_TEMPLATES[templateKey];
+    if (template) {
+      bands = template.bands;
+      data = { name: template.name, description: template.description, ...data };
+    }
     const sorted = assertBandsCover(bands);
     return transaction(async tx => {
       if (data.isDefault) await gradeScaleRepository.clearDefault(ctx.tenantId, null, { dbc: tx });
@@ -77,6 +92,17 @@ export const gradingService = {
   },
 
   exists: (ctx, gradeScaleId) => gradeScaleRepository.exists(ctx.tenantId, [eq(gradeScales.id, gradeScaleId)]),
+
+  /* The lowest percentage that earns a passing grade (null: every band passes or no scale) */
+  lowestPassingPercent: scale => {
+    if (!scale?.bands?.some(band => !band.isPassing)) return null;
+    const passing = scale.bands.filter(band => band.isPassing).map(band => band.minPercent);
+    return passing.length ? Math.min(...passing) : 100;
+  },
+
+  /* The band a recorded grade belongs to (descriptors for grade-only subjects) */
+  bandForGrade: (scale, grade) =>
+    scale?.bands?.find(band => band.grade.toUpperCase() === String(grade ?? "").toUpperCase()) ?? null,
 
   /* -> { grade, gradePoint, remark, isPassing } or null */
   gradeFor: (scale, percentage) => {

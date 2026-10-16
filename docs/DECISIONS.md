@@ -142,19 +142,26 @@ The weights live in one constant (`ATTENDANCE_WEIGHT`). They can become a per-sc
 - **Overrides:** the override roles (ADMIN by default; the school may add PRINCIPAL) can still change a locked register, but they must give an `overrideReason`. The reason, the person and the time are stored on the register and shown in the register view, and the change is in the audit trail.
 - **Late first entry:** taking a register for the first time after the window also counts as a change.
 
-### 🟡 D-09: Report-card result rules
-- **PASS** only if every paper is passed, meaning marks ≥ the paper's pass marks *and* the grade band is passing.
-- **FAIL** if any paper is failed or missed. A missed paper shows grade `AB`.
-- **INCOMPLETE** while any paper has no marks yet.
+### 🟡 D-09: Report-card result rules → configurable result policies (done)
+Each school defines **result policies** (`/academics/result-policies`): grading mode (marks only, letter grades, GPA on any scale up to 10 with credits, pass/fail), pass criteria (paper pass marks, a minimum % per subject or per policy, an overall minimum %, theory/practical components each passing), compartment (up to N failed subjects), grace marks (per subject and in total, only to pass a subject, and only when the result improves), best N subjects with mandatory ones, co-scholastic subjects graded without marks, absence treatment per reason (ABSENT, MEDICAL, EXEMPT), ranking (competition, dense, none; section and/or class; hidden from families) and rounding.
 
-Not modelled: grace marks, compartment/supplementary exams, best-of-N subjects, weighted exams (e.g. term 1 = 40%).
+- **Where a policy applies, most specific first:** exam + class → exam → class → school default → built-in. An exam is a one-off decision (a board exam, a pass/fail unit test), so it beats the class's standing rule.
+- **Grade scale:** the exam's own scale, else the policy's, else the school default.
+- **Built-in rules = the old behaviour,** so schools without a policy see the same results as before.
+- **Weighted exams** are assessment schemes (`/academics/assessment-schemes`). See the review points below.
 
-**Ranks** use standard competition ranking (1, 2, 2, 4) by percentage, failed students included. Some boards (e.g. CBSE) discourage publishing ranks: consider a setting to hide them from students and parents.
+### 🟢 D-10: Report cards are frozen when published (done)
+Live report cards are still computed from marks. Publishing (an exam or an assessment scheme) also stores an immutable snapshot per student in MongoDB `report_snapshots`, as version N (`result_publications`). Re-publishing adds a version, withdrawing hides it from the portal and keeps it, and staff can compare live results with any version. The portal and its PDFs read only snapshots.
 
-### 🟢 D-10: Report cards are computed live, not stored
-They're calculated from marks on every request, so they are always consistent with the marks. Publishing results only flips visibility.
-
-If you need a frozen copy of what was published, the planned MongoDB `report_snapshots` collection is the place for it.
+### Review points for D-09 / D-10
+- 🟡 **Grace counts in the total** (`graceCountsInTotal`, default true), and the subject's grade uses the graced marks. Some boards keep grace out of the aggregate: set it to false.
+- 🟡 **In assessment schemes, an absence counted as zero is 0% for that exam,** not an automatic fail of the year. The weighted result decides. Excluded absences (exempt, medical when excluded) drop that exam, and the other exams' weights are rescaled. Theory/practical pass rules apply in each exam's own result; the weighted subject is judged on its weighted total.
+- 🟡 **Co-scholastic subjects in a scheme show the latest exam's grade.** Grades are not averaged.
+- 🟡 **Ranks are hidden on the printed PDF too** when the policy hides them from families, because the card goes home.
+- 🟢 **Results published before this change have no snapshot,** so they are not in the portal until they are published again (`POST …/result-publication/versions`). There are no live schools yet.
+- 🟢 **Scheme results do not notify families yet.** Exam results still do, once per exam.
+- 🟢 **The letterhead on a snapshot PDF is today's** (name, logo); the report body is frozen.
+- 🟢 **`npm run mongo:sync-indexes` only loaded the audit-log model.** It now also loads report snapshots (their unique version index matters). Other modules' Mongo models still rely on `autoIndex` outside production.
 
 ### 🟡 D-11: What teachers can access (record-level scope)
 A teacher can act on a section if they are its **class teacher** or are **assigned a subject** in it. Inside such a section:

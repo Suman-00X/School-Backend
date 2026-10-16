@@ -1,9 +1,23 @@
-import { asc } from "drizzle-orm";
-import { createRepository } from "../../../../common/database/repository.js";
+import { asc, eq } from "drizzle-orm";
+import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { exams } from "../models/exam.schema.js";
 
-export const examRepository = createRepository({
+const base = createRepository({
   table: exams,
   queryKey: "exams",
   orderBy: [asc(exams.startDate), asc(exams.examName)]
 });
+
+export const examRepository = {
+  ...base,
+
+  /* Lock an exam for the rest of the transaction (publishing results) */
+  lockForUpdate: async (tenantId, examId, { dbc }) => {
+    const [row] = await dbc
+      .select()
+      .from(exams)
+      .where(scoped(exams, tenantId, eq(exams.id, examId)))
+      .for("update");
+    return row ?? null;
+  }
+};

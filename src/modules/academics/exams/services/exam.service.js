@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { createCrudService } from "../../../../common/crud/crudService.js";
-import { publish } from "../../../../common/events/events.js";
-import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
+import { unprocessable } from "../../../../common/http/errors.js";
 import { gradingService } from "../../grading/index.js";
 import { exams } from "../models/exam.schema.js";
 import { examRepository } from "../repositories/exam.repository.js";
@@ -38,24 +37,15 @@ export const examService = {
     return base.update(ctx, examId, data);
   },
 
-  /* Results become visible to students and parents; subscribers notify them */
-  publishResults: async (ctx, examId) => {
-    const exam = await base.getById(ctx, examId);
-    if (exam.resultsPublishedAt) throw conflict("Results for this exam are already published");
-    const updated = await examRepository.update(ctx.tenantId, examId, { resultsPublishedAt: new Date() });
-    await publish(EXAM_RESULTS_PUBLISHED, { tenantId: ctx.tenantId, examId, academicYearId: exam.academicYearId });
-    return updated;
-  },
-
-  unpublishResults: async (ctx, examId) => {
-    const exam = await base.getById(ctx, examId);
-    if (!exam.resultsPublishedAt) throw notFound("Result publication");
-    return examRepository.update(ctx.tenantId, examId, { resultsPublishedAt: null });
-  },
-
   /* For other submodules: null when missing */
   findById: (ctx, examId) => examRepository.findById(ctx.tenantId, examId),
 
   findInYear: (ctx, academicYearId) =>
-    examRepository.findMany(ctx.tenantId, { conditions: [eq(exams.academicYearId, academicYearId)] })
+    examRepository.findMany(ctx.tenantId, { conditions: [eq(exams.academicYearId, academicYearId)] }),
+
+  /* Result publication (report-cards) runs inside its own transaction: lock, then flip visibility */
+  lockForUpdate: (ctx, examId, { dbc }) => examRepository.lockForUpdate(ctx.tenantId, examId, { dbc }),
+
+  setResultsPublishedAt: (ctx, examId, publishedAt, { dbc }) =>
+    examRepository.update(ctx.tenantId, examId, { resultsPublishedAt: publishedAt }, { dbc })
 };

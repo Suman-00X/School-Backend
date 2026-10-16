@@ -112,33 +112,62 @@ export const exportService = {
     };
   },
 
-  /* Result sheet of a section for an exam: one column per paper */
+  /* Result sheet of a section for an exam under its result policy: one column per subject */
   results: async (ctx, { examId, sectionId }) => {
     const sheet = await reportCardService.forSection(ctx, { sectionId, examId });
+    const subjects = new Map();
+    for (const paper of sheet.papers) {
+      const entry = subjects.get(paper.subject.id) ?? { subject: paper.subject, maxMarks: 0, graded: true };
+      entry.maxMarks += paper.maxMarks ?? 0;
+      entry.graded &&= paper.gradingType === "GRADE";
+      subjects.set(paper.subject.id, entry);
+    }
+    const cell = line => {
+      if (!line) return "";
+      if (line.status === "ABSENT") return "AB";
+      if (line.status === "EXEMPT") return "EX";
+      if (line.category === "CO_SCHOLASTIC") return line.grade ?? "";
+      if (!sheet.display.marks) return line.passed === null ? "" : line.passed ? "P" : "F";
+      return line.graceMarks ? `${line.marksObtained}+${line.graceMarks}` : (line.marksObtained ?? "");
+    };
+    const extra = [
+      sheet.display.gradePoints && { key: "gpa", header: "GPA" },
+      sheet.students.some(s => s.graceTotal > 0) && { key: "graceTotal", header: "Grace" },
+      sheet.display.classRank && { key: "classRank", header: "Class rank" }
+    ].filter(Boolean);
     return {
       fileName: `results-${sheet.exam.examName}-${sheet.section.name}`,
-      title: `${sheet.exam.examName}: ${sheet.section.name}`,
-      rows: sheet.students.map(s => ({
-        rollNumber: s.rollNumber,
-        name: `${s.firstName ?? ""} ${s.lastName ?? ""}`.trim(),
-        ...Object.fromEntries(
-          s.subjects.map(sub => [sub.paperId, sub.status === "ABSENT" ? "AB" : (sub.marksObtained ?? "")])
-        ),
-        total: s.totalObtained,
-        percentage: s.percentage,
-        grade: s.grade,
-        result: s.result,
-        rank: s.rank
-      })),
+      title: `${sheet.exam.examName}: ${sheet.section.name} (${sheet.policy.name})`,
+      rows: sheet.students.map(s => {
+        const lines = new Map([...s.subjects, ...s.coScholastic].map(line => [line.subject.id, line]));
+        return {
+          rollNumber: s.rollNumber,
+          name: `${s.firstName ?? ""} ${s.lastName ?? ""}`.trim(),
+          ...Object.fromEntries([...subjects.keys()].map(id => [id, cell(lines.get(id))])),
+          total: s.totalObtained,
+          percentage: s.percentage,
+          grade: s.grade,
+          result: s.result,
+          rank: s.rank,
+          gpa: s.gpa,
+          graceTotal: s.graceTotal,
+          classRank: s.classRank
+        };
+      }),
       columns: [
         { key: "rollNumber", header: "Roll no." },
         { key: "name", header: "Student", width: 24 },
-        ...sheet.papers.map(p => ({ key: p.id, header: `${p.subject.subjectCode} (/${p.maxMarks})`, width: 12 })),
+        ...[...subjects.entries()].map(([id, { subject, maxMarks, graded }]) => ({
+          key: id,
+          header: graded ? subject.subjectCode : `${subject.subjectCode} (/${maxMarks})`,
+          width: 12
+        })),
         { key: "total", header: "Total" },
         { key: "percentage", header: "%" },
         { key: "grade", header: "Grade" },
         { key: "result", header: "Result" },
-        { key: "rank", header: "Rank" }
+        { key: "rank", header: "Rank" },
+        ...extra
       ]
     };
   }

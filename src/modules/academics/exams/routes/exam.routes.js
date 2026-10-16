@@ -16,19 +16,7 @@ router.get("/", authorize(can.read), validate(rules.list), inYear, controller.li
 router.get("/:examId", authorize(can.read), validate(rules.getById), controller.getById);
 router.patch("/:examId", authorize(can.update), validate(rules.update), controller.update);
 
-/* Publishing results is a sub-resource: create it to publish, delete it to withdraw */
-router.post(
-  "/:examId/result-publication",
-  authorize(can.publishResults),
-  validate(rules.publication),
-  controller.publishResults
-);
-router.delete(
-  "/:examId/result-publication",
-  authorize(can.publishResults),
-  validate(rules.publication),
-  controller.unpublishResults
-);
+/* /:examId/result-publication is served by report-cards (it stores report snapshots) */
 
 /* /api/v1/academics/exams/:examId/papers */
 router.get("/:examId/papers", authorize(can.read), validate(rules.listPapers), papers.list);

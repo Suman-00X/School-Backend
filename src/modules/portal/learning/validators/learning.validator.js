@@ -7,8 +7,19 @@ const params = idParams("studentId");
 export const learningValidators = {
   student: { params },
   attendance: { params, query: z.object({ from: date().optional(), to: date().optional() }) },
-  reportCards: { params, query: z.object({ examId: id().optional(), academicYearId: id().optional() }) },
-  reportCardPdf: { params, query: z.object({ examId: id() }) },
+  reportCards: {
+    params,
+    query: z.object({ examId: id().optional(), schemeId: id().optional(), academicYearId: id().optional() })
+  },
+  reportCardPdf: {
+    params,
+    query: z
+      .object({ examId: id().optional(), schemeId: id().optional() })
+      .refine(q => Boolean(q.examId) !== Boolean(q.schemeId), {
+        path: ["examId"],
+        message: "send either examId or schemeId"
+      })
+  },
   calendar: {
     query: listQuery({
       from: date().optional(),

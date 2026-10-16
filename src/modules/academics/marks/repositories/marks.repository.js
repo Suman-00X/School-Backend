@@ -21,7 +21,9 @@ export const marksRepository = {
         set: {
           marksObtained: excluded(marks.marksObtained),
           isAbsent: excluded(marks.isAbsent),
+          absenceReason: excluded(marks.absenceReason),
           grade: excluded(marks.grade),
+          gradeIsManual: excluded(marks.gradeIsManual),
           remarks: excluded(marks.remarks),
           evaluatedBy: excluded(marks.evaluatedBy),
           evaluatedAt: excluded(marks.evaluatedAt),

@@ -1,5 +1,6 @@
 import { z } from "../../../../common/validation/zod.js";
 import { idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { GRADE_SCALE_TEMPLATE_KEYS } from "../../shared/constants/gradeScaleTemplates.constants.js";
 
 const percent = () => z.number().min(0).max(100);
 
@@ -27,10 +28,24 @@ const fields = z.object({
   bands
 });
 
+/* Explicit bands, or a copy of a template (name defaults to the template's) */
+const createBody = fields
+  .extend({
+    name: text(100).optional(),
+    bands: bands.optional(),
+    templateKey: z.enum(GRADE_SCALE_TEMPLATE_KEYS).optional()
+  })
+  .refine(body => Boolean(body.templateKey) !== Boolean(body.bands), {
+    path: ["bands"],
+    message: "send either bands or templateKey"
+  })
+  .refine(body => body.templateKey || body.name, { path: ["name"], message: "is required" });
+
 const params = idParams("gradeScaleId");
 
 export const gradingValidators = {
-  create: { body: fields },
+  create: { body: createBody },
+  templates: {},
   list: { query: listQuery() },
   getById: { params },
   update: { params, body: patchBody(fields) },

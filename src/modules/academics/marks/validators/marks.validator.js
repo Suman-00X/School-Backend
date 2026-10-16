@@ -1,19 +1,24 @@
 import { z } from "../../../../common/validation/zod.js";
 import { bulkBody, id, listQuery, optionalText } from "../../../../common/validation/schemas.js";
+import { ABSENCE_REASONS } from "../../shared/constants/academic.constants.js";
 
+/* Marks, or a grade alone for papers graded without marks (Art, Conduct), or an absence */
 const entry = z
   .object({
     studentId: id(),
     examPaperId: id(),
     marksObtained: z.number().min(0).max(1000).optional(),
     isAbsent: z.boolean().default(false),
+    /* MEDICAL and EXEMPT absences can be excluded from results by the result policy */
+    absenceReason: z.enum(ABSENCE_REASONS).optional(),
     grade: optionalText(5),
     remarks: optionalText(500)
   })
-  .refine(e => e.isAbsent || e.marksObtained !== undefined, {
+  .refine(e => e.isAbsent || e.marksObtained !== undefined || e.grade !== undefined, {
     path: ["marksObtained"],
-    message: "is required unless isAbsent is true"
-  });
+    message: "is required unless isAbsent is true or a grade is given"
+  })
+  .refine(e => !e.absenceReason || e.isAbsent, { path: ["absenceReason"], message: "requires isAbsent: true" });
 
 const uniquePairs = body => {
   const keys = body.marks.map(m => `${m.studentId}:${m.examPaperId}`);

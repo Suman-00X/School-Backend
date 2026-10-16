@@ -192,9 +192,13 @@ For many students (any spreadsheet layout, saved as CSV):
 
 ### Exams and results
 
-1. `POST /academics/exams` creates the exam, then `POST /academics/exams/:examId/papers` adds papers (date, time, room, max and pass marks).
-2. `POST /academics/marks` or `/marks/bulk` records marks. Teachers can do this only for their sections. Grades are computed from the grade scale.
-3. `POST /academics/exams/:examId/result-publication` publishes results. Students and parents are notified once, and report cards appear in `/me/students/:id/report-cards` (also as PDF).
+1. **Rules:** `POST /academics/result-policies` defines how marks become results (marks only, letter grades, GPA, pass/fail; pass criteria, compartment, grace, best-of-N, absences, ranking, rounding). `POST /academics/result-policy-assignments` applies one to an exam in one class, an exam, or a class; `isDefault` makes it the school default. The most specific wins: exam + class, exam, class, school default, then the built-in standard rules. `GET /academics/result-policies/resolution` says which applies and why. Grade scales can start from a template (`GET /academics/grade-scales/templates`).
+2. `POST /academics/exams` creates the exam, then `POST /academics/exams/:examId/papers` adds papers (date, time, room, max and pass marks). Split a subject with `component` (THEORY, PRACTICAL…); use `gradingType: GRADE` for subjects graded without marks.
+3. `POST /academics/marks` or `/marks/bulk` records marks, a grade alone for GRADE papers, or an absence with `absenceReason` (ABSENT, MEDICAL, EXEMPT). Teachers can do this only for their sections.
+4. `POST /academics/report-cards/previews` runs any policy (saved or inline) on the real marks and shows what would change. Nothing is saved.
+5. `POST /academics/exams/:examId/result-publication` publishes results as version 1 and freezes a report snapshot per student. Students and parents are notified once, and see the snapshot in `/me/students/:id/report-cards` (also as PDF, rendered from the snapshot).
+6. After a correction, `GET …/result-publication/comparison` shows live results against the published version, and `POST …/result-publication/versions` publishes the next version. `DELETE …/result-publication` withdraws it from the portal; every version stays available to staff (`GET …/result-publication/versions`, `GET /academics/report-cards/snapshots`).
+7. Term and annual results: `POST /academics/assessment-schemes` combines exams with weights that add up to 100. It has the same results, preview and publication endpoints, with CGPA across the exams.
 
 ### Fees
 

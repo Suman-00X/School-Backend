@@ -1,14 +1,20 @@
 import { relations, sql } from "drizzle-orm";
-import { check, date, index, numeric, pgTable, text, time, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, date, index, numeric, pgEnum, pgTable, text, time, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { baseColumns } from "../../../../common/database/columns.js";
 import { academicYears } from "../../academic-years/models/academicYear.schema.js";
 import { sections } from "../../sections/models/section.schema.js";
 import { subjects } from "../../subjects/models/subject.schema.js";
+import { PAPER_COMPONENTS, PAPER_GRADING_TYPES } from "../../shared/constants/academic.constants.js";
 import { exams } from "./exam.schema.js";
 
 export const score = name => numeric(name, { precision: 6, scale: 2, mode: "number" });
 
-/* One paper: a subject a section sits in an exam, with its max/pass marks */
+export const paperGradingType = pgEnum("paper_grading_type", PAPER_GRADING_TYPES);
+export const paperComponent = pgEnum("paper_component", PAPER_COMPONENTS);
+
+/* One paper: a subject a section sits in an exam, with its max/pass marks.
+   A subject may be split into components (THEORY + PRACTICAL), one paper each.
+   GRADE papers (Art, Conduct) have no marks: teachers record a grade only. */
 export const examPapers = pgTable(
   "exam_papers",
   {
@@ -25,18 +31,28 @@ export const examPapers = pgTable(
     subjectId: uuid("subject_id")
       .notNull()
       .references(() => subjects.id),
+    component: paperComponent("component"),
+    gradingType: paperGradingType("grading_type").notNull().default("MARKS"),
     displayCode: text("display_code").notNull(),
     examDate: date("exam_date"),
     startTime: time("start_time"),
     endTime: time("end_time"),
     room: text("room"),
-    maxMarks: score("max_marks").notNull(),
+    maxMarks: score("max_marks"),
     passMarks: score("pass_marks"),
     description: text("description")
   },
   t => [
-    uniqueIndex("exam_papers_exam_section_subject_uq").on(t.examId, t.sectionId, t.subjectId),
-    uniqueIndex("exam_papers_exam_section_code_uq").on(t.examId, t.sectionId, t.displayCode),
+    /* One whole paper per subject, or one paper per component */
+    uniqueIndex("exam_papers_exam_section_subject_uq")
+      .on(t.examId, t.sectionId, t.subjectId)
+      .where(sql`${t.component} IS NULL AND ${t.isActive} = true`),
+    uniqueIndex("exam_papers_exam_section_subject_component_uq")
+      .on(t.examId, t.sectionId, t.subjectId, t.component)
+      .where(sql`${t.component} IS NOT NULL AND ${t.isActive} = true`),
+    uniqueIndex("exam_papers_exam_section_code_uq")
+      .on(t.examId, t.sectionId, t.displayCode)
+      .where(sql`${t.isActive} = true`),
     index("exam_papers_section_date_idx").on(t.sectionId, t.examDate),
     check(
       "exam_papers_times_chk",
@@ -44,7 +60,8 @@ export const examPapers = pgTable(
     ),
     check(
       "exam_papers_marks_chk",
-      sql`${t.maxMarks} > 0 AND (${t.passMarks} IS NULL OR ${t.passMarks} BETWEEN 0 AND ${t.maxMarks})`
+      sql`(${t.gradingType} = 'MARKS' AND ${t.maxMarks} > 0 AND (${t.passMarks} IS NULL OR ${t.passMarks} BETWEEN 0 AND ${t.maxMarks}))
+        OR (${t.gradingType} = 'GRADE' AND ${t.maxMarks} IS NULL AND ${t.passMarks} IS NULL)`
     )
   ]
 );

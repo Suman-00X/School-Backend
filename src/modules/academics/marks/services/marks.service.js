@@ -6,13 +6,15 @@ import { enrollmentService } from "../../enrollments/index.js";
 import { examPaperService, examService } from "../../exams/index.js";
 import { examPapers } from "../../exams/models/examPaper.schema.js";
 import { gradingService } from "../../grading/index.js";
+import { resultPolicyService } from "../../result-policies/index.js";
+import { sectionService } from "../../sections/index.js";
 import { teachingScope } from "../../teacher-assignments/index.js";
 import { marks } from "../models/marks.schema.js";
 import { marksRepository } from "../repositories/marks.repository.js";
 
 const withPaper = {
   examPaper: {
-    columns: { id: true, displayCode: true, maxMarks: true, passMarks: true },
+    columns: { id: true, displayCode: true, component: true, gradingType: true, maxMarks: true, passMarks: true },
     with: {
       exam: { columns: { id: true, examName: true, examType: true } },
       subject: { columns: { id: true, subjectName: true, subjectCode: true } }
@@ -20,7 +22,8 @@ const withPaper = {
   }
 };
 
-/* Per-request memo of papers and grade scales (bulk entry hits the same ones) */
+/* Per-request memo of papers and grade scales (bulk entry hits the same ones).
+   The scale follows the result policy: the exam's own scale, else the policy's, else the default. */
 const loader = ctx => {
   const papers = new Map();
   const scales = new Map();
@@ -29,14 +32,51 @@ const loader = ctx => {
       if (!papers.has(id)) papers.set(id, await examPaperService.findById(ctx, id));
       return papers.get(id);
     },
-    scaleForExam: async examId => {
-      if (!scales.has(examId)) {
-        const exam = await examService.findById(ctx, examId);
-        scales.set(examId, await gradingService.resolveScale(ctx, exam?.gradeScaleId));
+    scalesFor: paper => {
+      const key = `${paper.examId}:${paper.sectionId}`;
+      if (!scales.has(key)) {
+        scales.set(
+          key,
+          (async () => {
+            const [exam, section] = await Promise.all([
+              examService.findById(ctx, paper.examId),
+              sectionService.findById(ctx, paper.sectionId)
+            ]);
+            const { policy } = await resultPolicyService.resolve(ctx, {
+              examId: paper.examId,
+              classId: section?.classId
+            });
+            const scale = await gradingService.resolveScale(ctx, exam?.gradeScaleId ?? policy.gradeScaleId);
+            const coScale = policy.coScholasticScaleId
+              ? await gradingService.resolveScale(ctx, policy.coScholasticScaleId)
+              : scale;
+            return { scale, coScale };
+          })()
+        );
       }
-      return scales.get(examId);
+      return scales.get(key);
     }
   };
+};
+
+/* Grade-only papers take a grade from the co-scholastic scale (when the school has one) */
+const gradeOnly = async (entry, paper, load) => {
+  if (entry.marksObtained !== undefined) {
+    throw unprocessable(`${paper.displayCode} is graded without marks: send a grade instead of marksObtained`);
+  }
+  if (entry.isAbsent) return null;
+  if (!entry.grade) throw unprocessable(`${paper.displayCode} is graded without marks: grade is required`);
+  const { coScale } = await load.scalesFor(paper);
+  const band = gradingService.bandForGrade(coScale, entry.grade);
+  if (coScale && !band) {
+    throw unprocessable(
+      `Grade ${entry.grade} is not on the ${coScale.name} scale (${[...coScale.bands]
+        .sort((a, b) => b.minPercent - a.minPercent)
+        .map(b => b.grade)
+        .join(", ")})`
+    );
+  }
+  return band?.grade ?? entry.grade;
 };
 
 /* Check one entry against its paper and build the row to save */
@@ -54,24 +94,38 @@ const buildRow = async (ctx, entry, evaluatedBy, load) => {
   );
   if (!enrolled) throw unprocessable("The student is not enrolled in this paper's section");
 
-  if (!entry.isAbsent && entry.marksObtained > paper.maxMarks) {
-    throw unprocessable(`marksObtained cannot exceed the paper's maximum of ${paper.maxMarks}`);
-  }
-
-  /* An explicit grade wins; otherwise grade from the exam's scale */
-  let grade = entry.grade ?? null;
-  if (!grade && !entry.isAbsent) {
-    const scale = await load.scaleForExam(paper.examId);
-    grade = gradingService.gradeFor(scale, (entry.marksObtained / paper.maxMarks) * 100)?.grade ?? null;
+  let grade = null;
+  let gradeIsManual = false;
+  if (paper.gradingType === "GRADE") {
+    grade = await gradeOnly(entry, paper, load);
+    gradeIsManual = grade !== null;
+  } else {
+    if (!entry.isAbsent && entry.marksObtained === undefined) {
+      throw unprocessable(
+        `${paper.displayCode} is marked out of ${paper.maxMarks}: send marksObtained (a grade alone is for papers graded without marks)`
+      );
+    }
+    if (!entry.isAbsent && entry.marksObtained > paper.maxMarks) {
+      throw unprocessable(`marksObtained cannot exceed the paper's maximum of ${paper.maxMarks}`);
+    }
+    /* An explicit grade wins; otherwise grade from the scale */
+    grade = entry.grade ?? null;
+    gradeIsManual = Boolean(grade);
+    if (!grade && !entry.isAbsent) {
+      const { scale } = await load.scalesFor(paper);
+      grade = gradingService.gradeFor(scale, (entry.marksObtained / paper.maxMarks) * 100)?.grade ?? null;
+    }
   }
 
   return {
     academicYearId: paper.academicYearId,
     studentId: entry.studentId,
     examPaperId: entry.examPaperId,
-    marksObtained: entry.isAbsent ? null : entry.marksObtained,
+    marksObtained: entry.isAbsent || paper.gradingType === "GRADE" ? null : entry.marksObtained,
     isAbsent: entry.isAbsent,
+    absenceReason: entry.isAbsent ? (entry.absenceReason ?? "ABSENT") : null,
     grade,
+    gradeIsManual,
     remarks: entry.remarks ?? null,
     evaluatedBy: evaluatedBy ?? null,
     evaluatedAt: new Date()

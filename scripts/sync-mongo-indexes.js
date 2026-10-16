@@ -3,6 +3,8 @@
 import mongoose from "mongoose";
 import { closeMongo, connectMongo } from "../src/common/database/mongo.js";
 import "../src/common/audit/auditLog.model.js";
+/* Its unique (student, version) index guards published report cards */
+import "../src/modules/academics/report-cards/models/reportSnapshot.model.js";
 
 await connectMongo();
 
