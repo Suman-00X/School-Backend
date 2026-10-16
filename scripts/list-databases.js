@@ -10,7 +10,8 @@ import * as schema from "../src/database.schema.js";
 initPostgres(schema);
 try {
   const lines = [["platform", env.databaseUrl, ""]];
-  for (const school of await listTenantRecords()) lines.push([school.code, databaseUrlFor(school), mongoUrlFor(school)]);
+  for (const school of await listTenantRecords())
+    lines.push([school.code, databaseUrlFor(school), mongoUrlFor(school)]);
   process.stdout.write(`${lines.map(line => line.join("\t")).join("\n")}\n`);
 } finally {
   await closePostgres();
