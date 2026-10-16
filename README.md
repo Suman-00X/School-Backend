@@ -8,7 +8,7 @@ Covers academics (attendance, timetable, exams, report cards, homework), fees wi
 - [Endpoints](docs/ENDPOINTS.md): every endpoint with its roles (generated), plus live docs at `/api/docs`
 - [Data model](docs/DATA_MODEL.md): what lives in PostgreSQL and what lives in MongoDB
 - [Operations](docs/OPERATIONS.md): deploy, observe, back up and restore
-- [Decisions for review](docs/DECISIONS.md) and the [Roadmap](docs/ROADMAP.md)
+- [Decisions for review](docs/DECISIONS.md) (open items), the [Decision log](docs/DECISION_LOG.md) (settled, with reasoning) and the [Roadmap](docs/ROADMAP.md)
 
 ## Run
 
