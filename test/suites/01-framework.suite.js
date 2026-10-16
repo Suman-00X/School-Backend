@@ -91,3 +91,49 @@ describe("framework", () => {
     assert.match(run.stderr, /PAYMENT_PROVIDER=mock is not allowed in production/);
   });
 });
+
+describe("framework: PDFs in every script", () => {
+  it("splits text into script runs and has a real glyph for every letter", async () => {
+    const { scriptRuns, SCRIPT_FONTS, fontFile } = await import("../../src/common/export/fonts.js");
+    assert.deepEqual(scriptRuns("Asha अनन्या (Rao) தமிழ் 10"), [
+      { text: "Asha ", script: null },
+      { text: "अनन्या (", script: "Devanagari" },
+      { text: "Rao) ", script: null },
+      { text: "தமிழ் 10", script: "Tamil" }
+    ]);
+    const fontkit = await import("fontkit");
+    const samples = {
+      Devanagari: "अनन्या शर्मा",
+      Bengali: "সুমন দাস",
+      Tamil: "தமிழ்செல்வி",
+      Telugu: "శ్రీనివాస్",
+      Kannada: "ಕಾವ್ಯ",
+      Malayalam: "അനന്യ",
+      Gujarati: "હેતલ",
+      Gurmukhi: "ਗੁਰਪ੍ਰੀਤ",
+      Oriya: "ସୁମନ",
+      Arabic: "عائشہ خان"
+    };
+    for (const [script, family] of Object.entries(SCRIPT_FONTS)) {
+      for (const bold of [false, true]) {
+        const run = fontkit.openSync(fontFile(family, bold)).layout(samples[script]);
+        assert.equal(run.glyphs.filter(glyph => glyph.id === 0).length, 0, `${family} bold=${bold} has every glyph`);
+      }
+    }
+    assert.ok(fontkit.openSync(fontFile("NotoSans", false)).hasGlyphForCodePoint(0x20b9), "₹ prints");
+  });
+
+  it("embeds the right fonts in generated PDFs", async () => {
+    const { renderPdf } = await import("../../src/common/export/exporters.js");
+    const pdf = await renderPdf(doc => {
+      doc.font("Helvetica-Bold").fontSize(14).text("Report card: अनन्या शर्मा");
+      doc.font("Helvetica").text("தமிழ்செல்வி · عائشہ خان · ₹1,000.00", 40, 120, { width: 300 });
+    });
+    const text = pdf.toString("latin1");
+    assert.ok(text.startsWith("%PDF"));
+    for (const name of ["NotoSans-Bold", "NotoSansDevanagari-Bold", "NotoSansTamil", "NotoSansArabic", "NotoSans"]) {
+      assert.match(text, new RegExp(`/BaseFont /[A-Z]{6}\\+${name}\\b`), `${name} embedded`);
+    }
+    assert.doesNotMatch(text, /\/BaseFont \/Helvetica/, "no built-in font is used");
+  });
+});

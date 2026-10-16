@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import zlib from "node:zlib";
 import { describe, it } from "node:test";
 import { todayIn } from "../../src/common/utils/date.util.js";
 import { annualFees, lateFeeFor, splitByShares } from "../../src/modules/finance/shared/utils/invoiceMath.util.js";
 import { h, world, request, call, get, post, patch, del, person, settleJobs, tokenFor } from "../helpers/harness.js";
+import { pdfText } from "../helpers/pdf.js";
 
 /* Installment plans (D-17), concessions (D-18), late-fee slabs and waivers (D-19),
    each school's own Razorpay keys (D-20), partial online payments and overpayment (D-21).
@@ -44,23 +44,6 @@ const whileLocked = async (lockSql, params, requests) => {
   } finally {
     holder.release();
   }
-};
-
-/* The text PDFKit drew (content streams are deflated; text is hex in TJ arrays) */
-const pdfText = buffer => {
-  const raw = buffer.toString("latin1");
-  const streams = [...raw.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)].map(match => {
-    try {
-      return zlib.inflateSync(Buffer.from(match[1], "latin1")).toString("latin1");
-    } catch {
-      return match[1];
-    }
-  });
-  return streams
-    .join("\n")
-    .match(/\[[^\]]*\] TJ/g)
-    .map(tj => [...tj.matchAll(/<([0-9a-f]+)>/gi)].map(hex => Buffer.from(hex[1], "hex").toString("latin1")).join(""))
-    .join("\n");
 };
 
 describe("finance arithmetic (unit)", () => {
@@ -930,14 +913,7 @@ describe("finance: partial online payments and overpayment (D-21)", () => {
 
   it("prints the concessions, late fee and any credit on the receipt", async () => {
     const part = pdfText((await request("GET", `${F}/payments/${t.partPayment.id}/receipt`)).buffer);
-    for (const text of [
-      "Fee Receipt",
-      "Tuition (Year)",
-      "Concessions applied",
-      "Sibling 3",
-      "Late fee",
-      "INR 5,000.00"
-    ]) {
+    for (const text of ["Fee Receipt", "Tuition (Year)", "Concessions applied", "Sibling 3", "Late fee", "₹5,000.00"]) {
       assert.ok(part.includes(text), `receipt shows "${text}"`);
     }
     const excess = (await request("GET", `${ME}/payments/${t.excessPayment.id}/receipt`, { as: t.parent })).buffer;

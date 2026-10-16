@@ -25,6 +25,7 @@ COPY --chown=node:node package.json ./
 COPY --chown=node:node src ./src
 COPY --chown=node:node scripts ./scripts
 COPY --chown=node:node migrations ./migrations
+COPY --chown=node:node assets ./assets
 RUN mkdir -p /app/storage && chown node:node /app/storage
 USER node
 EXPOSE 3000

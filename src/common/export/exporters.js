@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
+import { useUnicodeFonts } from "./fonts.js";
 
 /* Tabular exports. `columns` = [{ key, header, width? , value?(row) }] */
 
@@ -39,10 +40,11 @@ export const toXlsx = async (rows, columns, { sheetName = "Sheet1", title } = {}
   return Buffer.from(await workbook.xlsx.writeBuffer());
 };
 
-/* Build a PDF with pdfkit: renderPdf(doc => { doc.text("Hello") }) -> Buffer */
+/* Build a PDF with pdfkit: renderPdf(doc => { doc.text("Hello") }) -> Buffer.
+   Unicode fonts are set up for every document (fonts.js). */
 export const renderPdf = (draw, options = {}) =>
   new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "A4", margin: 40, ...options });
+    const doc = useUnicodeFonts(new PDFDocument({ size: "A4", margin: 40, ...options }));
     const chunks = [];
     doc.on("data", chunk => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));

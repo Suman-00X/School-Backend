@@ -1,7 +1,4 @@
-/* Amounts as people read them on receipts: "INR 1,000.00".
-   The currency code is used, not a symbol, so the built-in PDF fonts can print it
-   (Intl puts a no-break space after the code, which those fonts lack). */
+/* Amounts as people read them on receipts: "₹1,000.00". The PDFs embed Unicode fonts
+   (common/export/fonts.js), so currency symbols print. */
 export const formatAmount = (amount, currency = "INR") =>
-  new Intl.NumberFormat("en-IN", { style: "currency", currency, currencyDisplay: "code" })
-    .format(amount)
-    .replace(/\s/g, " ");
+  new Intl.NumberFormat("en-IN", { style: "currency", currency }).format(amount);
