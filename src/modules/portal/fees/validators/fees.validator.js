@@ -10,5 +10,6 @@ export const feesValidators = {
     body: z.object({ amount: z.number().positive().max(100_000_000).multipleOf(0.01).optional() })
   },
   confirm: { body: z.object({ orderId: text(100), paymentId: text(100), signature: text(256) }) },
-  receipt: { params: idParams("paymentId") }
+  receipt: { params: idParams("paymentId") },
+  refundReceipt: { params: idParams("refundId") }
 };

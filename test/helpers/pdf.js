@@ -20,7 +20,7 @@ const objectsOf = latin => {
   return objects;
 };
 
-const utf16 = hex => Buffer.from(hex, "hex").swap16().toString("utf16le");
+const utf16 = hex => Buffer.from(hex.replace(/\s/g, ""), "hex").swap16().toString("utf16le");
 
 const cmapOf = text => {
   const map = new Map();
@@ -35,7 +35,8 @@ const cmapOf = text => {
       const start = parseInt(from, 16);
       const end = parseInt(to, 16);
       if (rest.startsWith("[")) {
-        [...rest.matchAll(/<([0-9a-fA-F]+)>/g)].forEach(([, value], i) => map.set(start + i, utf16(value)));
+        /* Entries may hold several code units, e.g. a ligature: <0066 0066> */
+        [...rest.matchAll(/<([0-9a-fA-F\s]+)>/g)].forEach(([, value], i) => map.set(start + i, utf16(value)));
       } else {
         const base = Buffer.from(rest.slice(1, -1), "hex");
         for (let code = start; code <= end; code++) {

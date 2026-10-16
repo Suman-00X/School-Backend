@@ -5,7 +5,14 @@ import { getTenant } from "../../../common/tenancy/tenant.service.js";
 import { daysBetween, todayIn } from "../../../common/utils/date.util.js";
 import { studentService } from "../../users/students/index.js";
 import { INVOICES_ISSUED, invoiceService } from "../../finance/invoices/index.js";
-import { PAYMENT_RECEIVED, REFUND_PROCESSED, paymentService, refundService } from "../../finance/payments/index.js";
+import {
+  PAYMENT_RECEIVED,
+  REFUND_DECIDED,
+  REFUND_PROCESSED,
+  REFUND_REQUESTED,
+  paymentService,
+  refundService
+} from "../../finance/payments/index.js";
 import { notificationService } from "../notifications/index.js";
 import { recipients } from "../shared/services/recipients.service.js";
 import { messages } from "../shared/templates/messages.js";
@@ -58,6 +65,51 @@ subscribe(REFUND_PROCESSED, "communication.refundProcessed", async ({ tenantId, 
     }),
     data: { refundId, paymentId: refund.paymentId, invoiceId: refund.invoiceId, studentId: refund.studentId },
     channels: ["IN_APP", "EMAIL"]
+  });
+});
+
+/* Refund requested -> every administrator (in-app), once per request */
+subscribe(REFUND_REQUESTED, "communication.refundRequested", async ({ tenantId, refundId }) => {
+  const ctx = { tenantId, role: "SYSTEM" };
+  const refund = await refundService.findById(ctx, refundId);
+  if (!refund || refund.status !== "REQUESTED" || !(await claimOnce(`refund-requested:${refundId}`))) return;
+  const tenant = await getTenant(tenantId);
+  await notificationService.notify(ctx, {
+    userIds: await recipients.forAudience(ctx, { roles: ["ADMIN"] }),
+    type: "REFUND_REQUESTED",
+    ...messages.refundRequested({
+      refundNumber: refund.refundNumber,
+      amount: refund.amount,
+      receiptNumber: refund.payment?.receiptNumber,
+      studentName: nameOf(refund.student),
+      requesterName: nameOf({ user: refund.requester }) || "A colleague",
+      reason: refund.reason,
+      currency: tenant?.currency
+    }),
+    data: { refundId, paymentId: refund.paymentId, studentId: refund.studentId }
+  });
+});
+
+/* Refund approved or rejected -> the person who asked (in-app), once */
+subscribe(REFUND_DECIDED, "communication.refundDecided", async ({ tenantId, refundId }) => {
+  const ctx = { tenantId, role: "SYSTEM" };
+  const refund = await refundService.findById(ctx, refundId);
+  if (!refund?.requestedBy || !(await claimOnce(`refund-decided:${refundId}`))) return;
+  const approved = refund.status !== "REJECTED";
+  const tenant = await getTenant(tenantId);
+  await notificationService.notify(ctx, {
+    userIds: [refund.requestedBy],
+    type: approved ? "REFUND_APPROVED" : "REFUND_REJECTED",
+    ...messages.refundDecided({
+      refundNumber: refund.refundNumber,
+      amount: refund.amount,
+      approved,
+      pending: refund.status === "PENDING",
+      deciderName: nameOf({ user: approved ? refund.approver : refund.rejecter }) || "An administrator",
+      reason: refund.rejectionReason,
+      currency: tenant?.currency
+    }),
+    data: { refundId, paymentId: refund.paymentId, studentId: refund.studentId, status: refund.status }
   });
 });
 

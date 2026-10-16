@@ -69,5 +69,7 @@ export const paymentValidators = {
       to: date().optional()
     })
   },
-  getRefund: { params: idParams("refundId") }
+  getRefund: { params: idParams("refundId") },
+  approveRefund: { params: idParams("refundId") },
+  rejectRefund: { params: idParams("refundId"), body: z.object({ reason: text(500) }) }
 };

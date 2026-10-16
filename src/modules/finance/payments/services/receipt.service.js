@@ -109,6 +109,10 @@ export const receiptService = {
         .fontSize(10)
         .fillColor("#555")
         .text(`Invoice balance after this payment: ${format(payment.balanceAfter ?? invoice.balance)}`);
+      /* Refunds have their own receipts; this one says that money went back */
+      if (toMinor(payment.refundedAmount)) {
+        doc.text(`Refunded from this payment since: ${format(payment.refundedAmount)} (see the refund receipts)`);
+      }
       doc
         .moveDown(3)
         .fontSize(8)

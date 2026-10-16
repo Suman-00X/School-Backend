@@ -10,10 +10,12 @@ import { sectionService } from "../../../academics/sections/index.js";
 import { concessionService } from "../../concessions/index.js";
 import { feeStructureService } from "../../fee-structures/index.js";
 import { installmentPlanService } from "../../installment-plans/index.js";
+import { financePostings } from "../../ledger/index.js";
 import { nextInvoiceNumber } from "../../shared/utils/codes.util.js";
 import { annualFees, installmentLines, statusFor } from "../../shared/utils/invoiceMath.util.js";
 import { invoiceRepository } from "../repositories/invoice.repository.js";
 import { INVOICES_ISSUED } from "./invoice.service.js";
+import { postInvoice } from "./invoicePosting.service.js";
 
 const nameOf = student => `${student?.user?.firstName ?? ""} ${student?.user?.lastName ?? ""}`.trim();
 
@@ -98,6 +100,7 @@ const issueOne = async (
     { dbc: tx }
   );
   await invoiceRepository.insertLines(ctx.tenantId, invoice.id, lines, { dbc: tx });
+  await financePostings.syncInvoice(ctx, { invoice, lines, kind: "issued", note: installment.name }, { dbc: tx });
   return {
     id: invoice.id,
     invoiceNumber: invoice.invoiceNumber,
@@ -220,12 +223,14 @@ export const invoiceIssuingService = {
       if (plan.id === invoices[0].installmentPlanId) continue;
 
       for (const invoice of invoices) {
+        const cancelReason = `Installment plan changed to ${plan.name}`;
         await invoiceRepository.update(
           ctx.tenantId,
           invoice.id,
-          { status: "CANCELLED", cancelledAt: new Date(), cancelReason: `Installment plan changed to ${plan.name}` },
+          { status: "CANCELLED", cancelledAt: new Date(), cancelReason },
           { dbc }
         );
+        await postInvoice(ctx, invoice.id, "cancelled", { dbc, note: cancelReason });
         result.cancelled.push(invoice.invoiceNumber);
       }
       const horizon = invoices.map(i => i.dueDate).reduce(maxDate);
@@ -289,6 +294,7 @@ export const invoiceIssuingService = {
         { subtotal, discount, total, status: statusFor(total, 0) },
         { dbc }
       );
+      await postInvoice(ctx, invoice.id, "recalculated", { dbc });
       changed.push(invoice.invoiceNumber);
     }
     return changed;

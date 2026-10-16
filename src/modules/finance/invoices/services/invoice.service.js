@@ -8,10 +8,11 @@ import { concessionService } from "../../concessions/index.js";
 import { creditService } from "../../credits/index.js";
 import { installmentPlanService } from "../../installment-plans/index.js";
 import { paymentService, refundService } from "../../payments/index.js";
-import { OPEN_INVOICE_STATUSES } from "../../shared/constants/finance.constants.js";
+import { EXECUTED_REFUND_STATUSES, OPEN_INVOICE_STATUSES } from "../../shared/constants/finance.constants.js";
 import { statusFor } from "../../shared/utils/invoiceMath.util.js";
 import { invoices } from "../models/invoice.schema.js";
 import { invoiceRepository } from "../repositories/invoice.repository.js";
+import { postInvoice } from "./invoicePosting.service.js";
 
 export const INVOICES_ISSUED = "finance.invoices.issued";
 
@@ -97,12 +98,14 @@ export const invoiceService = {
       if (!invoice) throw notFound("Invoice");
       if (invoice.status === "CANCELLED") throw conflict("The invoice is already cancelled");
       if (toMinor(invoice.amountPaid) > 0) throw unprocessable("An invoice with payments cannot be cancelled");
-      return invoiceRepository.update(
+      const cancelled = await invoiceRepository.update(
         ctx.tenantId,
         invoiceId,
         { status: "CANCELLED", cancelledAt: new Date(), cancelReason: reason },
         { dbc: tx }
       );
+      await postInvoice(ctx, invoiceId, "cancelled", { dbc: tx, note: reason });
+      return cancelled;
     }),
 
   /* Everything a student owes and paid in a year: plan, concessions, invoices with
@@ -134,7 +137,8 @@ export const invoiceService = {
         rows.map(invoice => invoice.id)
       )
     ]);
-    const liveRefunds = refunds.filter(refund => refund.status !== "FAILED");
+    /* Refunds whose money has left (requests, rejections and failures moved nothing) */
+    const liveRefunds = refunds.filter(refund => EXECUTED_REFUND_STATUSES.includes(refund.status));
     const [plan] = await installmentPlanService.findManyByIds(ctx, [assigned.get(studentId)].filter(Boolean));
     const applied = concessionSummary(live.flatMap(invoice => invoice.lines));
 

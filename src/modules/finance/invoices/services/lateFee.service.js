@@ -9,12 +9,19 @@ import { OPEN_INVOICE_STATUSES } from "../../shared/constants/finance.constants.
 import { lateFeeFor, statusFor } from "../../shared/utils/invoiceMath.util.js";
 import { invoiceRepository } from "../repositories/invoice.repository.js";
 import { invoiceService } from "./invoice.service.js";
+import { postInvoice } from "./invoicePosting.service.js";
 
 const netOf = invoice => toMinor(invoice.subtotal) - toMinor(invoice.discount);
 
-/* Set the late fee of a locked invoice. It never drops below the part of it already
-   paid, so the amount paid can never exceed the total. -> true when it changed */
-const setLateFee = async (invoice, lateFee, changes, { dbc }) => {
+/* Set the late fee of a locked invoice and post the difference to the ledger (kind:
+   late-fee, late-fee-waived, late-fee-reinstated). It never drops below the part of it
+   already paid, so the amount paid can never exceed the total. -> true when it changed */
+const setLateFee = async (
+  invoice,
+  lateFee,
+  changes,
+  { dbc, ctx = { tenantId: invoice.tenantId }, kind = "late-fee", note }
+) => {
   const feeMinor = Math.max(toMinor(lateFee), toMinor(invoice.amountPaid) - netOf(invoice));
   if (feeMinor === toMinor(invoice.lateFee) && !Object.keys(changes).length) return false;
   const total = fromMinor(netOf(invoice) + feeMinor);
@@ -24,6 +31,7 @@ const setLateFee = async (invoice, lateFee, changes, { dbc }) => {
     { ...changes, lateFee: fromMinor(feeMinor), total, status: statusFor(total, invoice.amountPaid) },
     { dbc }
   );
+  await postInvoice(ctx, invoice.id, kind, { dbc, note });
   return true;
 };
 
@@ -87,7 +95,7 @@ export const lateFeeService = {
           lateFeeWaivedAmount: invoice.lateFee,
           lateFeeWaiverReason: reason
         },
-        { dbc: tx }
+        { dbc: tx, ctx, kind: "late-fee-waived", note: reason }
       );
       return invoice.lateFee;
     });
@@ -106,7 +114,7 @@ export const lateFeeService = {
         invoice,
         lateFeeFor(rule, invoice.dueDate, today),
         { lateFeeWaivedAt: null, lateFeeWaivedBy: null, lateFeeWaivedAmount: 0, lateFeeWaiverReason: null },
-        { dbc: tx }
+        { dbc: tx, ctx, kind: "late-fee-reinstated" }
       );
     });
     return invoiceService.getById(ctx, invoiceId);

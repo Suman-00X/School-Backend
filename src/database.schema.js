@@ -44,6 +44,7 @@ export * from "./modules/finance/payments/models/payment.schema.js";
 export * from "./modules/finance/payments/models/paymentRefund.schema.js";
 export * from "./modules/finance/credits/models/studentCredit.schema.js";
 export * from "./modules/finance/payment-settings/models/paymentGatewayAccount.schema.js";
+export * from "./modules/finance/ledger/models/ledger.schema.js";
 
 /* hostel */
 export * from "./modules/hostel/hostels/models/hostel.schema.js";

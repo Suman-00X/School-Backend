@@ -33,6 +33,23 @@ export const messages = {
         : "")
   }),
 
+  /* To administrators: someone asked to pay money back */
+  refundRequested: ({ refundNumber, amount, receiptNumber, studentName, requesterName, reason, currency }) => ({
+    title: `Refund ${refundNumber} needs your approval`,
+    body:
+      `${requesterName} asked to refund ${money(amount, currency)} of payment ${receiptNumber} for ${studentName}` +
+      `${reason ? `: "${reason}"` : ""}. Approve or reject it under Finance > Refunds. No money moves until you approve.`
+  }),
+
+  /* To the person who asked */
+  refundDecided: ({ refundNumber, amount, approved, pending, deciderName, reason, currency }) => ({
+    title: approved ? `Refund ${refundNumber} approved` : `Refund ${refundNumber} rejected`,
+    body: approved
+      ? `${deciderName} approved refund ${refundNumber} of ${money(amount, currency)}. ` +
+        (pending ? "The payment gateway is completing it." : "It has been paid back.")
+      : `${deciderName} rejected refund ${refundNumber} of ${money(amount, currency)}: ${reason}. No money was paid back.`
+  }),
+
   paymentReceived: ({ studentName, amount, receiptNumber, credit = 0, currency }) => ({
     title: `Payment received (${receiptNumber})`,
     body:

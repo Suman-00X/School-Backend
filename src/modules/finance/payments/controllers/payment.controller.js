@@ -2,12 +2,20 @@ import { sendFile } from "../../../../common/export/exporters.js";
 import { created, ok, paginated } from "../../../../common/http/responses.js";
 import { paymentService } from "../services/payment.service.js";
 import { receiptService } from "../services/receipt.service.js";
+import { refundReceiptService } from "../services/refundReceipt.service.js";
 import { refundService } from "../services/refund.service.js";
 
-const refundMessage = refund =>
-  `Refund ${refund.refundNumber} of ${Number(refund.amount).toFixed(2)} ${
-    refund.status === "PROCESSED" ? "processed" : "submitted to the payment gateway"
-  } for receipt ${refund.payment.receiptNumber}`;
+const outcome = refund =>
+  ({
+    REQUESTED: "requested",
+    PROCESSED: "processed",
+    PENDING: "submitted to the payment gateway"
+  })[refund.status] ?? refund.status.toLowerCase();
+
+/* "Refund RFND26-000003 of 400.00 (approved and) processed for receipt RCPT26-000007" */
+const refundMessage = (refund, { approved = false } = {}) =>
+  `Refund ${refund.refundNumber} of ${Number(refund.amount).toFixed(2)} ${approved ? "approved and " : ""}${outcome(refund)} for receipt ${refund.payment.receiptNumber}` +
+  (refund.status === "REQUESTED" ? ". An administrator must approve it before any money is paid back" : "");
 
 /* "Payment confirmed. Receipt RCPT26-000004. 200.00 more than the balance is kept as credit" */
 const confirmedMessage = payment =>
@@ -53,6 +61,21 @@ export const paymentController = {
 
   getRefund: async (req, res) =>
     ok(res, await refundService.getById(req.context, req.params.refundId), "Refund retrieved successfully"),
+
+  approveRefund: async (req, res) => {
+    const refund = await refundService.approve(req.context, req.params.refundId);
+    return ok(res, refund, refundMessage(refund, { approved: true }));
+  },
+
+  rejectRefund: async (req, res) => {
+    const refund = await refundService.reject(req.context, req.params.refundId, req.body);
+    return ok(res, refund, `Refund ${refund.refundNumber} rejected: ${refund.rejectionReason}. No money was paid back`);
+  },
+
+  refundReceipt: async (req, res) => {
+    const { buffer, fileName } = await refundReceiptService.pdf(req.context, req.params.refundId);
+    return sendFile(res, { buffer, fileName, format: "pdf" });
+  },
 
   /* Razorpay -> us, for one school. Always 200 once the signature is valid, so it stops retrying. */
   webhook: async (req, res) => {

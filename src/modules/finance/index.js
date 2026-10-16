@@ -8,6 +8,7 @@ import { invoiceRoutes, statementRoutes } from "./invoices/index.js";
 import { invoicePaymentRoutes, paymentRoutes, refundRoutes } from "./payments/index.js";
 import { invoiceCreditRoutes, studentCreditRoutes } from "./credits/index.js";
 import { paymentSettingsRoutes } from "./payment-settings/index.js";
+import { ledgerRoutes } from "./ledger/index.js";
 
 /* Finance module, mounted at /api/v1/finance */
 const router = createRouter();
@@ -27,5 +28,6 @@ router.use("/refunds", refundRoutes);
 router.use("/students", statementRoutes);
 router.use("/students", studentCreditRoutes);
 router.use("/payment-settings", paymentSettingsRoutes);
+router.use("/ledger", ledgerRoutes);
 
 export default router;

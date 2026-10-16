@@ -4,6 +4,7 @@ import { notFound, unprocessable } from "../../../../common/http/errors.js";
 import { fromMinor, toMinor } from "../../../../common/money/money.js";
 import { studentService } from "../../../users/students/index.js";
 import { invoiceService } from "../../invoices/index.js";
+import { financePostings } from "../../ledger/index.js";
 import { OPEN_INVOICE_STATUSES } from "../../shared/constants/finance.constants.js";
 import { studentCreditBalances, studentCreditEntries } from "../models/studentCredit.schema.js";
 import {
@@ -57,12 +58,13 @@ export const creditService = {
 
       const remaining = await balances.take(ctx.tenantId, invoice.studentId, applied, { dbc: tx });
       if (remaining === null) throw shortfall(await balanceOf(ctx, invoice.studentId, { dbc: tx }));
-      await entries.create(
+      const entry = await entries.create(
         ctx.tenantId,
         { studentId: invoice.studentId, entryType: "APPLIED", amount: applied, invoiceId, createdBy: ctx.userId },
         { dbc: tx }
       );
       await invoiceService.applyPayment(ctx.tenantId, invoice, applied, { dbc: tx });
+      await financePostings.creditApplied(ctx, { entry, invoice }, { dbc: tx });
       return { applied, remainingCredit: remaining };
     });
     return { ...result, invoice: await invoiceService.getById(ctx, invoiceId) };
@@ -79,6 +81,7 @@ export const creditService = {
         { studentId, entryType: "REFUNDED", amount, method, reference, notes, createdBy: ctx.userId },
         { dbc: tx }
       );
+      await financePostings.creditRefunded(ctx, { entry }, { dbc: tx });
       return { ...entry, remainingCredit: remaining };
     });
   },

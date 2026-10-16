@@ -36,5 +36,10 @@ export const feesController = {
   receipt: async (req, res) => {
     const { buffer, fileName } = await feesService.receipt(req.context, req.params.paymentId);
     return sendFile(res, { buffer, fileName, format: "pdf" });
+  },
+
+  refundReceipt: async (req, res) => {
+    const { buffer, fileName } = await feesService.refundReceipt(req.context, req.params.refundId);
+    return sendFile(res, { buffer, fileName, format: "pdf" });
   }
 };

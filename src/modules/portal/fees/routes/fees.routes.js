@@ -23,5 +23,6 @@ router.post(
 );
 router.post("/payments/confirmations", authorize(can.pay), validate(rules.confirm), controller.confirmPayment);
 router.get("/payments/:paymentId/receipt", authorize(can.read), validate(rules.receipt), controller.receipt);
+router.get("/refunds/:refundId/receipt", authorize(can.read), validate(rules.refundReceipt), controller.refundReceipt);
 
 export default router;

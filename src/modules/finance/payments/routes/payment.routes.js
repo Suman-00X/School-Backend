@@ -32,6 +32,20 @@ paymentRoutes.post("/:paymentId/refunds", authorize(can.refund), validate(rules.
 export const refundRoutes = createRouter();
 refundRoutes.get("/", authorize(can.read), validate(rules.listRefunds), controller.listRefunds);
 refundRoutes.get("/:refundId", authorize(can.read), validate(rules.getRefund), controller.getRefund);
+refundRoutes.get("/:refundId/receipt", authorize(can.read), validate(rules.getRefund), controller.refundReceipt);
+/* Maker-checker: an administrator approves (which pays it out) or rejects a request */
+refundRoutes.post(
+  "/:refundId/approval",
+  authorize(can.approveRefund),
+  validate(rules.approveRefund),
+  controller.approveRefund
+);
+refundRoutes.post(
+  "/:refundId/rejection",
+  authorize(can.approveRefund),
+  validate(rules.rejectRefund),
+  controller.rejectRefund
+);
 
 /* /api/v1/public/payments/razorpay/:tenantId/webhook (no token: signed with the school's webhook secret) */
 export const paymentWebhookRoutes = createRouter();

@@ -10,6 +10,10 @@ export const NOTIFICATION_TYPES = [
   "INVOICE_ISSUED",
   "PAYMENT_RECEIVED",
   "REFUND_PROCESSED",
+  /* Staff: a refund waits for approval (administrators), or was approved or rejected (its requester) */
+  "REFUND_REQUESTED",
+  "REFUND_APPROVED",
+  "REFUND_REJECTED",
   "FEE_REMINDER",
   "IMPORT_COMPLETED"
 ];

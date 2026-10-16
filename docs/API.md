@@ -143,7 +143,7 @@ Self-service lives under `/api/v1/me` (portal), plus `my-…` endpoints in libra
 | Auth | `/auth` | Sign-in, refresh, sign-out, devices, invitations, password reset and change |
 | Portal | `/me` | Student, parent and teacher self-service, and the notification inbox |
 | Administration | `/administration` | School settings and logo, CSV imports, audit log |
-| Finance | `/finance` | Fee heads, installment plans and per-student assignment, structures, late-fee rules and waivers, concessions, invoices, payments (counter and online, partial), student credit, receipts, statements, the school's own Razorpay keys |
+| Finance | `/finance` | Fee heads, installment plans and per-student assignment, structures, late-fee rules and waivers, concessions, invoices, payments (counter and online, partial), student credit, refunds with administrator approval, receipts and refund receipts, statements, the school's own Razorpay keys, double-entry general ledger |
 | Communication | `/communication` | Notifications (in-app, email, SMS) and announcements to audiences |
 | Reports | `/reports` | Dashboards (overview, attendance, fees, academics) and exports |
 | Files | `/files` | Student, staff and general documents |
@@ -218,6 +218,16 @@ For many students (any spreadsheet layout, saved as CSV):
    - `POST /me/payments/confirmations` sends the signed result.
    - Razorpay also calls `POST /public/payments/razorpay/:tenantId/webhook` (the URL is shown in the payment settings).
    - Both paths are idempotent, so a payment is recorded once. Money beyond the balance (two payments in flight) becomes student credit, applied later with `POST /finance/invoices/:id/credit-application` or refunded with `POST /finance/students/:id/credit-refunds`.
+7. **Refunds (maker-checker):**
+   - `POST /finance/payments/:id/refunds` (ADMIN, ACCOUNTANT) → 201. From an accountant it is a **request** (`REQUESTED`): no money moves, and every administrator is notified in-app. An administrator's own request is approved and executed at once, recorded as approved by them.
+   - Requests waiting on a payment are set aside: together they never exceed what the payment can still refund. `GET /finance/refunds?status=REQUESTED` lists them.
+   - `POST /finance/refunds/:id/approval` (ADMIN) → 200 executes it, under the payment's row lock: what can be refunded is checked again, the gateway is called (online payments), the invoice and credit change, and the ledger is posted. If the gateway refuses, nothing changes and the request keeps waiting. `POST /finance/refunds/:id/rejection { reason }` (ADMIN) → 200. The requester is notified either way.
+   - Refunds made in the Razorpay dashboard arrive by webhook and are recorded without approval (they already happened).
+   - `GET /finance/refunds/:id/receipt` (staff) and `GET /me/refunds/:id/receipt` (the family) give the refund receipt PDF for PROCESSED refunds, and for PENDING ones marked as pending at the gateway.
+8. **General ledger (double entry):** every invoice, late-fee change, cancellation, payment, credit movement and refund posts a balanced journal entry in the same transaction (`/finance/ledger`). Entries are immutable; corrections are reversals.
+   - Chart of accounts: `GET/POST /finance/ledger/accounts` (system accounts are created on first use; schools add their own). `GET /finance/ledger/accounts/:id/ledger?from=&to=` gives the lines with a running balance.
+   - `GET /finance/ledger/journal-entries` (filters: dates, `sourceType`, `sourceId`, `accountId`, `studentId`), `GET …/:id`; manual adjustments `POST /finance/ledger/journal-entries` (balanced, not on receivables or student credit) and `POST …/:id/reversal`.
+   - Reports: `GET /finance/ledger/trial-balance?asOf=`, `GET /finance/ledger/income-summary?from=&to=`. ADMIN and ACCOUNTANT; PRINCIPAL reads.
 
 ### Year end
 

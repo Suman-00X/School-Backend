@@ -110,9 +110,12 @@ The backend uses two databases, each for the kind of data it handles best.
 | invoices | `invoice_lines` | Bill lines per fee head: gross, concession, net | CHECK net = gross − concession, concession ≤ gross |
 | invoices | `invoice_line_concessions` | Which concession took how much off a line (name copied for receipts) | CHECK amount > 0 |
 | payments | `payments` | Cash or online payments; one receipt each; gateway ids; the part kept as credit; balance after | Unique receipt number. **Unique (tenant, gateway order) and (tenant, gateway payment id)**, which makes webhooks idempotent. CHECK amount > 0, 0 ≤ excess ≤ amount |
-| payments | `payment_refunds` | Money paid back: the amount split into `from_credit`, `from_invoice` and `unallocated`; method (ORIGINAL = back through the gateway), status (PENDING, PROCESSED, FAILED = reversed), source (STAFF, or GATEWAY for dashboard refunds). Numbered `RFND26-000001` | Unique refund number and (provider, gateway refund id). CHECK the parts add up to the amount |
+| payments | `payment_refunds` | Money paid back: the amount split into `from_credit`, `from_invoice` and `unallocated`; method (ORIGINAL = back through the gateway), status (REQUESTED = waiting for an administrator, PENDING, PROCESSED, FAILED = reversed, REJECTED), source (STAFF, or GATEWAY for dashboard refunds); who requested, approved or rejected it (and why). Numbered `RFND26-000001` | Unique refund number and (provider, gateway refund id). CHECK the parts add up to the amount. **CHECK an executed staff refund has an approver**; a rejection has a reason |
 | credits | `student_credit_balances` | A student's unused credit (overpayments), across years | Unique (tenant, student). **CHECK balance ≥ 0**; spent with a conditional update |
 | credits | `student_credit_entries` | Credit history: OVERPAYMENT, APPLIED (to an invoice), REFUNDED | CHECK amount > 0; overpayments name their payment, applications their invoice |
+| ledger | `ledger_accounts` | The school's chart of accounts: system accounts created on first use with stable codes (1000 Cash, 1010 Bank, 1020 Gateway clearing, 1100 Receivables, 1190 Refund suspense, 2100 Student credit, 3000 Opening balances, 4101… fee income per fee head, 4800 Late fees, 4900 Concessions as contra-income) and the school's own | Partial unique (tenant, code), (tenant, system key) and (tenant, fee head). CHECK code format; fee-head accounts are FEE_INCOME income accounts |
+| ledger | `journal_entries` | One balanced posting: `JE-000001`, date, narration, source (type, id, event), total, the entry it reverses | **Unique (tenant, source type, source id, event)**: a source event posts once. Unique reversal. **Triggers: no UPDATE/DELETE/TRUNCATE; deferred check at commit that debits = credits = total, ≥ 2 lines, one school** |
+| ledger | `journal_lines` | A debit or a credit to an account, with the student for receivables and credit | CHECK exactly one side, positive. Same immutability and balance triggers |
 | payment-settings | `payment_gateway_accounts` | The school's own Razorpay key id, **key secret and webhook secret encrypted at rest** | Partial unique tenant. Secrets never returned |
 
 ### Operations modules
@@ -218,6 +221,10 @@ erDiagram
   invoice_lines ||--o{ invoice_line_concessions : ""
   students ||--o| student_credit_balances : ""
   payments ||--o{ student_credit_entries : ""
+  payments ||--o{ payment_refunds : ""
+  journal_entries ||--o{ journal_lines : ""
+  ledger_accounts ||--o{ journal_lines : ""
+  fee_heads ||--o| ledger_accounts : ""
 ```
 
 `tenant_id` on every table is omitted from the diagram for readability.

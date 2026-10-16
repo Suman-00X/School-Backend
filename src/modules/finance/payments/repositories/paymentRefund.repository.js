@@ -1,5 +1,6 @@
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
+import { EXECUTED_REFUND_STATUSES } from "../../shared/constants/finance.constants.js";
 import { payments } from "../models/payment.schema.js";
 import { paymentRefunds } from "../models/paymentRefund.schema.js";
 
@@ -50,7 +51,33 @@ export const paymentRefundRepository = {
     return row ?? null;
   },
 
-  /* What earlier refunds of a payment (not failed) took from its invoice and its credit, in paise */
+  /* A refund, locked (after its payment: the payment lock comes first everywhere) */
+  lockById: async (tenantId, refundId, { dbc }) => {
+    const [row] = await dbc
+      .select()
+      .from(paymentRefunds)
+      .where(scoped(paymentRefunds, tenantId, eq(paymentRefunds.id, refundId)))
+      .for("update");
+    return row ?? null;
+  },
+
+  /* Requests of a payment still waiting for approval, in paise */
+  awaitingApproval: async (tenantId, paymentId, { dbc }) => {
+    const [row] = await dbc
+      .select({ amount: sql`coalesce(sum(${paymentRefunds.amount}), 0)`.mapWith(Number) })
+      .from(paymentRefunds)
+      .where(
+        scoped(
+          paymentRefunds,
+          tenantId,
+          eq(paymentRefunds.paymentId, paymentId),
+          eq(paymentRefunds.status, "REQUESTED")
+        )
+      );
+    return Math.round(row.amount * 100);
+  },
+
+  /* What a payment's executed refunds (processed or pending) took from its invoice and its credit, in paise */
   takenSoFar: async (tenantId, paymentId, { dbc }) => {
     const [row] = await dbc
       .select({
@@ -59,7 +86,12 @@ export const paymentRefundRepository = {
       })
       .from(paymentRefunds)
       .where(
-        scoped(paymentRefunds, tenantId, eq(paymentRefunds.paymentId, paymentId), ne(paymentRefunds.status, "FAILED"))
+        scoped(
+          paymentRefunds,
+          tenantId,
+          eq(paymentRefunds.paymentId, paymentId),
+          inArray(paymentRefunds.status, EXECUTED_REFUND_STATUSES)
+        )
       );
     return { fromInvoice: Math.round(row.fromInvoice * 100), fromCredit: Math.round(row.fromCredit * 100) };
   },

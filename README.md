@@ -96,7 +96,7 @@ src/
     portal/              /me: profile, learning, fees, homework (students, parents, teachers)
     administration/      settings, imports, audit-logs
     finance/             fee-heads installment-plans late-fee-rules fee-structures concessions invoices
-                         payments credits payment-settings
+                         payments credits payment-settings ledger
     communication/       notifications announcements subscribers (event → message)
     reports/             dashboards exports
     files/               documents

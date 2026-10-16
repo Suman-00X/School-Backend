@@ -9,6 +9,7 @@ import { getTenant } from "../../../../common/tenancy/tenant.service.js";
 import { academicYearService } from "../../../academics/academic-years/index.js";
 import { creditService } from "../../credits/index.js";
 import { invoiceService } from "../../invoices/index.js";
+import { financePostings } from "../../ledger/index.js";
 import { paymentSettingsService } from "../../payment-settings/index.js";
 import { MIN_ONLINE_PAYMENT, OPEN_INVOICE_STATUSES } from "../../shared/constants/finance.constants.js";
 import { nextReceiptNumber } from "../../shared/utils/codes.util.js";
@@ -121,6 +122,7 @@ const settleGatewayPayment = async ({ tenantId, provider, orderId, gatewayPaymen
         { dbc: tx }
       );
     }
+    await financePostings.paymentReceived({ tenantId }, { payment: updated, invoice, appliedMinor }, { dbc: tx });
     return { payment: updated, fresh: true };
   });
 
@@ -156,6 +158,11 @@ export const paymentService = {
         { dbc: tx }
       );
       await invoiceService.applyPayment(ctx.tenantId, invoice, amount, { dbc: tx });
+      await financePostings.paymentReceived(
+        ctx,
+        { payment: created, invoice, appliedMinor: toMinor(amount) },
+        { dbc: tx }
+      );
       return created;
     });
 
