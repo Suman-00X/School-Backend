@@ -2,7 +2,7 @@ import { desc, eq, lte } from "drizzle-orm";
 import { transaction } from "../../../../common/database/postgres.js";
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { employeeDirectory } from "../../shared/services/employeeDirectory.service.js";
-import { maskTail } from "../../shared/utils/mask.util.js";
+import { maskSensitive, sealSensitive } from "../../shared/utils/mask.util.js";
 import { employeeSalaries } from "../models/payroll.schema.js";
 import { employeeSalaryRepository } from "../repositories/payroll.repository.js";
 import { salaryComponentService } from "./salaryComponent.service.js";
@@ -18,8 +18,8 @@ const withDetails = {
 const masked = salary =>
   salary && {
     ...salary,
-    bankAccountNumber: maskTail(salary.bankAccountNumber),
-    panNumber: maskTail(salary.panNumber)
+    bankAccountNumber: maskSensitive(salary.bankAccountNumber),
+    panNumber: maskSensitive(salary.panNumber)
   };
 
 /* Fill each line's value from the component default, and check percents */
@@ -57,11 +57,14 @@ export const employeeSalaryService = {
       orderBy: desc(employeeSalaries.effectiveFrom)
     });
     const carried = ["bankAccountNumber", "bankIfsc", "panNumber"].map(key => [key, details[key] ?? previous?.[key]]);
+    const sealed = Object.fromEntries(carried);
+    sealed.bankAccountNumber = sealSensitive(sealed.bankAccountNumber);
+    sealed.panNumber = sealSensitive(sealed.panNumber);
 
     const salaryId = await transaction(async tx => {
       const salary = await employeeSalaryRepository.create(
         ctx.tenantId,
-        { ...details, ...Object.fromEntries(carried), userId, effectiveFrom, createdBy: ctx.userId },
+        { ...details, ...sealed, userId, effectiveFrom, createdBy: ctx.userId },
         { dbc: tx }
       );
       await employeeSalaryRepository.insertLines(ctx.tenantId, salary.id, resolved, { dbc: tx });

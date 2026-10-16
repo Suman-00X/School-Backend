@@ -439,7 +439,10 @@ describe("hr: payroll", () => {
     const stored = await h.pool.query("SELECT bank_account_number, pan_number FROM employee_salaries WHERE id = $1", [
       teacher.data.id
     ]);
-    assert.deepEqual(stored.rows[0], { bank_account_number: "123456789012", pan_number: "ABCDE1234F" });
+    /* Encrypted at rest (the masked API values above prove they decrypt) */
+    assert.match(stored.rows[0].bank_account_number, /^enc:v1:/);
+    assert.match(stored.rows[0].pan_number, /^enc:v1:/);
+    assert.doesNotMatch(JSON.stringify(stored.rows[0]), /123456789012|ABCDE1234F/i);
 
     await post(
       `${P}/employee-salaries`,

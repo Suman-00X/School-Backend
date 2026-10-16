@@ -28,7 +28,7 @@ How to run, deploy, observe, back up and restore the backend. Decisions behind t
 | Staging | Same image as production | Managed, separate instances | Worker container(s) | Production-like data volume; restore drills run here |
 | Production | Container platform (ECS, Cloud Run, Kubernetes, Fly…) | Managed PostgreSQL (PITR on), managed MongoDB (backups on), managed Redis | 1+ worker containers | `REDIS_URL` is **required** with more than one API instance |
 
-Configuration is environment variables only; see `.env.example`. Production must set at least: `NODE_ENV=production`, `DATABASE_URL`, `MONGO_URI`, `REDIS_URL`, `JWT_SECRET` (32+ random bytes), `APP_URL`, `ALLOWED_ORIGINS`, `TRUST_PROXY_HOPS` (behind a load balancer), `STORAGE_DRIVER=s3` + bucket settings, email/SMS drivers, payment keys, `METRICS_TOKEN`.
+Configuration is environment variables only; see `.env.example`. Production must set at least: `NODE_ENV=production`, `DATABASE_URL`, `MONGO_URI`, `REDIS_URL`, `JWT_SECRET` (32+ random bytes), `DATA_ENCRYPTION_KEY` (32 bytes; keep it with the backups, encrypted fields are unreadable without it), `APP_URL`, `ALLOWED_ORIGINS`, `TRUST_PROXY_HOPS` (behind a load balancer), `STORAGE_DRIVER=s3` + bucket settings, email/SMS drivers, payment keys, `METRICS_TOKEN`.
 
 ## Processes
 

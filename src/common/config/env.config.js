@@ -36,6 +36,8 @@ export default {
   redisUrl: str("REDIS_URL"),
 
   jwtSecret: str("JWT_SECRET"),
+  /* 32 bytes (hex or base64) for encrypting sensitive fields; required in production */
+  dataEncryptionKey: str("DATA_ENCRYPTION_KEY"),
 
   allowedOrigins: list("ALLOWED_ORIGINS"),
   rateLimitWindowMs: num("RATE_LIMIT_WINDOW_MS", 15 * 60 * 1000),

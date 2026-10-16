@@ -7,7 +7,7 @@ import { tenantToday } from "../../../../common/tenancy/tenant.service.js";
 import { leaveRequestService } from "../../leaves/index.js";
 import { staffAttendanceService } from "../../staff-attendance/index.js";
 import { employeeDirectory } from "../../shared/services/employeeDirectory.service.js";
-import { maskTail } from "../../shared/utils/mask.util.js";
+import { maskSensitive } from "../../shared/utils/mask.util.js";
 import { computePayslip } from "../../shared/utils/payrollMath.util.js";
 import { monthBounds, monthLabel, monthOf } from "../../shared/utils/period.util.js";
 import { payrollRuns, payslips } from "../models/payroll.schema.js";
@@ -60,9 +60,9 @@ const computeRun = async (ctx, run, tx) => {
         marks: marks.get(employee.userId) ?? [],
         leaves: leaves.get(employee.userId) ?? []
       }),
-      bankAccountMasked: maskTail(salary.bankAccountNumber),
+      bankAccountMasked: maskSensitive(salary.bankAccountNumber),
       bankIfsc: salary.bankIfsc,
-      panMasked: maskTail(salary.panNumber)
+      panMasked: maskSensitive(salary.panNumber)
     });
   }
 
