@@ -2,9 +2,13 @@
 
 Multi-tenant school management API: Express 5, **PostgreSQL** (Drizzle ORM) for relational data, **MongoDB** (Mongoose) for document data.
 
-- [API reference (v1)](docs/API.md): endpoints, roles, response and error formats
-- [Data model](docs/DATA_MODEL.md): what lives in PostgreSQL vs MongoDB
-- [Roadmap](docs/ROADMAP.md): phases and status
+Covers academics (attendance, timetable, exams, report cards, homework), fees with online payments, communication, reports, a student and parent portal, library, transport, hostel, HR and payroll, and inventory. There are 300+ endpoints, all role-checked and tenant-isolated, verified by an end-to-end suite against real databases.
+
+- [API guide (v1)](docs/API.md): conventions, roles, response and error formats, workflows
+- [Endpoints](docs/ENDPOINTS.md): every endpoint with its roles (generated), plus live docs at `/api/docs`
+- [Data model](docs/DATA_MODEL.md): what lives in PostgreSQL and what lives in MongoDB
+- [Operations](docs/OPERATIONS.md): deploy, observe, back up and restore
+- [Decisions for review](docs/DECISIONS.md) and the [Roadmap](docs/ROADMAP.md)
 
 ## Run
 
@@ -25,25 +29,42 @@ npm run db:migrate       # create/upgrade PostgreSQL tables
 npm run dev              # or: npm start
 ```
 
-Requires PostgreSQL 13+ and MongoDB 6+.
+Requires Node 22+, PostgreSQL 13+ (18 in CI and compose) and MongoDB 6+.
 
-> There is no login endpoint yet (roadmap Phase 2). Until then, tokens come from `dev:memory`.
+**Whole stack in containers** (API, worker, PostgreSQL, MongoDB, Redis):
+
+```bash
+cp .env.example .env     # set JWT_SECRET (and DATA_ENCRYPTION_KEY for production)
+docker compose up -d --build
+docker compose run --rm api node scripts/create-school.js --name "Demo School" --code DEMO \
+  --admin-email admin@demo.school --admin-first Demo --admin-last Admin
+```
+
+> There is no login endpoint yet (roadmap Phase 2). Until then, tokens come from `dev:memory` or `school:create`.
 
 | Script | Does |
 |---|---|
+| `npm test` | End-to-end suite on embedded PostgreSQL 18 + in-memory MongoDB (about 10 s) |
+| `npm run lint`, `npm run format` | ESLint, Prettier |
 | `npm run db:generate -- --name <change>` | Writes a SQL migration from model changes |
 | `npm run db:migrate` | Applies pending migrations |
 | `npm run db:studio` | Browse PostgreSQL in Drizzle Studio |
 | `npm run mongo:sync-indexes` | Builds MongoDB indexes (production) |
+| `npm run worker` | Background job worker (with `REDIS_URL`) |
+| `npm run school:create -- …` | Onboards a school and its first admin |
+| `npm run backup`, `npm run restore -- <dir>` | Portable backups (see OPERATIONS.md) |
+| `npm run docs:endpoints` | Regenerates docs/ENDPOINTS.md |
 
 ## Project structure
 
 ```
 src/
-  server.js              start-up and shutdown
-  app.js                 Express app: security, JSON, /health, /api/v1, errors
-  routes.js              API v1: authenticate + audit, then mounts each module
-  bootstrap.js           connects PostgreSQL and MongoDB
+  server.js              API start-up and graceful shutdown
+  worker.js              background job worker (BullMQ, needs REDIS_URL)
+  app.js                 Express app: logging, metrics, security, /health, /ready, docs, /api/v1, errors
+  routes.js              API v1: public webhooks, then authenticate + audit, then each module
+  bootstrap.js           connects PostgreSQL, MongoDB, cache, jobs, error reporting
+  jobs.js                registry of job and event-subscriber files
   database.schema.js     registry of every module's tables (for the ORM)
 
   common/                FRAMEWORK ONLY: no school/business logic
@@ -55,21 +76,39 @@ src/
     crud/                createCrudService, createCrudController
     audit/               audit-trail middleware + MongoDB model
     sequences/           per-tenant number sequences (for generated codes)
-    utils/
+    jobs/  events/       background jobs (BullMQ or in-process), domain events, once-only claims
+    cache/  storage/     cache (Redis or memory), file storage (S3 or local) with signed links
+    messaging/  payments/  email/SMS drivers, payment gateway (Razorpay or mock)
+    money/  export/  import/  money in paise; CSV/XLSX/PDF exporters, branding; CSV import
+    openapi/             OpenAPI 3.1 generated from the route table
+    observability/       Prometheus metrics, error reporting
+    crypto/              field encryption for sensitive values
+    tenancy/  logging/  utils/
 
   modules/
     users/
       index.js           module entry: mounts the submodules' routers
       shared/            code only the users module needs (constants, validators, services, utils, models)
       accounts/  staff/  teachers/  parents/  students/
-    academics/
-      index.js
-      shared/            (constants, middlewares, utils)
-      academic-years/  classes/  subjects/  sections/  section-subjects/
-      teacher-assignments/  enrollments/  exams/  marks/
+    academics/           academic-years classes subjects sections section-subjects teacher-assignments
+                         enrollments calendar attendance timetable grading exams marks report-cards homework
+    portal/              /me: profile, learning, fees, homework (students, parents, teachers)
+    administration/      settings, imports, audit-logs
+    finance/             fee-heads fee-structures concessions invoices payments
+    communication/       notifications announcements subscribers (event → message)
+    reports/             dashboards exports
+    files/               documents
+    library/             policy books copies loans
+    transport/           vehicles routes assignments
+    hostel/              hostels rooms allocations
+    hr/                  staff-attendance leaves payroll
+    inventory/           categories vendors items stock
 
-migrations/              generated SQL migrations
-scripts/                 migrate, dev-memory, Mongo index sync
+migrations/              SQL migrations (generated, plus triggers for database-enforced rules)
+scripts/                 migrate, dev-memory, Mongo index sync, create-school, backup/restore, docs
+test/                    e2e.test.js + suites/ (one per area) + helpers/harness.js
+ops/                     Prometheus alert rules
+Dockerfile, docker-compose.yml, .github/workflows/ci.yml
 ```
 
 ### Inside a submodule
@@ -102,5 +141,6 @@ students/
 
 1. Create `models/`, `repositories/`, `services/`, `controllers/`, `validators/`, `permissions/`, `routes/` and `index.js` (copy `academics/classes` as a template).
 2. Register the model in `src/database.schema.js` and run `npm run db:generate -- --name attendance`.
-3. Mount the router in `modules/academics/index.js`.
-4. Document the endpoints in `docs/API.md` and the tables in `docs/DATA_MODEL.md`.
+3. Mount the router in `modules/academics/index.js`. For a new module, mount it in `src/routes.js`, and register any jobs in `src/jobs.js`.
+4. Add a test suite in `test/suites/` and import it in `test/e2e.test.js`.
+5. Run `npm run docs:endpoints`, and describe the tables in `docs/DATA_MODEL.md`.

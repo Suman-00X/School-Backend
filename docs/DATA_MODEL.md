@@ -4,7 +4,7 @@ The backend uses two databases, each for the kind of data it handles best.
 
 | | PostgreSQL | MongoDB |
 |---|---|---|
-| **Holds** | The school's records: people, academics, attendance, timetable, exams, marks, homework, fees, payments, and the operations modules | Logs and documents: audit trail, notifications, announcements, import jobs, file metadata, once-only claims |
+| **Holds** | The school's records: people, academics, attendance, timetable, exams, marks, homework, fees, payments, library, transport, hostel, HR and payroll, inventory | Logs and documents: audit trail, notifications, announcements, import jobs, file metadata, once-only claims |
 | **Why** | Foreign keys, unique and check constraints, multi-row transactions, row locks, joins for reports | Append-heavy writes, flexible payloads, read back whole, no joins needed |
 | **Access** | Drizzle ORM through `createRepository` (`src/common/database`) | Mongoose, through `createMongoRepository` where a module needs CRUD |
 | **Schema changes** | SQL migrations (`npm run db:generate`, then `npm run db:migrate`) | Schemas in code; `npm run mongo:sync-indexes` for indexes |
@@ -101,7 +101,55 @@ The backend uses two databases, each for the kind of data it handles best.
 
 ### Operations modules
 
-<!-- OPERATIONS_MODULES -->
+Hostel, library, transport, HR and inventory have no foreign keys into each other. They reference users, students and academic years.
+
+**Library**
+
+| Submodule | Table | Purpose | Key constraints |
+|---|---|---|---|
+| policy | `library_policies` | One per school: loan days, limits per role, fine per day, grace days, renewals | Unique `tenant_id`. Created with defaults on first read (`ON CONFLICT DO NOTHING`) |
+| books | `library_books` | Catalogue: title, `authors text[]`, ISBN (normalised, checksum-validated), category, optional subject | Partial unique ISBN when present. CHECK published year |
+| copies | `library_copies` | Physical copies with accession number `ACC-000001`, barcode, price, status | Unique accession number (never reused). Partial unique barcode |
+| loans | `library_loans` | Issue → return/lost; borrower and their role at issue time; due date, renewals, late fine, lost charge | **One open loan per copy** (partial unique, plus a row lock). Generated `fine_outstanding`. CHECK status ↔ return date, paid + waived ≤ fine |
+| loans | `library_fine_payments` | Fine payments with receipt `LIBR-000001` | Unique receipt. CHECK amount > 0 |
+
+**Transport**
+
+| Submodule | Table | Purpose | Key constraints |
+|---|---|---|---|
+| vehicles | `transport_vehicles` | Bus/van: normalised registration, capacity, driver and attendant, insurance, fitness and permit expiry dates, status | Partial unique registration. CHECK capacity > 0 |
+| routes | `transport_routes` | Route with code, vehicle | Partial unique name and code. **A vehicle serves at most one active route** (partial unique) |
+| routes | `transport_route_stops` | Ordered stops: pickup and drop times, monthly fee | Partial unique (route, sequence) and (route, name) |
+| assignments | `transport_assignments` | A student's seat on a route and stop for a year, with direction; changes link to the row they replaced | **One active assignment per student per year** (partial unique). Capacity checked under a route row lock |
+
+**Hostel**
+
+| Submodule | Table | Purpose | Key constraints |
+|---|---|---|---|
+| hostels | `hostels` | Hostel with resident gender (BOYS/GIRLS/COED) and warden | Partial unique name and code |
+| rooms | `hostel_rooms` | Rooms with capacity (beds), type, monthly fee, status | Partial unique (hostel, room number). CHECK 1 ≤ capacity ≤ 50 |
+| allocations | `hostel_allocations` | A student's bed for a year; vacate and transfer history | **One active bed per student** and **one student per bed** (partial uniques), plus a room row lock |
+
+**HR**
+
+| Submodule | Table | Purpose | Key constraints |
+|---|---|---|---|
+| staff-attendance | `staff_attendance` | Daily mark per employee, check-in/out, link to the leave that wrote it | Unique (tenant, user, date), also the upsert target |
+| leaves | `leave_types` | Leave types with yearly quota, paid/unpaid, approval needed | Partial unique code and name. CHECK quota 0–366 |
+| leaves | `leave_requests` | Requests with days (fixed at request time), half day, decision and cancellation trail | CHECK dates in order, days > 0, half day = one date and 0.5 |
+| payroll | `salary_components` | Earnings and deductions: fixed or percent of basic | Partial unique code. CHECK percent ≤ 100 |
+| payroll | `employee_salaries`, `employee_salary_lines` | Salary revisions effective from the 1st of a month, with component values. **Bank account and PAN are encrypted at rest** (AES-256-GCM) | Partial unique (user, effective from) |
+| payroll | `payroll_runs` | One run per month: DRAFT → FINALIZED | Unique (tenant, month) |
+| payroll | `payslips` | Snapshot per employee: earnings and deductions (jsonb), loss of pay, net pay, masked bank details. Numbered `PSL-202609-0001` at finalization | Unique (run, user) and payslip number. CHECK amounts ≥ 0 |
+
+**Inventory**
+
+| Submodule | Table | Purpose | Key constraints |
+|---|---|---|---|
+| categories | `inventory_categories` | Item categories | Partial unique `lower(name)` |
+| vendors | `inventory_vendors` | Suppliers, optional GSTIN/tax id | Partial unique tax id |
+| items | `inventory_items` | SKU, unit, reorder level, stock on hand, weighted average cost, discontinued flag | Partial unique SKU. CHECK stock, reorder level and cost ≥ 0 |
+| stock | `stock_movements` | **Append-only ledger** (RECEIPT, ISSUE, RETURN, ADJUSTMENT) with balance and average cost after each movement, numbered `STK-000001` | CHECK direction per type, balance ≥ 0. **A trigger rejects UPDATE and DELETE.** Movements lock the item row |
 
 ### Relationships (core)
 
