@@ -16,13 +16,14 @@ const captureLowStockEvents = async () => {
   });
 };
 
-const move = (itemId, body, as = h.tokens.office) => request("POST", `${I}/items/${itemId}/movements`, { body, as });
+const move = (itemId, body, as = h.tokens.inventoryManager) =>
+  request("POST", `${I}/items/${itemId}/movements`, { body, as });
 
 const stockOf = async itemId => (await get(`${I}/items/${itemId}`)).data;
 
 describe("inventory: catalogue", () => {
   it("manages categories with case-insensitive unique names", async () => {
-    world.stationery = (await post(`${I}/categories`, { name: "Stationery" }, { as: h.tokens.office })).data;
+    world.stationery = (await post(`${I}/categories`, { name: "Stationery" }, { as: h.tokens.inventoryManager })).data;
     world.lab = (await post(`${I}/categories`, { name: "Lab supplies", description: "Chemicals and glassware" })).data;
 
     const duplicate = await request("POST", `${I}/categories`, { body: { name: " stationery " } });
@@ -58,7 +59,7 @@ describe("inventory: catalogue", () => {
         taxId: "29abcde1234f1z5",
         address: "12 MG Road, Bengaluru"
       },
-      { as: h.tokens.office }
+      { as: h.tokens.inventoryManager }
     );
     assert.equal(vendor.data.taxId, "29ABCDE1234F1Z5");
     assert.equal(vendor.data.email, "orders@sharma.example");
@@ -92,7 +93,7 @@ describe("inventory: catalogue", () => {
         reorderLevel: 5,
         location: "Store room, shelf B2"
       },
-      { as: h.tokens.office }
+      { as: h.tokens.inventoryManager }
     );
     assert.equal(marker.data.sku, "WBM-BLUE");
     assert.deepEqual([marker.data.stockOnHand, marker.data.averageUnitCost, marker.data.stockValue], [0, 0, 0]);
@@ -190,7 +191,7 @@ describe("inventory: stock movements", () => {
     assert.equal(first.body.data.balanceAfter, 10);
     assert.equal(first.body.data.totalValue, 120);
     assert.equal(first.body.data.movementDate, today);
-    assert.equal(first.body.data.creator.id, world.office.userId);
+    assert.equal(first.body.data.creator.id, world.inventoryManager.userId);
 
     const second = await move(world.marker.id, {
       type: "RECEIPT",
@@ -308,10 +309,10 @@ describe("inventory: stock movements", () => {
     assert.equal(empty.body.message, "White chalk is out of stock");
   });
 
-  it("lets only an admin adjust stock, never below zero", async () => {
+  it("lets only the store's administrators adjust stock, never below zero", async () => {
     const adjust = (body, as = h.tokens.admin) => move(world.marker.id, { type: "ADJUSTMENT", ...body }, as);
 
-    assert.equal((await adjust({ quantityChange: -1, reason: "Damaged" }, h.tokens.office)).status, 403);
+    assert.equal((await adjust({ quantityChange: -1, reason: "Damaged" }, h.tokens.accountant)).status, 403);
     const noReason = await adjust({ quantityChange: -1 });
     assert.equal(noReason.status, 400);
     assert.equal(noReason.body.message, "Invalid request: reason is required for an ADJUSTMENT");
@@ -374,7 +375,7 @@ describe("inventory: stock movements", () => {
     );
 
     /* The office is told in-app */
-    const inbox = await get("/api/v1/me/notifications?limit=50", { as: h.tokens.office });
+    const inbox = await get("/api/v1/me/notifications?limit=50", { as: h.tokens.inventoryManager });
     const notice = inbox.data.find(n => n.title === "Low stock: A4 paper 80 gsm");
     assert.equal(notice?.body, "Only 2 REAM of A4 paper 80 gsm left (reorder level 2). Time to restock.");
   });
@@ -490,7 +491,9 @@ describe("inventory: reports", () => {
   });
 
   it("reports consumption per item, net of returns", async () => {
-    const { data } = await get(`${I}/reports/consumption?from=2000-01-01&to=${today}`, { as: h.tokens.office });
+    const { data } = await get(`${I}/reports/consumption?from=2000-01-01&to=${today}`, {
+      as: h.tokens.inventoryManager
+    });
     assert.deepEqual(
       data.items.map(i => [i.sku, i.issuedQuantity, i.issuedValue, i.returnedQuantity, i.netQuantity, i.netValue]),
       [

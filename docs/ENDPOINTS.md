@@ -48,19 +48,19 @@
 | GET | `/api/v1/users/:userId` | Read — accounts | ADMIN, PRINCIPAL |
 | PATCH | `/api/v1/users/:userId` | Update — accounts | ADMIN |
 | DELETE | `/api/v1/users/:userId` | Deactivate — accounts | ADMIN |
-| GET | `/api/v1/users/parents` | Read — parents | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
+| GET | `/api/v1/users/parents` | Read — parents | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER |
 | POST | `/api/v1/users/parents` | Create — parents | ADMIN, STAFF |
-| GET | `/api/v1/users/parents/:parentId` | Read — parents | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
+| GET | `/api/v1/users/parents/:parentId` | Read — parents | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER |
 | PATCH | `/api/v1/users/parents/:parentId` | Update — parents | ADMIN, STAFF |
 | GET | `/api/v1/users/staff` | Read — staff | ADMIN, PRINCIPAL |
 | POST | `/api/v1/users/staff` | Create — staff | ADMIN |
 | GET | `/api/v1/users/staff/:staffId` | Read — staff | ADMIN, PRINCIPAL |
 | PATCH | `/api/v1/users/staff/:staffId` | Update — staff | ADMIN |
-| GET | `/api/v1/users/students` | Read — students | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/users/students` | Read — students | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | POST | `/api/v1/users/students` | Admit — students | ADMIN, STAFF |
-| GET | `/api/v1/users/students/:studentId` | Read — students | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/users/students/:studentId` | Read — students | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | PATCH | `/api/v1/users/students/:studentId` | Update — students | ADMIN, STAFF |
-| GET | `/api/v1/users/students/:studentId/parents` | Read Parents — students | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/users/students/:studentId/parents` | Read Parents — students | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | POST | `/api/v1/users/students/:studentId/parents` | Manage Parents — students | ADMIN, STAFF |
 | DELETE | `/api/v1/users/students/:studentId/parents/:parentId` | Manage Parents — students | ADMIN, STAFF |
 | GET | `/api/v1/users/teachers` | Read — teachers | ADMIN, PRINCIPAL, STAFF |
@@ -72,13 +72,13 @@
 
 | Method | Path | Action | Roles |
 |---|---|---|---|
-| GET | `/api/v1/academics/academic-years` | Read — academic years | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/academic-years` | Read — academic years | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | POST | `/api/v1/academics/academic-years` | Create — academic years | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/academic-years/:academicYearId` | Read — academic years | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/academic-years/:academicYearId` | Read — academic years | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | PATCH | `/api/v1/academics/academic-years/:academicYearId` | Update — academic years | ADMIN, PRINCIPAL |
 | POST | `/api/v1/academics/academic-years/:academicYearId/archival` | Archive — academic years | ADMIN |
 | DELETE | `/api/v1/academics/academic-years/:academicYearId/archival` | Archive — academic years | ADMIN |
-| GET | `/api/v1/academics/academic-years/current` | Read — academic years | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/academic-years/current` | Read — academic years | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | GET | `/api/v1/academics/assessment-schemes` | Read — assessment schemes | ADMIN, PRINCIPAL, STAFF, TEACHER |
 | POST | `/api/v1/academics/assessment-schemes` | Manage — assessment schemes | ADMIN, PRINCIPAL |
 | GET | `/api/v1/academics/assessment-schemes/:schemeId` | Read — assessment schemes | ADMIN, PRINCIPAL, STAFF, TEACHER |
@@ -95,23 +95,23 @@
 | GET | `/api/v1/academics/assessment-schemes/:schemeId/students/:studentId` | Read — assessment schemes | ADMIN, PRINCIPAL, STAFF, TEACHER |
 | GET | `/api/v1/academics/assessment-schemes/:schemeId/students/:studentId/pdf` | Read — assessment schemes | ADMIN, PRINCIPAL, STAFF, TEACHER |
 | POST | `/api/v1/academics/attendance` | Record — attendance | ADMIN, PRINCIPAL, TEACHER |
-| GET | `/api/v1/academics/attendance/policy` | Read — attendance | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/attendance/policy` | Read — attendance | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | PATCH | `/api/v1/academics/attendance/policy` | Manage Policy — attendance | ADMIN |
-| GET | `/api/v1/academics/attendance/register` | Read — attendance | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| GET | `/api/v1/academics/attendance/students/:studentId` | Read — attendance | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| GET | `/api/v1/academics/attendance/summary` | Read — attendance | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/attendance/register` | Read — attendance | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
+| GET | `/api/v1/academics/attendance/students/:studentId` | Read — attendance | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
+| GET | `/api/v1/academics/attendance/summary` | Read — attendance | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | GET | `/api/v1/academics/calendar/events` | Read — calendar | Everyone |
 | POST | `/api/v1/academics/calendar/events` | Create — calendar | ADMIN, PRINCIPAL |
 | GET | `/api/v1/academics/calendar/events/:eventId` | Read — calendar | Everyone |
 | PATCH | `/api/v1/academics/calendar/events/:eventId` | Update — calendar | ADMIN, PRINCIPAL |
 | DELETE | `/api/v1/academics/calendar/events/:eventId` | Remove — calendar | ADMIN, PRINCIPAL |
 | GET | `/api/v1/academics/calendar/working-days` | Read — calendar | Everyone |
-| GET | `/api/v1/academics/classes` | Read — classes | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/classes` | Read — classes | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | POST | `/api/v1/academics/classes` | Create — classes | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/classes/:classId` | Read — classes | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/classes/:classId` | Read — classes | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | PATCH | `/api/v1/academics/classes/:classId` | Update — classes | ADMIN, PRINCIPAL |
 | POST | `/api/v1/academics/classes/bulk` | Create — classes | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/enrollments` | Read — enrollments | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/enrollments` | Read — enrollments | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | POST | `/api/v1/academics/enrollments` | Create — enrollments | ADMIN, PRINCIPAL, STAFF |
 | PATCH | `/api/v1/academics/enrollments/:enrollmentId` | Update — enrollments | ADMIN, PRINCIPAL, STAFF |
 | POST | `/api/v1/academics/enrollments/promotions` | Promote — enrollments | ADMIN, PRINCIPAL |
@@ -131,27 +131,27 @@
 | POST | `/api/v1/academics/exams/:examId/result-publication/versions` | Publish — result publications | ADMIN, PRINCIPAL |
 | GET | `/api/v1/academics/exams/:examId/result-publication/versions/:version/integrity` | Publish — result publications | ADMIN, PRINCIPAL |
 | POST | `/api/v1/academics/exams/bulk` | Create — exams | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/grade-scales` | Read — grade scales | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/grade-scales` | Read — grade scales | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | POST | `/api/v1/academics/grade-scales` | Manage — grade scales | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/grade-scales/:gradeScaleId` | Read — grade scales | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/grade-scales/:gradeScaleId` | Read — grade scales | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | PATCH | `/api/v1/academics/grade-scales/:gradeScaleId` | Manage — grade scales | ADMIN, PRINCIPAL |
 | DELETE | `/api/v1/academics/grade-scales/:gradeScaleId` | Manage — grade scales | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/grade-scales/templates` | Read — grade scales | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| GET | `/api/v1/academics/homework` | Read — homework | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/grade-scales/templates` | Read — grade scales | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
+| GET | `/api/v1/academics/homework` | Read — homework | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | POST | `/api/v1/academics/homework` | Manage — homework | ADMIN, PRINCIPAL, TEACHER |
-| GET | `/api/v1/academics/homework/:homeworkId` | Read — homework | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/homework/:homeworkId` | Read — homework | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | PATCH | `/api/v1/academics/homework/:homeworkId` | Manage — homework | ADMIN, PRINCIPAL, TEACHER |
 | DELETE | `/api/v1/academics/homework/:homeworkId` | Manage — homework | ADMIN, PRINCIPAL, TEACHER |
 | POST | `/api/v1/academics/homework/:homeworkId/attachments` | Manage — homework | ADMIN, PRINCIPAL, TEACHER |
 | DELETE | `/api/v1/academics/homework/:homeworkId/attachments/:fileId` | Manage — homework | ADMIN, PRINCIPAL, TEACHER |
-| GET | `/api/v1/academics/homework/:homeworkId/attachments/:fileId/download-url` | Read — homework | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| GET | `/api/v1/academics/homework/:homeworkId/submissions` | Read — homework | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| GET | `/api/v1/academics/homework/:homeworkId/submissions/:submissionId/attachments/:fileId/download-url` | Read — homework | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/homework/:homeworkId/attachments/:fileId/download-url` | Read — homework | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
+| GET | `/api/v1/academics/homework/:homeworkId/submissions` | Read — homework | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
+| GET | `/api/v1/academics/homework/:homeworkId/submissions/:submissionId/attachments/:fileId/download-url` | Read — homework | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | POST | `/api/v1/academics/homework/:homeworkId/submissions/:submissionId/grading` | Grade — homework | ADMIN, PRINCIPAL, TEACHER |
 | GET | `/api/v1/academics/marks` | Read — marks | ADMIN, PRINCIPAL, TEACHER |
 | POST | `/api/v1/academics/marks` | Record — marks | ADMIN, PRINCIPAL, TEACHER |
 | POST | `/api/v1/academics/marks/bulk` | Record — marks | ADMIN, PRINCIPAL, TEACHER |
-| GET | `/api/v1/academics/periods` | Read — timetable | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/periods` | Read — timetable | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | POST | `/api/v1/academics/periods` | Manage — timetable | ADMIN, PRINCIPAL |
 | PATCH | `/api/v1/academics/periods/:periodId` | Manage — timetable | ADMIN, PRINCIPAL |
 | DELETE | `/api/v1/academics/periods/:periodId` | Manage — timetable | ADMIN, PRINCIPAL |
@@ -162,38 +162,38 @@
 | GET | `/api/v1/academics/report-cards/snapshots/:snapshotId/pdf` | Read — report cards | ADMIN, PRINCIPAL, STAFF, TEACHER |
 | GET | `/api/v1/academics/report-cards/students/:studentId` | Read — report cards | ADMIN, PRINCIPAL, STAFF, TEACHER |
 | GET | `/api/v1/academics/report-cards/students/:studentId/pdf` | Read — report cards | ADMIN, PRINCIPAL, STAFF, TEACHER |
-| GET | `/api/v1/academics/result-policies` | Read — result policies | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/result-policies` | Read — result policies | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | POST | `/api/v1/academics/result-policies` | Manage — result policies | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/result-policies/:policyId` | Read — result policies | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/result-policies/:policyId` | Read — result policies | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | PATCH | `/api/v1/academics/result-policies/:policyId` | Manage — result policies | ADMIN, PRINCIPAL |
 | DELETE | `/api/v1/academics/result-policies/:policyId` | Manage — result policies | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/result-policies/resolution` | Read — result policies | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| GET | `/api/v1/academics/result-policy-assignments` | Read — result policies | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/result-policies/resolution` | Read — result policies | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
+| GET | `/api/v1/academics/result-policy-assignments` | Read — result policies | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | POST | `/api/v1/academics/result-policy-assignments` | Manage — result policies | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/result-policy-assignments/:assignmentId` | Read — result policies | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/result-policy-assignments/:assignmentId` | Read — result policies | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | PATCH | `/api/v1/academics/result-policy-assignments/:assignmentId` | Manage — result policies | ADMIN, PRINCIPAL |
 | DELETE | `/api/v1/academics/result-policy-assignments/:assignmentId` | Manage — result policies | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/section-subjects` | Read — section subjects | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/section-subjects` | Read — section subjects | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | POST | `/api/v1/academics/section-subjects` | Create — section subjects | ADMIN, PRINCIPAL |
 | DELETE | `/api/v1/academics/section-subjects/:sectionSubjectId` | Remove — section subjects | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/sections` | Read — sections | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/sections` | Read — sections | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | POST | `/api/v1/academics/sections` | Create — sections | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/sections/:sectionId` | Read — sections | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/sections/:sectionId` | Read — sections | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | PATCH | `/api/v1/academics/sections/:sectionId` | Update — sections | ADMIN, PRINCIPAL |
 | POST | `/api/v1/academics/sections/bulk` | Create — sections | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/subjects` | Read — subjects | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/subjects` | Read — subjects | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | POST | `/api/v1/academics/subjects` | Create — subjects | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/subjects/:subjectId` | Read — subjects | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/subjects/:subjectId` | Read — subjects | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | PATCH | `/api/v1/academics/subjects/:subjectId` | Update — subjects | ADMIN, PRINCIPAL |
 | POST | `/api/v1/academics/subjects/bulk` | Create — subjects | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/teacher-assignments` | Read — teacher assignments | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/teacher-assignments` | Read — teacher assignments | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | POST | `/api/v1/academics/teacher-assignments` | Create — teacher assignments | ADMIN, PRINCIPAL |
 | DELETE | `/api/v1/academics/teacher-assignments/:assignmentId` | Remove — teacher assignments | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/timetable/sections/:sectionId` | Read — timetable | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/timetable/sections/:sectionId` | Read — timetable | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 | POST | `/api/v1/academics/timetable/slots` | Manage — timetable | ADMIN, PRINCIPAL |
 | PATCH | `/api/v1/academics/timetable/slots/:slotId` | Manage — timetable | ADMIN, PRINCIPAL |
 | DELETE | `/api/v1/academics/timetable/slots/:slotId` | Manage — timetable | ADMIN, PRINCIPAL |
-| GET | `/api/v1/academics/timetable/teachers/:teacherId` | Read — timetable | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/academics/timetable/teachers/:teacherId` | Read — timetable | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
 
 ## me
 
@@ -235,7 +235,7 @@
 | POST | `/api/v1/administration/imports/:importId/start` | Create — imports | ADMIN, STAFF |
 | POST | `/api/v1/administration/imports/students` | Create — imports | ADMIN, STAFF |
 | GET | `/api/v1/administration/imports/students/template` | Create — imports | ADMIN, STAFF |
-| GET | `/api/v1/administration/settings` | Read — settings | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
+| GET | `/api/v1/administration/settings` | Read — settings | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER |
 | PATCH | `/api/v1/administration/settings` | Update — settings | ADMIN |
 | PUT | `/api/v1/administration/settings/logo` | Update — settings | ADMIN |
 
@@ -328,146 +328,146 @@
 
 | Method | Path | Action | Roles |
 |---|---|---|---|
-| GET | `/api/v1/files` | Read — documents | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
+| GET | `/api/v1/files` | Read — documents | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER |
 | POST | `/api/v1/files` | Upload — documents | ADMIN, STAFF |
-| GET | `/api/v1/files/:fileId` | Read — documents | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
+| GET | `/api/v1/files/:fileId` | Read — documents | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER |
 | DELETE | `/api/v1/files/:fileId` | Remove — documents | ADMIN, STAFF |
-| GET | `/api/v1/files/:fileId/download-url` | Read — documents | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
+| GET | `/api/v1/files/:fileId/download-url` | Read — documents | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER |
 
 ## hostel
 
 | Method | Path | Action | Roles |
 |---|---|---|---|
-| GET | `/api/v1/hostel/allocations` | Read — allocations | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| POST | `/api/v1/hostel/allocations` | Manage — allocations | ADMIN, STAFF |
-| GET | `/api/v1/hostel/allocations/:allocationId` | Read — allocations | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| PATCH | `/api/v1/hostel/allocations/:allocationId` | Manage — allocations | ADMIN, STAFF |
-| POST | `/api/v1/hostel/allocations/:allocationId/transfer` | Manage — allocations | ADMIN, STAFF |
-| POST | `/api/v1/hostel/allocations/:allocationId/vacate` | Manage — allocations | ADMIN, STAFF |
-| GET | `/api/v1/hostel/hostels` | Read — hostels | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| POST | `/api/v1/hostel/hostels` | Manage — hostels | ADMIN, STAFF |
-| GET | `/api/v1/hostel/hostels/:hostelId` | Read — hostels | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| PATCH | `/api/v1/hostel/hostels/:hostelId` | Manage — hostels | ADMIN, STAFF |
-| DELETE | `/api/v1/hostel/hostels/:hostelId` | Manage — hostels | ADMIN, STAFF |
-| GET | `/api/v1/hostel/hostels/:hostelId/occupancy` | Read — hostels | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
+| GET | `/api/v1/hostel/allocations` | Read — allocations | ADMIN, PRINCIPAL, ACCOUNTANT, HOSTEL_MANAGER |
+| POST | `/api/v1/hostel/allocations` | Manage — allocations | ADMIN, HOSTEL_MANAGER |
+| GET | `/api/v1/hostel/allocations/:allocationId` | Read — allocations | ADMIN, PRINCIPAL, ACCOUNTANT, HOSTEL_MANAGER |
+| PATCH | `/api/v1/hostel/allocations/:allocationId` | Manage — allocations | ADMIN, HOSTEL_MANAGER |
+| POST | `/api/v1/hostel/allocations/:allocationId/transfer` | Manage — allocations | ADMIN, HOSTEL_MANAGER |
+| POST | `/api/v1/hostel/allocations/:allocationId/vacate` | Manage — allocations | ADMIN, HOSTEL_MANAGER |
+| GET | `/api/v1/hostel/hostels` | Read — hostels | ADMIN, PRINCIPAL, ACCOUNTANT, HOSTEL_MANAGER |
+| POST | `/api/v1/hostel/hostels` | Manage — hostels | ADMIN, HOSTEL_MANAGER |
+| GET | `/api/v1/hostel/hostels/:hostelId` | Read — hostels | ADMIN, PRINCIPAL, ACCOUNTANT, HOSTEL_MANAGER |
+| PATCH | `/api/v1/hostel/hostels/:hostelId` | Manage — hostels | ADMIN, HOSTEL_MANAGER |
+| DELETE | `/api/v1/hostel/hostels/:hostelId` | Manage — hostels | ADMIN, HOSTEL_MANAGER |
+| GET | `/api/v1/hostel/hostels/:hostelId/occupancy` | Read — hostels | ADMIN, PRINCIPAL, ACCOUNTANT, HOSTEL_MANAGER |
 | GET | `/api/v1/hostel/my-hostel` | Read — my hostel | STUDENT, PARENT |
-| GET | `/api/v1/hostel/rooms` | Read — rooms | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| POST | `/api/v1/hostel/rooms` | Manage — rooms | ADMIN, STAFF |
-| GET | `/api/v1/hostel/rooms/:roomId` | Read — rooms | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| PATCH | `/api/v1/hostel/rooms/:roomId` | Manage — rooms | ADMIN, STAFF |
-| DELETE | `/api/v1/hostel/rooms/:roomId` | Manage — rooms | ADMIN, STAFF |
+| GET | `/api/v1/hostel/rooms` | Read — rooms | ADMIN, PRINCIPAL, ACCOUNTANT, HOSTEL_MANAGER |
+| POST | `/api/v1/hostel/rooms` | Manage — rooms | ADMIN, HOSTEL_MANAGER |
+| GET | `/api/v1/hostel/rooms/:roomId` | Read — rooms | ADMIN, PRINCIPAL, ACCOUNTANT, HOSTEL_MANAGER |
+| PATCH | `/api/v1/hostel/rooms/:roomId` | Manage — rooms | ADMIN, HOSTEL_MANAGER |
+| DELETE | `/api/v1/hostel/rooms/:roomId` | Manage — rooms | ADMIN, HOSTEL_MANAGER |
 
 ## library
 
 | Method | Path | Action | Roles |
 |---|---|---|---|
 | GET | `/api/v1/library/books` | Read — books | Everyone |
-| POST | `/api/v1/library/books` | Manage — books | ADMIN, STAFF |
+| POST | `/api/v1/library/books` | Manage — books | ADMIN, LIBRARIAN |
 | GET | `/api/v1/library/books/:bookId` | Read — books | Everyone |
-| PATCH | `/api/v1/library/books/:bookId` | Manage — books | ADMIN, STAFF |
-| DELETE | `/api/v1/library/books/:bookId` | Manage — books | ADMIN, STAFF |
+| PATCH | `/api/v1/library/books/:bookId` | Manage — books | ADMIN, LIBRARIAN |
+| DELETE | `/api/v1/library/books/:bookId` | Manage — books | ADMIN, LIBRARIAN |
 | GET | `/api/v1/library/books/:bookId/copies` | Read — copies | Everyone |
-| POST | `/api/v1/library/books/:bookId/copies` | Manage — copies | ADMIN, STAFF |
+| POST | `/api/v1/library/books/:bookId/copies` | Manage — copies | ADMIN, LIBRARIAN |
 | GET | `/api/v1/library/copies` | Read — copies | Everyone |
 | GET | `/api/v1/library/copies/:copyId` | Read — copies | Everyone |
-| PATCH | `/api/v1/library/copies/:copyId` | Manage — copies | ADMIN, STAFF |
-| GET | `/api/v1/library/loans` | Read — loans | ADMIN, STAFF, PRINCIPAL |
-| POST | `/api/v1/library/loans` | Circulate — loans | ADMIN, STAFF |
-| GET | `/api/v1/library/loans/:loanId` | Read — loans | ADMIN, STAFF, PRINCIPAL |
-| POST | `/api/v1/library/loans/:loanId/fine-payment` | Circulate — loans | ADMIN, STAFF |
-| POST | `/api/v1/library/loans/:loanId/fine-waiver` | Waive Fine — loans | ADMIN, PRINCIPAL |
-| POST | `/api/v1/library/loans/:loanId/renewal` | Circulate — loans | ADMIN, STAFF |
-| POST | `/api/v1/library/loans/:loanId/return` | Circulate — loans | ADMIN, STAFF |
+| PATCH | `/api/v1/library/copies/:copyId` | Manage — copies | ADMIN, LIBRARIAN |
+| GET | `/api/v1/library/loans` | Read — loans | ADMIN, LIBRARIAN, PRINCIPAL |
+| POST | `/api/v1/library/loans` | Circulate — loans | ADMIN, LIBRARIAN |
+| GET | `/api/v1/library/loans/:loanId` | Read — loans | ADMIN, LIBRARIAN, PRINCIPAL |
+| POST | `/api/v1/library/loans/:loanId/fine-payment` | Circulate — loans | ADMIN, LIBRARIAN |
+| POST | `/api/v1/library/loans/:loanId/fine-waiver` | Waive Fine — loans | ADMIN, LIBRARIAN |
+| POST | `/api/v1/library/loans/:loanId/renewal` | Circulate — loans | ADMIN, LIBRARIAN |
+| POST | `/api/v1/library/loans/:loanId/return` | Circulate — loans | ADMIN, LIBRARIAN |
 | GET | `/api/v1/library/my-loans` | Read Own — loans | Everyone |
 | GET | `/api/v1/library/policy` | Read — policy | Everyone |
-| PATCH | `/api/v1/library/policy` | Manage — policy | ADMIN, STAFF |
+| PATCH | `/api/v1/library/policy` | Manage — policy | ADMIN, LIBRARIAN |
 
 ## hr
 
 | Method | Path | Action | Roles |
 |---|---|---|---|
-| GET | `/api/v1/hr/employee-salaries` | Read — employee salaries | ADMIN, ACCOUNTANT |
-| POST | `/api/v1/hr/employee-salaries` | Manage — employee salaries | ADMIN, ACCOUNTANT |
-| GET | `/api/v1/hr/employee-salaries/:salaryId` | Read — employee salaries | ADMIN, ACCOUNTANT |
-| GET | `/api/v1/hr/leave-balances` | Read — leave balances | ADMIN, PRINCIPAL |
-| GET | `/api/v1/hr/leave-requests` | Read — leave requests | ADMIN, PRINCIPAL |
-| POST | `/api/v1/hr/leave-requests` | Apply — leave requests | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| GET | `/api/v1/hr/leave-requests/:requestId` | Read — leave requests | ADMIN, PRINCIPAL |
-| POST | `/api/v1/hr/leave-requests/:requestId/cancellation` | Cancel — leave requests | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| POST | `/api/v1/hr/leave-requests/:requestId/decision` | Decide — leave requests | ADMIN, PRINCIPAL |
-| GET | `/api/v1/hr/leave-types` | Read — leave types | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| POST | `/api/v1/hr/leave-types` | Manage — leave types | ADMIN, PRINCIPAL |
-| GET | `/api/v1/hr/leave-types/:leaveTypeId` | Read — leave types | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| PATCH | `/api/v1/hr/leave-types/:leaveTypeId` | Manage — leave types | ADMIN, PRINCIPAL |
-| DELETE | `/api/v1/hr/leave-types/:leaveTypeId` | Manage — leave types | ADMIN, PRINCIPAL |
-| GET | `/api/v1/hr/me/attendance` | Read Own — staff attendance | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| GET | `/api/v1/hr/me/leave-balances` | Read Own — leave balances | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| GET | `/api/v1/hr/me/leave-requests` | Read Own — leave requests | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| GET | `/api/v1/hr/me/payslips` | Read Own — payslips | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| GET | `/api/v1/hr/me/payslips/:payslipId` | Read Own — payslips | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| GET | `/api/v1/hr/me/payslips/:payslipId/pdf` | Read Own — payslips | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| GET | `/api/v1/hr/payroll-runs` | Read — payroll runs | ADMIN, ACCOUNTANT |
-| POST | `/api/v1/hr/payroll-runs` | Run — payroll runs | ADMIN, ACCOUNTANT |
-| GET | `/api/v1/hr/payroll-runs/:runId` | Read — payroll runs | ADMIN, ACCOUNTANT |
-| POST | `/api/v1/hr/payroll-runs/:runId/finalization` | Finalize — payroll runs | ADMIN, ACCOUNTANT |
-| GET | `/api/v1/hr/payroll-runs/:runId/payslips` | Read — payroll runs | ADMIN, ACCOUNTANT |
-| POST | `/api/v1/hr/payroll-runs/:runId/recalculation` | Run — payroll runs | ADMIN, ACCOUNTANT |
-| GET | `/api/v1/hr/payslips/:payslipId` | Read — payslips | ADMIN, ACCOUNTANT |
-| GET | `/api/v1/hr/payslips/:payslipId/pdf` | Read — payslips | ADMIN, ACCOUNTANT |
-| GET | `/api/v1/hr/salary-components` | Read — salary components | ADMIN, ACCOUNTANT |
-| POST | `/api/v1/hr/salary-components` | Manage — salary components | ADMIN, ACCOUNTANT |
-| GET | `/api/v1/hr/salary-components/:componentId` | Read — salary components | ADMIN, ACCOUNTANT |
-| PATCH | `/api/v1/hr/salary-components/:componentId` | Manage — salary components | ADMIN, ACCOUNTANT |
-| DELETE | `/api/v1/hr/salary-components/:componentId` | Manage — salary components | ADMIN, ACCOUNTANT |
-| POST | `/api/v1/hr/staff-attendance` | Record — staff attendance | ADMIN, PRINCIPAL, STAFF |
-| GET | `/api/v1/hr/staff-attendance/register` | Read — staff attendance | ADMIN, PRINCIPAL, STAFF |
-| GET | `/api/v1/hr/staff-attendance/summary` | Read — staff attendance | ADMIN, PRINCIPAL, STAFF |
+| GET | `/api/v1/hr/employee-salaries` | Read — employee salaries | ADMIN, ACCOUNTANT, HR_MANAGER |
+| POST | `/api/v1/hr/employee-salaries` | Manage — employee salaries | ADMIN, ACCOUNTANT, HR_MANAGER |
+| GET | `/api/v1/hr/employee-salaries/:salaryId` | Read — employee salaries | ADMIN, ACCOUNTANT, HR_MANAGER |
+| GET | `/api/v1/hr/leave-balances` | Read — leave balances | ADMIN, PRINCIPAL, HR_MANAGER |
+| GET | `/api/v1/hr/leave-requests` | Read — leave requests | ADMIN, PRINCIPAL, HR_MANAGER |
+| POST | `/api/v1/hr/leave-requests` | Apply — leave requests | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
+| GET | `/api/v1/hr/leave-requests/:requestId` | Read — leave requests | ADMIN, PRINCIPAL, HR_MANAGER |
+| POST | `/api/v1/hr/leave-requests/:requestId/cancellation` | Cancel — leave requests | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
+| POST | `/api/v1/hr/leave-requests/:requestId/decision` | Decide — leave requests | ADMIN, PRINCIPAL, HR_MANAGER |
+| GET | `/api/v1/hr/leave-types` | Read — leave types | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
+| POST | `/api/v1/hr/leave-types` | Manage — leave types | ADMIN, PRINCIPAL, HR_MANAGER |
+| GET | `/api/v1/hr/leave-types/:leaveTypeId` | Read — leave types | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
+| PATCH | `/api/v1/hr/leave-types/:leaveTypeId` | Manage — leave types | ADMIN, PRINCIPAL, HR_MANAGER |
+| DELETE | `/api/v1/hr/leave-types/:leaveTypeId` | Manage — leave types | ADMIN, PRINCIPAL, HR_MANAGER |
+| GET | `/api/v1/hr/me/attendance` | Read Own — staff attendance | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
+| GET | `/api/v1/hr/me/leave-balances` | Read Own — leave balances | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
+| GET | `/api/v1/hr/me/leave-requests` | Read Own — leave requests | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
+| GET | `/api/v1/hr/me/payslips` | Read Own — payslips | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
+| GET | `/api/v1/hr/me/payslips/:payslipId` | Read Own — payslips | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
+| GET | `/api/v1/hr/me/payslips/:payslipId/pdf` | Read Own — payslips | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, HR_MANAGER, LIBRARIAN, TRANSPORT_MANAGER, HOSTEL_MANAGER, INVENTORY_MANAGER, TEACHER |
+| GET | `/api/v1/hr/payroll-runs` | Read — payroll runs | ADMIN, ACCOUNTANT, HR_MANAGER |
+| POST | `/api/v1/hr/payroll-runs` | Run — payroll runs | ADMIN, ACCOUNTANT, HR_MANAGER |
+| GET | `/api/v1/hr/payroll-runs/:runId` | Read — payroll runs | ADMIN, ACCOUNTANT, HR_MANAGER |
+| POST | `/api/v1/hr/payroll-runs/:runId/finalization` | Finalize — payroll runs | ADMIN, ACCOUNTANT, HR_MANAGER |
+| GET | `/api/v1/hr/payroll-runs/:runId/payslips` | Read — payroll runs | ADMIN, ACCOUNTANT, HR_MANAGER |
+| POST | `/api/v1/hr/payroll-runs/:runId/recalculation` | Run — payroll runs | ADMIN, ACCOUNTANT, HR_MANAGER |
+| GET | `/api/v1/hr/payslips/:payslipId` | Read — payslips | ADMIN, ACCOUNTANT, HR_MANAGER |
+| GET | `/api/v1/hr/payslips/:payslipId/pdf` | Read — payslips | ADMIN, ACCOUNTANT, HR_MANAGER |
+| GET | `/api/v1/hr/salary-components` | Read — salary components | ADMIN, ACCOUNTANT, HR_MANAGER |
+| POST | `/api/v1/hr/salary-components` | Manage — salary components | ADMIN, ACCOUNTANT, HR_MANAGER |
+| GET | `/api/v1/hr/salary-components/:componentId` | Read — salary components | ADMIN, ACCOUNTANT, HR_MANAGER |
+| PATCH | `/api/v1/hr/salary-components/:componentId` | Manage — salary components | ADMIN, ACCOUNTANT, HR_MANAGER |
+| DELETE | `/api/v1/hr/salary-components/:componentId` | Manage — salary components | ADMIN, ACCOUNTANT, HR_MANAGER |
+| POST | `/api/v1/hr/staff-attendance` | Record — staff attendance | ADMIN, PRINCIPAL, HR_MANAGER |
+| GET | `/api/v1/hr/staff-attendance/register` | Read — staff attendance | ADMIN, PRINCIPAL, HR_MANAGER |
+| GET | `/api/v1/hr/staff-attendance/summary` | Read — staff attendance | ADMIN, PRINCIPAL, HR_MANAGER |
 
 ## transport
 
 | Method | Path | Action | Roles |
 |---|---|---|---|
-| GET | `/api/v1/transport/assignments` | Read — assignments | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| POST | `/api/v1/transport/assignments` | Manage — assignments | ADMIN, STAFF |
-| GET | `/api/v1/transport/assignments/:assignmentId` | Read — assignments | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| POST | `/api/v1/transport/assignments/:assignmentId/change` | Manage — assignments | ADMIN, STAFF |
-| POST | `/api/v1/transport/assignments/:assignmentId/end` | Manage — assignments | ADMIN, STAFF |
+| GET | `/api/v1/transport/assignments` | Read — assignments | ADMIN, PRINCIPAL, ACCOUNTANT, TRANSPORT_MANAGER |
+| POST | `/api/v1/transport/assignments` | Manage — assignments | ADMIN, TRANSPORT_MANAGER |
+| GET | `/api/v1/transport/assignments/:assignmentId` | Read — assignments | ADMIN, PRINCIPAL, ACCOUNTANT, TRANSPORT_MANAGER |
+| POST | `/api/v1/transport/assignments/:assignmentId/change` | Manage — assignments | ADMIN, TRANSPORT_MANAGER |
+| POST | `/api/v1/transport/assignments/:assignmentId/end` | Manage — assignments | ADMIN, TRANSPORT_MANAGER |
 | GET | `/api/v1/transport/my-transport` | Read — my transport | STUDENT, PARENT |
-| GET | `/api/v1/transport/routes` | Read — routes | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| POST | `/api/v1/transport/routes` | Manage — routes | ADMIN, STAFF |
-| GET | `/api/v1/transport/routes/:routeId` | Read — routes | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| PATCH | `/api/v1/transport/routes/:routeId` | Manage — routes | ADMIN, STAFF |
-| DELETE | `/api/v1/transport/routes/:routeId` | Manage — routes | ADMIN, STAFF |
-| GET | `/api/v1/transport/routes/:routeId/roster` | Read — roster | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| GET | `/api/v1/transport/vehicles` | Read — vehicles | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| POST | `/api/v1/transport/vehicles` | Manage — vehicles | ADMIN, STAFF |
-| GET | `/api/v1/transport/vehicles/:vehicleId` | Read — vehicles | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF, TEACHER |
-| PATCH | `/api/v1/transport/vehicles/:vehicleId` | Manage — vehicles | ADMIN, STAFF |
-| DELETE | `/api/v1/transport/vehicles/:vehicleId` | Manage — vehicles | ADMIN, STAFF |
+| GET | `/api/v1/transport/routes` | Read — routes | ADMIN, PRINCIPAL, ACCOUNTANT, TRANSPORT_MANAGER |
+| POST | `/api/v1/transport/routes` | Manage — routes | ADMIN, TRANSPORT_MANAGER |
+| GET | `/api/v1/transport/routes/:routeId` | Read — routes | ADMIN, PRINCIPAL, ACCOUNTANT, TRANSPORT_MANAGER |
+| PATCH | `/api/v1/transport/routes/:routeId` | Manage — routes | ADMIN, TRANSPORT_MANAGER |
+| DELETE | `/api/v1/transport/routes/:routeId` | Manage — routes | ADMIN, TRANSPORT_MANAGER |
+| GET | `/api/v1/transport/routes/:routeId/roster` | Read — roster | ADMIN, PRINCIPAL, ACCOUNTANT, TRANSPORT_MANAGER |
+| GET | `/api/v1/transport/vehicles` | Read — vehicles | ADMIN, PRINCIPAL, ACCOUNTANT, TRANSPORT_MANAGER |
+| POST | `/api/v1/transport/vehicles` | Manage — vehicles | ADMIN, TRANSPORT_MANAGER |
+| GET | `/api/v1/transport/vehicles/:vehicleId` | Read — vehicles | ADMIN, PRINCIPAL, ACCOUNTANT, TRANSPORT_MANAGER |
+| PATCH | `/api/v1/transport/vehicles/:vehicleId` | Manage — vehicles | ADMIN, TRANSPORT_MANAGER |
+| DELETE | `/api/v1/transport/vehicles/:vehicleId` | Manage — vehicles | ADMIN, TRANSPORT_MANAGER |
 
 ## inventory
 
 | Method | Path | Action | Roles |
 |---|---|---|---|
-| GET | `/api/v1/inventory/categories` | Read — categories | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
-| POST | `/api/v1/inventory/categories` | Manage — categories | ADMIN, STAFF |
-| GET | `/api/v1/inventory/categories/:categoryId` | Read — categories | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
-| PATCH | `/api/v1/inventory/categories/:categoryId` | Manage — categories | ADMIN, STAFF |
-| DELETE | `/api/v1/inventory/categories/:categoryId` | Manage — categories | ADMIN, STAFF |
-| GET | `/api/v1/inventory/items` | Read — items | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
-| POST | `/api/v1/inventory/items` | Manage — items | ADMIN, STAFF |
-| GET | `/api/v1/inventory/items/:itemId` | Read — items | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
-| PATCH | `/api/v1/inventory/items/:itemId` | Manage — items | ADMIN, STAFF |
-| DELETE | `/api/v1/inventory/items/:itemId` | Manage — items | ADMIN, STAFF |
-| GET | `/api/v1/inventory/items/:itemId/movements` | Read — stock | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
-| POST | `/api/v1/inventory/items/:itemId/movements` | Move — stock | ADMIN, STAFF |
-| GET | `/api/v1/inventory/movements` | Read — stock | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
-| GET | `/api/v1/inventory/movements/:movementId` | Read — stock | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
-| GET | `/api/v1/inventory/reports/consumption` | Read — reports | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
-| GET | `/api/v1/inventory/reports/low-stock` | Read — reports | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
-| GET | `/api/v1/inventory/reports/valuation` | Read — reports | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
-| GET | `/api/v1/inventory/vendors` | Read — vendors | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
-| POST | `/api/v1/inventory/vendors` | Manage — vendors | ADMIN, STAFF |
-| GET | `/api/v1/inventory/vendors/:vendorId` | Read — vendors | ADMIN, PRINCIPAL, ACCOUNTANT, STAFF |
-| PATCH | `/api/v1/inventory/vendors/:vendorId` | Manage — vendors | ADMIN, STAFF |
-| DELETE | `/api/v1/inventory/vendors/:vendorId` | Manage — vendors | ADMIN, STAFF |
+| GET | `/api/v1/inventory/categories` | Read — categories | ADMIN, PRINCIPAL, ACCOUNTANT, INVENTORY_MANAGER |
+| POST | `/api/v1/inventory/categories` | Manage — categories | ADMIN, INVENTORY_MANAGER |
+| GET | `/api/v1/inventory/categories/:categoryId` | Read — categories | ADMIN, PRINCIPAL, ACCOUNTANT, INVENTORY_MANAGER |
+| PATCH | `/api/v1/inventory/categories/:categoryId` | Manage — categories | ADMIN, INVENTORY_MANAGER |
+| DELETE | `/api/v1/inventory/categories/:categoryId` | Manage — categories | ADMIN, INVENTORY_MANAGER |
+| GET | `/api/v1/inventory/items` | Read — items | ADMIN, PRINCIPAL, ACCOUNTANT, INVENTORY_MANAGER |
+| POST | `/api/v1/inventory/items` | Manage — items | ADMIN, INVENTORY_MANAGER |
+| GET | `/api/v1/inventory/items/:itemId` | Read — items | ADMIN, PRINCIPAL, ACCOUNTANT, INVENTORY_MANAGER |
+| PATCH | `/api/v1/inventory/items/:itemId` | Manage — items | ADMIN, INVENTORY_MANAGER |
+| DELETE | `/api/v1/inventory/items/:itemId` | Manage — items | ADMIN, INVENTORY_MANAGER |
+| GET | `/api/v1/inventory/items/:itemId/movements` | Read — stock | ADMIN, PRINCIPAL, ACCOUNTANT, INVENTORY_MANAGER |
+| POST | `/api/v1/inventory/items/:itemId/movements` | Move — stock | ADMIN, INVENTORY_MANAGER |
+| GET | `/api/v1/inventory/movements` | Read — stock | ADMIN, PRINCIPAL, ACCOUNTANT, INVENTORY_MANAGER |
+| GET | `/api/v1/inventory/movements/:movementId` | Read — stock | ADMIN, PRINCIPAL, ACCOUNTANT, INVENTORY_MANAGER |
+| GET | `/api/v1/inventory/reports/consumption` | Read — reports | ADMIN, PRINCIPAL, ACCOUNTANT, INVENTORY_MANAGER |
+| GET | `/api/v1/inventory/reports/low-stock` | Read — reports | ADMIN, PRINCIPAL, ACCOUNTANT, INVENTORY_MANAGER |
+| GET | `/api/v1/inventory/reports/valuation` | Read — reports | ADMIN, PRINCIPAL, ACCOUNTANT, INVENTORY_MANAGER |
+| GET | `/api/v1/inventory/vendors` | Read — vendors | ADMIN, PRINCIPAL, ACCOUNTANT, INVENTORY_MANAGER |
+| POST | `/api/v1/inventory/vendors` | Manage — vendors | ADMIN, INVENTORY_MANAGER |
+| GET | `/api/v1/inventory/vendors/:vendorId` | Read — vendors | ADMIN, PRINCIPAL, ACCOUNTANT, INVENTORY_MANAGER |
+| PATCH | `/api/v1/inventory/vendors/:vendorId` | Manage — vendors | ADMIN, INVENTORY_MANAGER |
+| DELETE | `/api/v1/inventory/vendors/:vendorId` | Manage — vendors | ADMIN, INVENTORY_MANAGER |

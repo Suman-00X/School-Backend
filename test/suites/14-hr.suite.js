@@ -11,7 +11,7 @@ const teacherId = () => world.teacher.userId;
 const teacher2Id = () => world.teacher2.userId;
 const officeId = () => world.office.userId;
 
-const mark = (date, records, as = h.tokens.office) =>
+const mark = (date, records, as = h.tokens.hrManager) =>
   request("POST", `${HR}/staff-attendance`, { as, body: { date, records } });
 
 const statuses = responses => responses.map(r => r.status).sort();
@@ -105,7 +105,7 @@ describe("hr: staff attendance", () => {
 
   it("summarises per employee and shows employees their own record", async () => {
     const summary = await get(`${HR}/staff-attendance/summary?from=2026-07-01&to=2026-07-31&userId=${teacher2Id()}`, {
-      as: h.tokens.office
+      as: h.tokens.hrManager
     });
     assert.equal(summary.data.workingDays, 26, "31 July days - 4 Sundays - 1 holiday");
     assert.equal(summary.data.employees.length, 1);
@@ -338,7 +338,7 @@ describe("hr: leave", () => {
     const pending = await post(
       `${HR}/leave-requests`,
       { leaveTypeId: temp.id, fromDate: "2026-12-01", toDate: "2026-12-01", reason: "Exam" },
-      { as: h.tokens.office }
+      { as: h.tokens.hrManager }
     );
     const blocked = await request("DELETE", `${HR}/leave-types/${temp.id}`);
     assert.equal(blocked.status, 409);
@@ -346,7 +346,7 @@ describe("hr: leave", () => {
       blocked.body.message,
       "Study Leave has 1 pending request(s); decide or cancel them before removing it"
     );
-    await post(`${HR}/leave-requests/${pending.data.id}/cancellation`, {}, { as: h.tokens.office }, 200);
+    await post(`${HR}/leave-requests/${pending.data.id}/cancellation`, {}, { as: h.tokens.hrManager }, 200);
     const removed = await request("DELETE", `${HR}/leave-types/${temp.id}`);
     assert.equal(removed.body.message, "Leave type removed successfully");
     await post(`${HR}/leave-types`, { name: "Study Leave", code: "STUDY", annualQuotaDays: 5 }, {}, 201);

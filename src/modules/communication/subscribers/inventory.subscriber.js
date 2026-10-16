@@ -6,8 +6,8 @@ import { notificationService } from "../notifications/index.js";
 import { recipients } from "../shared/services/recipients.service.js";
 import { messages } from "../shared/templates/messages.js";
 
-/* Who restocks: administrators and the office (in-app) */
-const RESTOCKERS = ["ADMIN", "STAFF"];
+/* Who restocks: administrators and the store's administrator (in-app) */
+const RESTOCKERS = ["ADMIN", "INVENTORY_MANAGER"];
 
 /* An item fell to its reorder level -> tell the people who restock it, once per movement */
 subscribe(INVENTORY_EVENTS.LOW_STOCK, "communication.lowStock", async ({ tenantId, itemId, movementId }) => {

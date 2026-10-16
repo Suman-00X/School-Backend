@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { addDays, todayIn } from "../../src/common/utils/date.util.js";
-import { h, world, request, get, post, patch, del, uuid } from "../helpers/harness.js";
+import { h, world, request, get, post, patch, del, person, settleJobs, uuid } from "../helpers/harness.js";
 
 const T = "/api/v1/transport";
 const today = todayIn("Asia/Kolkata");
-const asOffice = () => ({ as: h.tokens.office });
+const asOffice = () => ({ as: h.tokens.transportManager });
 
 const activeOnRoute = async routeId =>
   Number(
@@ -75,7 +75,9 @@ describe("transport: vehicles", () => {
     ).data;
 
     await post(`${T}/vehicles`, { registrationNumber: "KA05IJ0001", capacity: 10 }, { as: h.tokens.teacher }, 403);
-    assert.equal((await get(`${T}/vehicles`, { as: h.tokens.teacher })).meta.total, 4);
+    assert.equal((await get(`${T}/vehicles`, { as: h.tokens.transportManager })).meta.total, 4);
+    /* Teachers have no part in transport (D-51) */
+    await get(`${T}/vehicles`, { as: h.tokens.teacher }, 403);
     await get(`${T}/vehicles`, { as: h.tokens.student1 }, 403);
 
     const renamed = await request("PATCH", `${T}/vehicles/${world.spare.id}`, {
@@ -198,7 +200,7 @@ describe("transport: routes", () => {
     assert.deepEqual(mixed.body.error.details.map(d => d.field).sort(), ["stops", "stops", "stops.2.pickupTime"]);
 
     await post(`${T}/routes`, { name: "Teacher Loop", stops: [{ name: "X" }] }, { as: h.tokens.teacher }, 403);
-    const list = await get(`${T}/routes`, { as: h.tokens.teacher });
+    const list = await get(`${T}/routes`, { as: h.tokens.transportManager });
     assert.deepEqual(
       list.data.map(r => [r.code, r.occupancy.capacity]),
       [
@@ -273,7 +275,7 @@ describe("transport: assignments", () => {
 
     const attempt = student =>
       request("POST", `${T}/assignments`, {
-        as: h.tokens.office,
+        as: h.tokens.transportManager,
         body: {
           studentId: student.id,
           routeId: world.r1.id,
@@ -408,7 +410,7 @@ describe("transport: assignments", () => {
   });
 
   it("lists assignments by route, stop and student", async () => {
-    const onR1 = await get(`${T}/assignments?routeId=${world.r1.id}&status=ACTIVE`, { as: h.tokens.teacher });
+    const onR1 = await get(`${T}/assignments?routeId=${world.r1.id}&status=ACTIVE`, { as: h.tokens.transportManager });
     assert.deepEqual(onR1.data.map(a => a.studentId).sort(), [world.s1.id, world.loser.id].sort());
     const atGate = await get(`${T}/assignments?stopId=${world.gate.id}`);
     assert.deepEqual(
@@ -506,7 +508,7 @@ describe("transport: rules on routes and vehicles in use", () => {
     assert.deepEqual(vehicle.data.route, { id: world.r1.id, name: "North Loop", code: "R1" });
 
     await del(`${T}/routes/${world.r1.id}`, {}, 409);
-    await del(`${T}/vehicles/${world.oldBus.id}`, { as: h.tokens.office });
+    await del(`${T}/vehicles/${world.oldBus.id}`, { as: h.tokens.transportManager });
     await get(`${T}/vehicles/${world.oldBus.id}`, {}, 404);
   });
 });
@@ -516,7 +518,9 @@ describe("transport: roster and self-service", () => {
     const mother = (await get(`/api/v1/users/parents/${world.motherId}`)).data;
     await patch(`/api/v1/users/${mother.userId}`, { phone: "9000011111" });
 
-    const roster = await get(`${T}/routes/${world.r1.id}/roster`, { as: h.tokens.teacher });
+    const roster = await get(`${T}/routes/${world.r1.id}/roster`, { as: h.tokens.transportManager });
+    /* Parent phone numbers on rosters are not for teachers (D-51) */
+    await get(`${T}/routes/${world.r1.id}/roster`, { as: h.tokens.teacher }, 403);
     assert.equal(roster.message, "Route R1 roster: 2 student(s) across 3 stop(s)");
     assert.deepEqual(
       roster.data.stops.map(s => [s.sequence, s.name, s.students.length]),
@@ -543,7 +547,7 @@ describe("transport: roster and self-service", () => {
     );
     assert.equal(roster.data.vehicle.registrationNumber, "KA03EF9012");
 
-    const csv = await request("GET", `${T}/routes/${world.r1.id}/roster?format=csv`, { as: h.tokens.office });
+    const csv = await request("GET", `${T}/routes/${world.r1.id}/roster?format=csv`, { as: h.tokens.transportManager });
     assert.equal(csv.status, 200);
     assert.match(csv.headers.get("content-type"), /^text\/csv/);
     assert.match(csv.headers.get("content-disposition"), /route-R1-roster\.csv/);
@@ -599,5 +603,36 @@ describe("transport: roster and self-service", () => {
 
     await get(`${T}/my-transport`, { as: h.tokens.teacher }, 403);
     await get(`${T}/my-transport`, { as: h.tokens.admin }, 403);
+  });
+});
+
+describe("transport: students who leave", () => {
+  it("releases the seat of a student who leaves the school (D-52)", async () => {
+    const vehicle = (await post(`${T}/vehicles`, { registrationNumber: "KA09ZZ0909", capacity: 5 })).data;
+    const route = (
+      await post(`${T}/routes`, { name: "Leavers Loop", vehicleId: vehicle.id, stops: [{ name: "Gate" }] })
+    ).data;
+    const student = (
+      await post("/api/v1/users/students", {
+        user: person("leaver"),
+        profile: { admissionNumber: "ADM-LEAVER" },
+        parents: [],
+        enrollment: { academicYearId: world.y1.id, sectionId: world.s2A.id }
+      })
+    ).data;
+    const seat = (
+      await post(
+        `${T}/assignments`,
+        { studentId: student.id, routeId: route.id, stopId: route.stops[0].id },
+        { as: h.tokens.transportManager }
+      )
+    ).data;
+    assert.equal(seat.status, "ACTIVE");
+
+    await patch(`/api/v1/academics/enrollments/${student.enrollment.id}`, { status: "LEFT" });
+    await settleJobs();
+    const after = await get(`${T}/assignments/${seat.id}`, { as: h.tokens.transportManager });
+    assert.equal(after.data.status, "ENDED");
+    assert.ok(after.data.endDate);
   });
 });

@@ -133,6 +133,12 @@ export const assignmentService = {
   },
 
   /* Stop using transport. endDate (default today) is the last day of use. */
+  /* For jobs: a student's active assignments in a year */
+  activeForStudent: (ctx, studentId, academicYearId) =>
+    assignmentRepository.findMany(ctx.tenantId, {
+      conditions: [eq(assignments.studentId, studentId), eq(assignments.academicYearId, academicYearId), active()]
+    }),
+
   end: async (ctx, assignmentId, { endDate }) => {
     await transaction(async tx => {
       const assignment = await assignmentRepository.lockForUpdate(ctx.tenantId, assignmentId, { dbc: tx });

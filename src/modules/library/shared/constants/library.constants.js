@@ -1,4 +1,4 @@
-import { ROLES } from "../../../../common/auth/roles.js";
+import { ROLE_GROUPS, ROLES } from "../../../../common/auth/roles.js";
 
 /* Enum values used by the library module's tables and validators (single source) */
 export const COPY_STATUSES = ["AVAILABLE", "ISSUED", "LOST", "DAMAGED", "WITHDRAWN"];
@@ -10,7 +10,7 @@ export const RETURN_CONDITIONS = ["OK", "DAMAGED", "LOST"];
 export const FINE_PAYMENT_METHODS = ["CASH", "UPI", "CARD"];
 
 /* Who may borrow: students and every employee. Parents cannot. */
-export const STAFF_BORROWER_ROLES = [ROLES.ADMIN, ROLES.PRINCIPAL, ROLES.ACCOUNTANT, ROLES.STAFF, ROLES.TEACHER];
+export const STAFF_BORROWER_ROLES = ROLE_GROUPS.ALL_EMPLOYEES;
 export const BORROWER_ROLES = [ROLES.STUDENT, ...STAFF_BORROWER_ROLES];
 
 /* Policy defaults, used when a school first opens its library */

@@ -120,6 +120,13 @@
       "when": 1792160255918,
       "tag": "0016_snapshot_seals",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792160756595,
+      "tag": "0017_module_manager_roles",
+      "breakpoints": true
     }
   ]
 }

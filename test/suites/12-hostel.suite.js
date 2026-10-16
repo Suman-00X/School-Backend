@@ -43,7 +43,7 @@ describe("hostel: hostels and rooms", () => {
     assert.equal(student.status, 422);
     assert.equal(
       student.body.message,
-      "wardenUserId must be an active employee account (ADMIN, PRINCIPAL, STAFF, TEACHER); Fstudent1 Lstudent1 is a student account"
+      "wardenUserId must be an active employee account (ADMIN, PRINCIPAL, HOSTEL_MANAGER, STAFF, TEACHER); Fstudent1 Lstudent1 is a student account"
     );
     await post(`${HS}/hostels`, { name: "X", residentGender: "COED", wardenUserId: world.accountant.userId }, {}, 422);
     await post(`${HS}/hostels`, { name: "X", residentGender: "COED", wardenUserId: uuid() }, {}, 422);
@@ -55,7 +55,9 @@ describe("hostel: hostels and rooms", () => {
     await post(`${HS}/hostels`, { name: "Y", residentGender: "COED" }, { as: h.tokens.teacher }, 403);
 
     /* Office staff manage hostels too */
-    t.annex = (await post(`${HS}/hostels`, { name: "Annex", residentGender: "COED" }, { as: h.tokens.office })).data;
+    t.annex = (
+      await post(`${HS}/hostels`, { name: "Annex", residentGender: "COED" }, { as: h.tokens.hostelManager })
+    ).data;
     assert.equal(t.annex.code, "HST-002");
 
     const all = await get(`${HS}/hostels`, { as: h.tokens.accountant });
@@ -63,7 +65,7 @@ describe("hostel: hostels and rooms", () => {
       all.data.map(x => x.name),
       ["Annex", "Boys Hostel", "Girls Hostel"]
     );
-    assert.equal((await get(`${HS}/hostels?residentGender=GIRLS`, { as: h.tokens.teacher })).meta.total, 1);
+    assert.equal((await get(`${HS}/hostels?residentGender=GIRLS`, { as: h.tokens.hostelManager })).meta.total, 1);
     await get(`${HS}/hostels/${t.boys.id}`, { as: h.tokens.otherAdmin }, 404);
     await get(`${HS}/hostels`, { as: h.tokens.student1 }, 403);
   });
@@ -99,7 +101,8 @@ describe("hostel: hostels and rooms", () => {
     await post(`${HS}/rooms`, { hostelId: uuid(), roomNumber: "104", capacity: 2 }, {}, 422);
     await post(`${HS}/rooms`, { hostelId: t.boys.id, roomNumber: "104", capacity: 2 }, { as: h.tokens.teacher }, 403);
 
-    const boysRooms = await get(`${HS}/rooms?hostelId=${t.boys.id}`, { as: h.tokens.teacher });
+    const boysRooms = await get(`${HS}/rooms?hostelId=${t.boys.id}`, { as: h.tokens.hostelManager });
+    await get(`${HS}/rooms?hostelId=${t.boys.id}`, { as: h.tokens.teacher }, 403);
     assert.deepEqual(
       boysRooms.data.map(r => r.roomNumber),
       ["101", "102", "103"]
@@ -178,7 +181,10 @@ describe("hostel: allocations", () => {
       await holder.query("SELECT id FROM hostel_rooms WHERE id = $1 FOR UPDATE", [t.r102.id]);
       const pending = Promise.all(
         [world.s1, world.s2].map(student =>
-          allocate({ studentId: student.id, roomId: t.r102.id, allocatedOn: "2026-07-01" }, { as: h.tokens.office })
+          allocate(
+            { studentId: student.id, roomId: t.r102.id, allocatedOn: "2026-07-01" },
+            { as: h.tokens.hostelManager }
+          )
         )
       );
       for (let i = 0; i < 200 && (await lockWaiters()) < 2; i++) await new Promise(r => setTimeout(r, 10));
@@ -218,7 +224,7 @@ describe("hostel: allocations", () => {
     await del(`${HS}/rooms/${t.r101.id}`, {}, 409);
     await del(`${HS}/hostels/${t.boys.id}`, {}, 409);
 
-    await patch(`${HS}/rooms/${t.r103.id}`, { status: "MAINTENANCE" }, { as: h.tokens.office });
+    await patch(`${HS}/rooms/${t.r103.id}`, { status: "MAINTENANCE" }, { as: h.tokens.hostelManager });
     const maintenance = await allocate({ studentId: t.ira.id, roomId: t.r103.id });
     assert.equal(maintenance.status, 422);
     assert.equal(maintenance.body.message, "Room 103, Boys Hostel is under maintenance and cannot take residents");
@@ -227,7 +233,7 @@ describe("hostel: allocations", () => {
   });
 
   it("reports occupancy per room and for the hostel", async () => {
-    const res = await get(`${HS}/hostels/${t.boys.id}/occupancy`, { as: h.tokens.teacher });
+    const res = await get(`${HS}/hostels/${t.boys.id}/occupancy`, { as: h.tokens.hostelManager });
     assert.equal(res.message, "Boys Hostel: 3 of 6 beds occupied");
     assert.deepEqual(res.data.totals, { rooms: 3, capacity: 6, occupied: 3, free: 3, allocatable: 3 });
     const byNumber = Object.fromEntries(res.data.rooms.map(r => [r.roomNumber, r]));
@@ -359,7 +365,7 @@ describe("hostel: allocations", () => {
   it("removes empty rooms and hostels", async () => {
     await del(`${HS}/rooms/${t.g101.id}`);
     await get(`${HS}/rooms/${t.g101.id}`, {}, 404);
-    const removed = await del(`${HS}/hostels/${t.annex.id}`, { as: h.tokens.office });
+    const removed = await del(`${HS}/hostels/${t.annex.id}`, { as: h.tokens.hostelManager });
     assert.equal(removed.message, "Hostel Annex and its rooms removed");
     await get(`${HS}/hostels/${t.annex.id}`, {}, 404);
     /* The name is free again */

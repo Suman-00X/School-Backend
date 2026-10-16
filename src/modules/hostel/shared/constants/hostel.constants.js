@@ -9,6 +9,7 @@ export const ALLOCATION_STATUSES = ["ACTIVE", "VACATED"];
 export const GENDER_FOR_RESIDENTS = { BOYS: "MALE", GIRLS: "FEMALE" };
 
 /* Accounts that can be a hostel's warden */
-export const WARDEN_ROLES = [ROLES.ADMIN, ROLES.PRINCIPAL, ROLES.STAFF, ROLES.TEACHER];
+/* A warden is often a resident teacher; being warden gives no module access by itself */
+export const WARDEN_ROLES = [ROLES.ADMIN, ROLES.PRINCIPAL, ROLES.HOSTEL_MANAGER, ROLES.STAFF, ROLES.TEACHER];
 
 export const MAX_ROOM_CAPACITY = 50;

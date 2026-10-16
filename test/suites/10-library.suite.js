@@ -7,9 +7,9 @@ const L = "/api/v1/library";
 const lib = {};
 
 const today = () => todayIn("Asia/Kolkata");
-const issue = (body, as = h.tokens.office, status = 201) => post(`${L}/loans`, body, { as }, status);
+const issue = (body, as = h.tokens.librarian, status = 201) => post(`${L}/loans`, body, { as }, status);
 const copyByAccession = async accessionNumber =>
-  (await get(`${L}/copies?accessionNumber=${accessionNumber}`, { as: h.tokens.office })).data[0];
+  (await get(`${L}/copies?accessionNumber=${accessionNumber}`, { as: h.tokens.librarian })).data[0];
 
 describe("library: policy and catalogue", () => {
   it("creates the default policy on first read, once, and lets librarians change it", async () => {
@@ -37,10 +37,10 @@ describe("library: policy and catalogue", () => {
     assert.equal(Number(rows.rows[0].count), 1);
 
     await patch(`${L}/policy`, { fineGraceDays: 1 }, { as: h.tokens.teacher }, 403);
-    await patch(`${L}/policy`, {}, { as: h.tokens.office }, 400);
-    await patch(`${L}/policy`, { finePerDay: 1.234 }, { as: h.tokens.office }, 400);
-    await patch(`${L}/policy`, { studentLoanDays: 0 }, { as: h.tokens.office }, 400);
-    const updated = await patch(`${L}/policy`, { finePerDay: 2.5, fineGraceDays: 2 }, { as: h.tokens.office });
+    await patch(`${L}/policy`, {}, { as: h.tokens.librarian }, 400);
+    await patch(`${L}/policy`, { finePerDay: 1.234 }, { as: h.tokens.librarian }, 400);
+    await patch(`${L}/policy`, { studentLoanDays: 0 }, { as: h.tokens.librarian }, 400);
+    const updated = await patch(`${L}/policy`, { finePerDay: 2.5, fineGraceDays: 2 }, { as: h.tokens.librarian });
     assert.equal(updated.data.finePerDay, 2.5);
     assert.equal(updated.data.fineGraceDays, 2);
     assert.equal(updated.message, "Library policy updated successfully");
@@ -56,7 +56,7 @@ describe("library: policy and catalogue", () => {
         category: "Fiction",
         shelfLocation: "F-12"
       },
-      { as: h.tokens.office }
+      { as: h.tokens.librarian }
     );
     assert.equal(hobbit.data.isbn, "9780306406157");
     assert.deepEqual(hobbit.data.copies, { total: 0, available: 0, issued: 0, lost: 0, damaged: 0, withdrawn: 0 });
@@ -66,7 +66,7 @@ describe("library: policy and catalogue", () => {
       await post(
         `${L}/books`,
         { title: "Mathematics Made Easy", authors: ["K. Rao"], isbn: "0 306 40615 2", subjectId: world.math.id },
-        { as: h.tokens.office }
+        { as: h.tokens.librarian }
       )
     ).data;
     assert.equal(lib.maths.isbn, "0306406152");
@@ -77,31 +77,31 @@ describe("library: policy and catalogue", () => {
       await post(
         `${L}/books`,
         { title: "Wings of Fire", authors: ["A. P. J. Abdul Kalam", "Arun Tiwari"], isbn: "0-8044-2957-x" },
-        { as: h.tokens.office }
+        { as: h.tokens.librarian }
       )
     ).data;
     assert.equal(lib.wings.isbn, "080442957X");
 
     const badChecksum = await request("POST", `${L}/books`, {
-      as: h.tokens.office,
+      as: h.tokens.librarian,
       body: { title: "Bad", isbn: "978-0-306-40615-8" }
     });
     assert.equal(badChecksum.status, 400);
     assert.equal(badChecksum.body.message, "Invalid request: isbn must be a valid ISBN-10 or ISBN-13");
-    await post(`${L}/books`, { title: "Bad", isbn: "12345" }, { as: h.tokens.office }, 400);
-    await post(`${L}/books`, { title: "Bad", isbn: "0306406153" }, { as: h.tokens.office }, 400);
+    await post(`${L}/books`, { title: "Bad", isbn: "12345" }, { as: h.tokens.librarian }, 400);
+    await post(`${L}/books`, { title: "Bad", isbn: "0306406153" }, { as: h.tokens.librarian }, 400);
 
     const duplicate = await request("POST", `${L}/books`, {
-      as: h.tokens.office,
+      as: h.tokens.librarian,
       body: { title: "Another Hobbit", isbn: "9780306406157" }
     });
     assert.equal(duplicate.status, 409);
     assert.equal(duplicate.body.message, "A book with ISBN 9780306406157 is already in the catalogue: The Hobbit");
-    await patch(`${L}/books/${lib.wings.id}`, { isbn: "9780306406157" }, { as: h.tokens.office }, 409);
+    await patch(`${L}/books/${lib.wings.id}`, { isbn: "9780306406157" }, { as: h.tokens.librarian }, 409);
 
-    await post(`${L}/books`, { title: "No subject", subjectId: uuid() }, { as: h.tokens.office }, 422);
+    await post(`${L}/books`, { title: "No subject", subjectId: uuid() }, { as: h.tokens.librarian }, 422);
     await post(`${L}/books`, { title: "Teacher's book" }, { as: h.tokens.teacher }, 403);
-    await post(`${L}/books`, { authors: ["Nobody"] }, { as: h.tokens.office }, 400);
+    await post(`${L}/books`, { authors: ["Nobody"] }, { as: h.tokens.librarian }, 400);
   });
 
   it("lets every role search the catalogue", async () => {
@@ -134,7 +134,7 @@ describe("library: policy and catalogue", () => {
     const added = await post(
       `${L}/books/${lib.hobbit.id}/copies`,
       { count: 3, price: 350, acquiredOn: "2026-06-01" },
-      { as: h.tokens.office }
+      { as: h.tokens.librarian }
     );
     assert.equal(added.message, "3 copies of The Hobbit added (ACC-000001 to ACC-000003)");
     assert.deepEqual(
@@ -145,12 +145,12 @@ describe("library: policy and catalogue", () => {
         ["ACC-000003", "AVAILABLE", 350]
       ]
     );
-    const maths = await post(`${L}/books/${lib.maths.id}/copies`, { count: 2, price: 200 }, { as: h.tokens.office });
+    const maths = await post(`${L}/books/${lib.maths.id}/copies`, { count: 2, price: 200 }, { as: h.tokens.librarian });
     assert.deepEqual(
       maths.data.map(c => c.accessionNumber),
       ["ACC-000004", "ACC-000005"]
     );
-    const wings = await post(`${L}/books/${lib.wings.id}/copies`, { count: 3 }, { as: h.tokens.office });
+    const wings = await post(`${L}/books/${lib.wings.id}/copies`, { count: 3 }, { as: h.tokens.librarian });
     assert.deepEqual(
       wings.data.map(c => [c.accessionNumber, c.price]),
       [
@@ -160,10 +160,10 @@ describe("library: policy and catalogue", () => {
       ]
     );
 
-    await post(`${L}/books/${lib.hobbit.id}/copies`, { count: 0 }, { as: h.tokens.office }, 400);
-    await post(`${L}/books/${lib.hobbit.id}/copies`, { count: 101 }, { as: h.tokens.office }, 400);
-    await post(`${L}/books/${lib.hobbit.id}/copies`, { count: 1, price: -5 }, { as: h.tokens.office }, 400);
-    await post(`${L}/books/${uuid()}/copies`, { count: 1 }, { as: h.tokens.office }, 404);
+    await post(`${L}/books/${lib.hobbit.id}/copies`, { count: 0 }, { as: h.tokens.librarian }, 400);
+    await post(`${L}/books/${lib.hobbit.id}/copies`, { count: 101 }, { as: h.tokens.librarian }, 400);
+    await post(`${L}/books/${lib.hobbit.id}/copies`, { count: 1, price: -5 }, { as: h.tokens.librarian }, 400);
+    await post(`${L}/books/${uuid()}/copies`, { count: 1 }, { as: h.tokens.librarian }, 404);
     await post(`${L}/books/${lib.hobbit.id}/copies`, { count: 1 }, { as: h.tokens.teacher }, 403);
 
     const detail = await get(`${L}/books/${lib.hobbit.id}`, { as: h.tokens.student1 });
@@ -172,27 +172,27 @@ describe("library: policy and catalogue", () => {
 
     const listed = await get(`${L}/books/${lib.hobbit.id}/copies`, { as: h.tokens.student1 });
     assert.equal(listed.meta.total, 3);
-    const found = await get(`${L}/copies?accessionNumber=acc-000002`, { as: h.tokens.office });
+    const found = await get(`${L}/copies?accessionNumber=acc-000002`, { as: h.tokens.librarian });
     assert.equal(found.meta.total, 1);
     assert.equal(found.data[0].book.title, "The Hobbit");
-    await get(`${L}/copies?accessionNumber=12`, { as: h.tokens.office }, 400);
+    await get(`${L}/copies?accessionNumber=12`, { as: h.tokens.librarian }, 400);
   });
 
   it("edits copies: barcodes are unique, ISSUED is not set by hand", async () => {
     const acc1 = await copyByAccession("ACC-000001");
     const acc3 = await copyByAccession("ACC-000003");
     lib.acc = { 1: acc1 };
-    const tagged = await patch(`${L}/copies/${acc1.id}`, { barcode: "LIB-0001" }, { as: h.tokens.office });
+    const tagged = await patch(`${L}/copies/${acc1.id}`, { barcode: "LIB-0001" }, { as: h.tokens.librarian });
     assert.equal(tagged.message, "Copy ACC-000001 updated successfully");
     const clash = await request("PATCH", `${L}/copies/${acc3.id}`, {
-      as: h.tokens.office,
+      as: h.tokens.librarian,
       body: { barcode: "LIB-0001" }
     });
     assert.equal(clash.status, 409);
     assert.equal(clash.body.message, "Barcode LIB-0001 is already used by copy ACC-000001");
-    assert.equal((await get(`${L}/copies?barcode=LIB-0001`, { as: h.tokens.office })).data[0].id, acc1.id);
+    assert.equal((await get(`${L}/copies?barcode=LIB-0001`, { as: h.tokens.librarian })).data[0].id, acc1.id);
 
-    await patch(`${L}/copies/${acc3.id}`, { status: "ISSUED" }, { as: h.tokens.office }, 400);
+    await patch(`${L}/copies/${acc3.id}`, { status: "ISSUED" }, { as: h.tokens.librarian }, 400);
     await patch(`${L}/copies/${acc3.id}`, { status: "DAMAGED" }, { as: h.tokens.teacher }, 403);
 
     const acc8 = await copyByAccession("ACC-000008");
@@ -200,7 +200,7 @@ describe("library: policy and catalogue", () => {
     await patch(
       `${L}/copies/${acc8.id}`,
       { status: "WITHDRAWN", conditionNotes: "Water damage" },
-      { as: h.tokens.office }
+      { as: h.tokens.librarian }
     );
     const wings = await get(`${L}/books/${lib.wings.id}`);
     assert.deepEqual(wings.data.copies, { total: 2, available: 2, issued: 0, lost: 0, damaged: 0, withdrawn: 1 });
@@ -234,14 +234,14 @@ describe("library: circulation", () => {
     await issue({ copyId: lib.acc[1].id, borrowerUserId: world.s2.userId }, h.tokens.student1, 403);
 
     const onLoan = await request("POST", `${L}/loans`, {
-      as: h.tokens.office,
+      as: h.tokens.librarian,
       body: { copyId: lib.acc[1].id, borrowerUserId: world.s2.userId }
     });
     assert.equal(onLoan.status, 409);
     assert.equal(onLoan.body.message, "Copy ACC-000001 is already on loan");
 
     const sameBook = await request("POST", `${L}/loans`, {
-      as: h.tokens.office,
+      as: h.tokens.librarian,
       body: { accessionNumber: "ACC-000002", borrowerUserId: world.s1.userId }
     });
     assert.equal(sameBook.status, 422);
@@ -250,36 +250,36 @@ describe("library: circulation", () => {
     const mother = await get(`/api/v1/users/parents/${world.motherId}`);
     lib.motherUserId = mother.data.userId;
     const parent = await request("POST", `${L}/loans`, {
-      as: h.tokens.office,
+      as: h.tokens.librarian,
       body: { accessionNumber: "ACC-000002", borrowerUserId: lib.motherUserId }
     });
     assert.equal(parent.status, 422);
     assert.equal(parent.body.message, "Parents cannot borrow books; issue them to the student instead");
 
     const withdrawn = await request("POST", `${L}/loans`, {
-      as: h.tokens.office,
+      as: h.tokens.librarian,
       body: { accessionNumber: "ACC-000008", borrowerUserId: world.s2.userId }
     });
     assert.equal(withdrawn.status, 422);
     assert.equal(withdrawn.body.message, "Copy ACC-000008 is withdrawn and cannot be issued");
 
-    await issue({ accessionNumber: "ACC-000099", borrowerUserId: world.s2.userId }, h.tokens.office, 422);
-    await issue({ accessionNumber: "ACC-000002", borrowerUserId: uuid() }, h.tokens.office, 422);
-    await issue({ borrowerUserId: world.s2.userId }, h.tokens.office, 400);
+    await issue({ accessionNumber: "ACC-000099", borrowerUserId: world.s2.userId }, h.tokens.librarian, 422);
+    await issue({ accessionNumber: "ACC-000002", borrowerUserId: uuid() }, h.tokens.librarian, 422);
+    await issue({ borrowerUserId: world.s2.userId }, h.tokens.librarian, 400);
     await issue(
       { copyId: lib.acc[1].id, accessionNumber: "ACC-000002", borrowerUserId: world.s2.userId },
-      h.tokens.office,
+      h.tokens.librarian,
       400
     );
     await issue(
       { accessionNumber: "ACC-000002", borrowerUserId: world.s2.userId, dueDate: addDays(today(), 400) },
-      h.tokens.office,
+      h.tokens.librarian,
       422
     );
 
     /* A copy on loan only changes status through a return */
     const busy = await request("PATCH", `${L}/copies/${lib.acc[1].id}`, {
-      as: h.tokens.office,
+      as: h.tokens.librarian,
       body: { status: "WITHDRAWN" }
     });
     assert.equal(busy.status, 422);
@@ -291,7 +291,7 @@ describe("library: circulation", () => {
     const results = await Promise.all(
       [world.s2, world.s3].map(student =>
         request("POST", `${L}/loans`, {
-          as: h.tokens.office,
+          as: h.tokens.librarian,
           body: { copyId: acc4.id, borrowerUserId: student.userId }
         })
       )
@@ -305,12 +305,12 @@ describe("library: circulation", () => {
   });
 
   it("enforces the active-loan limit, also under concurrency", async () => {
-    await patch(`${L}/policy`, { maxActiveLoansStudent: 2 }, { as: h.tokens.office });
+    await patch(`${L}/policy`, { maxActiveLoansStudent: 2 }, { as: h.tokens.librarian });
     /* s1 has one book; two concurrent issues may not take them past 2 */
     const results = await Promise.all(
       ["ACC-000005", "ACC-000007"].map(accessionNumber =>
         request("POST", `${L}/loans`, {
-          as: h.tokens.office,
+          as: h.tokens.librarian,
           body: { accessionNumber, borrowerUserId: world.s1.userId }
         })
       )
@@ -321,7 +321,7 @@ describe("library: circulation", () => {
       refused.body.message,
       "Fstudent1 Lstudent1 already has 2 book(s) on loan, the limit for students is 2"
     );
-    await patch(`${L}/policy`, { maxActiveLoansStudent: 3 }, { as: h.tokens.office });
+    await patch(`${L}/policy`, { maxActiveLoansStudent: 3 }, { as: h.tokens.librarian });
   });
 
   it("renews up to the policy's limit", async () => {
@@ -331,27 +331,27 @@ describe("library: circulation", () => {
       dueDate: addDays(today(), 1)
     });
     const url = `${L}/loans/${short.data.id}/renewal`;
-    const renewed = await post(url, {}, { as: h.tokens.office }, 200);
+    const renewed = await post(url, {}, { as: h.tokens.librarian }, 200);
     assert.equal(renewed.data.dueDate, addDays(today(), 14));
     assert.equal(renewed.data.renewalCount, 1);
     assert.equal(renewed.message, `Loan renewed. Due ${addDays(today(), 14)} (renewal 1)`);
     await post(url, {}, { as: h.tokens.teacher }, 403);
 
-    await patch(`${L}/policy`, { maxRenewals: 1 }, { as: h.tokens.office });
-    const limit = await request("POST", url, { as: h.tokens.office });
+    await patch(`${L}/policy`, { maxRenewals: 1 }, { as: h.tokens.librarian });
+    const limit = await request("POST", url, { as: h.tokens.librarian });
     assert.equal(limit.status, 422);
     assert.equal(limit.body.message, "This loan has already been renewed 1 time(s), the most the library allows");
 
-    await patch(`${L}/policy`, { maxRenewals: 2 }, { as: h.tokens.office });
-    const noGain = await request("POST", url, { as: h.tokens.office });
+    await patch(`${L}/policy`, { maxRenewals: 2 }, { as: h.tokens.librarian });
+    const noGain = await request("POST", url, { as: h.tokens.librarian });
     assert.equal(noGain.status, 422);
     assert.equal(noGain.body.message, `Renewing today would not extend the due date (${addDays(today(), 14)})`);
 
-    const back = await post(`${L}/loans/${short.data.id}/return`, {}, { as: h.tokens.office }, 200);
+    const back = await post(`${L}/loans/${short.data.id}/return`, {}, { as: h.tokens.librarian }, 200);
     assert.equal(back.data.status, "RETURNED");
     assert.equal(back.data.fineTotal, 0);
     assert.equal(back.message, "The Hobbit (ACC-000003) returned by Fstudent2 Lstudent2. No fine");
-    await post(url, {}, { as: h.tokens.office }, 422);
+    await post(url, {}, { as: h.tokens.librarian }, 422);
   });
 
   it("charges late fines after the grace days, and does not renew overdue loans", async () => {
@@ -367,7 +367,7 @@ describe("library: circulation", () => {
     assert.equal(late.data.fineAccrued, 7.5);
     assert.equal(late.data.fineOutstanding, 0, "assessed on return");
 
-    const overdue = await get(`${L}/loans?overdue=true`, { as: h.tokens.office });
+    const overdue = await get(`${L}/loans?overdue=true`, { as: h.tokens.librarian });
     assert.deepEqual(
       overdue.data.map(l => l.id),
       [late.data.id]
@@ -376,14 +376,19 @@ describe("library: circulation", () => {
     assert.equal(overdue.data[0].copy.accessionNumber, "ACC-000003");
     assert.equal(overdue.data[0].borrower.name, "Fstudent2 Lstudent2");
 
-    const renewal = await request("POST", `${L}/loans/${late.data.id}/renewal`, { as: h.tokens.office });
+    const renewal = await request("POST", `${L}/loans/${late.data.id}/renewal`, { as: h.tokens.librarian });
     assert.equal(renewal.status, 422);
     assert.equal(
       renewal.body.message,
       `This loan is overdue (due ${addDays(today(), -5)}); the book must be returned, not renewed`
     );
 
-    const returned = await post(`${L}/loans/${late.data.id}/return`, { condition: "OK" }, { as: h.tokens.office }, 200);
+    const returned = await post(
+      `${L}/loans/${late.data.id}/return`,
+      { condition: "OK" },
+      { as: h.tokens.librarian },
+      200
+    );
     assert.equal(returned.message, "The Hobbit (ACC-000003) returned by Fstudent2 Lstudent2. Fine due: 7.50");
     assert.equal(returned.data.returnedOn, today());
     assert.equal(returned.data.lateFine, 7.5);
@@ -391,48 +396,48 @@ describe("library: circulation", () => {
     assert.equal(returned.data.isOverdue, false);
     assert.equal(returned.data.copy.status, "AVAILABLE");
 
-    const again = await request("POST", `${L}/loans/${late.data.id}/return`, { as: h.tokens.office, body: {} });
+    const again = await request("POST", `${L}/loans/${late.data.id}/return`, { as: h.tokens.librarian, body: {} });
     assert.equal(again.status, 409);
     assert.equal(again.body.message, `This loan was already closed on ${today()}`);
-    await post(`${L}/loans/${uuid()}/return`, {}, { as: h.tokens.office }, 404);
-    await post(`${L}/loans/${late.data.id}/return`, { condition: "BURNT" }, { as: h.tokens.office }, 400);
+    await post(`${L}/loans/${uuid()}/return`, {}, { as: h.tokens.librarian }, 404);
+    await post(`${L}/loans/${late.data.id}/return`, { condition: "BURNT" }, { as: h.tokens.librarian }, 400);
   });
 
   it("takes partial fine payments and lets management waive the rest", async () => {
     const url = `${L}/loans/${lib.lateLoan.id}`;
     const open = await request("POST", `${L}/loans/${lib.s1Hobbit.id}/fine-payment`, {
-      as: h.tokens.office,
+      as: h.tokens.librarian,
       body: { amount: 1, method: "CASH" }
     });
     assert.equal(open.status, 422);
     assert.equal(open.body.message, "The fine is assessed when the book is returned; record the return first");
 
-    const paid = await post(`${url}/fine-payment`, { amount: 5, method: "CASH" }, { as: h.tokens.office });
+    const paid = await post(`${url}/fine-payment`, { amount: 5, method: "CASH" }, { as: h.tokens.librarian });
     assert.equal(paid.message, "Fine payment of 5.00 received. Receipt LIBR-000001. Outstanding 2.50");
     assert.equal(paid.data.receiptNumber, "LIBR-000001");
     assert.equal(paid.data.loan.finePaid, 5);
     assert.equal(paid.data.loan.fineOutstanding, 2.5);
 
     const tooMuch = await request("POST", `${url}/fine-payment`, {
-      as: h.tokens.office,
+      as: h.tokens.librarian,
       body: { amount: 3, method: "UPI" }
     });
     assert.equal(tooMuch.status, 422);
     assert.equal(tooMuch.body.message, "The amount exceeds the outstanding fine of 2.50");
-    await post(`${url}/fine-payment`, { amount: 0, method: "CASH" }, { as: h.tokens.office }, 400);
-    await post(`${url}/fine-payment`, { amount: 1.005, method: "CASH" }, { as: h.tokens.office }, 400);
-    await post(`${url}/fine-payment`, { amount: 1, method: "CHEQUE" }, { as: h.tokens.office }, 400);
+    await post(`${url}/fine-payment`, { amount: 0, method: "CASH" }, { as: h.tokens.librarian }, 400);
+    await post(`${url}/fine-payment`, { amount: 1.005, method: "CASH" }, { as: h.tokens.librarian }, 400);
+    await post(`${url}/fine-payment`, { amount: 1, method: "CHEQUE" }, { as: h.tokens.librarian }, 400);
     await post(`${url}/fine-payment`, { amount: 1, method: "CASH" }, { as: h.tokens.teacher }, 403);
 
-    /* Waivers are for ADMIN and PRINCIPAL only */
-    await post(`${url}/fine-waiver`, { reason: "Hardship" }, { as: h.tokens.office }, 403);
-    await post(`${url}/fine-waiver`, {}, { as: h.tokens.principal }, 400);
-    const waived = await post(`${url}/fine-waiver`, { reason: "Hardship" }, { as: h.tokens.principal }, 200);
+    /* Waivers are for the library's administrators */
+    await post(`${url}/fine-waiver`, { reason: "Hardship" }, { as: h.tokens.principal }, 403);
+    await post(`${url}/fine-waiver`, {}, { as: h.tokens.librarian }, 400);
+    const waived = await post(`${url}/fine-waiver`, { reason: "Hardship" }, { as: h.tokens.librarian }, 200);
     assert.equal(waived.message, "Fine of 2.50 waived for The Hobbit");
     assert.equal(waived.data.fineOutstanding, 0);
     assert.equal(waived.data.waiverReason, "Hardship");
-    await post(`${url}/fine-waiver`, { reason: "Again" }, { as: h.tokens.principal }, 422);
-    await post(`${url}/fine-payment`, { amount: 1, method: "CASH" }, { as: h.tokens.office }, 422);
+    await post(`${url}/fine-waiver`, { reason: "Again" }, { as: h.tokens.librarian }, 422);
+    await post(`${url}/fine-payment`, { amount: 1, method: "CASH" }, { as: h.tokens.librarian }, 422);
 
     const detail = await get(url, { as: h.tokens.principal });
     assert.deepEqual(
@@ -451,7 +456,12 @@ describe("library: circulation", () => {
       borrowerUserId: world.s3.userId,
       dueDate: addDays(today(), -3)
     });
-    const lost = await post(`${L}/loans/${loan.data.id}/return`, { condition: "LOST" }, { as: h.tokens.office }, 200);
+    const lost = await post(
+      `${L}/loans/${loan.data.id}/return`,
+      { condition: "LOST" },
+      { as: h.tokens.librarian },
+      200
+    );
     assert.equal(lost.data.status, "LOST");
     assert.equal(lost.data.lateFine, 2.5, "(3 - 2 grace days) x 2.50");
     assert.equal(lost.data.lostCharge, 350);
@@ -464,13 +474,13 @@ describe("library: circulation", () => {
 
     const book = await get(`${L}/books/${lib.hobbit.id}`);
     assert.deepEqual(book.data.copies, { total: 3, available: 1, issued: 1, lost: 1, damaged: 0, withdrawn: 0 });
-    assert.equal((await get(`${L}/loans?status=LOST&withFine=true`, { as: h.tokens.office })).meta.total, 1);
+    assert.equal((await get(`${L}/loans?status=LOST&withFine=true`, { as: h.tokens.librarian })).meta.total, 1);
 
     /* A damaged return takes the copy off the shelf, without a fine when on time */
     const damaged = await post(
       `${L}/loans/${lib.teacherWings.id}/return`,
       { condition: "DAMAGED", notes: "Torn cover" },
-      { as: h.tokens.office },
+      { as: h.tokens.librarian },
       200
     );
     assert.equal(damaged.message, "Wings of Fire (ACC-000006) returned damaged by Fteacher Lteacher. No fine");
@@ -479,14 +489,14 @@ describe("library: circulation", () => {
   });
 
   it("lists loans with filters for librarians and the principal only", async () => {
-    const s1 = await get(`${L}/loans?borrowerUserId=${world.s1.userId}&status=ISSUED`, { as: h.tokens.office });
+    const s1 = await get(`${L}/loans?borrowerUserId=${world.s1.userId}&status=ISSUED`, { as: h.tokens.librarian });
     assert.equal(s1.meta.total, 2);
     const hobbit = await get(`${L}/loans?bookId=${lib.hobbit.id}`, { as: h.tokens.principal });
     assert.equal(hobbit.meta.total, 4);
     await get(`${L}/loans`, { as: h.tokens.teacher }, 403);
     await get(`${L}/loans`, { as: h.tokens.student1 }, 403);
     await get(`${L}/loans/${lib.lateLoan.id}`, { as: h.tokens.mother }, 403);
-    await get(`${L}/loans?overdue=yes`, { as: h.tokens.office }, 400);
+    await get(`${L}/loans?overdue=yes`, { as: h.tokens.librarian }, 400);
   });
 
   it("shows each person their own loans, and parents their children's only", async () => {
@@ -507,7 +517,7 @@ describe("library: circulation", () => {
       teacher.data.map(l => l.id),
       [lib.teacherWings.id]
     );
-    assert.equal((await get(`${L}/my-loans`, { as: h.tokens.office })).meta.total, 0);
+    assert.equal((await get(`${L}/my-loans`, { as: h.tokens.librarian })).meta.total, 0);
   });
 
   it("reminds borrowers of overdue books once a day", async () => {
@@ -536,21 +546,24 @@ describe("library: circulation", () => {
 
 describe("library: removing books", () => {
   it("removes a book and its copies, but not while copies are on loan", async () => {
-    const busy = await request("DELETE", `${L}/books/${lib.hobbit.id}`, { as: h.tokens.office });
+    const busy = await request("DELETE", `${L}/books/${lib.hobbit.id}`, { as: h.tokens.librarian });
     assert.equal(busy.status, 409);
     assert.equal(
       busy.body.message,
       "2 copy(ies) of The Hobbit are on loan; they must be returned before the book is removed"
     );
 
-    const draft = (await post(`${L}/books`, { title: "Duplicate entry" }, { as: h.tokens.office })).data;
-    await post(`${L}/books/${draft.id}/copies`, { count: 2 }, { as: h.tokens.office });
+    const draft = (await post(`${L}/books`, { title: "Duplicate entry" }, { as: h.tokens.librarian })).data;
+    await post(`${L}/books/${draft.id}/copies`, { count: 2 }, { as: h.tokens.librarian });
     await del(`${L}/books/${draft.id}`, { as: h.tokens.teacher }, 403);
-    assert.equal((await del(`${L}/books/${draft.id}`, { as: h.tokens.office })).message, "Book removed successfully");
+    assert.equal(
+      (await del(`${L}/books/${draft.id}`, { as: h.tokens.librarian })).message,
+      "Book removed successfully"
+    );
     await get(`${L}/books/${draft.id}`, {}, 404);
-    assert.equal((await get(`${L}/copies?bookId=${draft.id}`, { as: h.tokens.office })).meta.total, 0);
+    assert.equal((await get(`${L}/copies?bookId=${draft.id}`, { as: h.tokens.librarian })).meta.total, 0);
     /* Accession numbers are never reused */
-    const next = await post(`${L}/books/${lib.maths.id}/copies`, { count: 1 }, { as: h.tokens.office });
+    const next = await post(`${L}/books/${lib.maths.id}/copies`, { count: 1 }, { as: h.tokens.librarian });
     assert.equal(next.data[0].accessionNumber, "ACC-000011");
   });
 });

@@ -15,6 +15,7 @@ await import("./suites/06-portal-imports.suite.js");
 await import("./suites/07-finance-communication.suite.js");
 await import("./suites/08-reports-administration.suite.js");
 await import("./suites/09-files-homework.suite.js");
+await import("./suites/09b-module-managers.suite.js");
 await import("./suites/10-library.suite.js");
 await import("./suites/11-transport.suite.js");
 await import("./suites/12-hostel.suite.js");

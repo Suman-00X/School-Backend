@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { createCrudService } from "../../../../common/crud/crudService.js";
 import { transaction } from "../../../../common/database/postgres.js";
+import { publish } from "../../../../common/events/events.js";
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { studentService } from "../../../users/students/index.js";
 import { sectionService } from "../../sections/index.js";
@@ -8,6 +9,18 @@ import { teachingScope } from "../../teacher-assignments/index.js";
 import { nextRollNumber } from "../../shared/utils/codes.util.js";
 import { studentEnrollments as enrollments } from "../models/enrollment.schema.js";
 import { enrollmentRepository } from "../repositories/enrollment.repository.js";
+
+/* A student left the school (not a promotion): other modules release what they hold
+   (transport seat, hostel bed). Payload: { tenantId, studentId, academicYearId, enrollmentId } */
+export const STUDENT_LEFT = "academics.enrollment.left";
+
+const announceLeaving = (ctx, enrollment) =>
+  publish(STUDENT_LEFT, {
+    tenantId: ctx.tenantId,
+    studentId: enrollment.studentId,
+    academicYearId: enrollment.academicYearId,
+    enrollmentId: enrollment.id
+  });
 
 const base = createCrudService(enrollmentRepository, {
   entity: "Enrollment",
@@ -90,7 +103,9 @@ export const enrollmentService = {
     if (data.sectionId && !(await sectionService.isInAcademicYear(ctx, existing.academicYearId, data.sectionId))) {
       throw unprocessable("The new section must belong to the same academic year as the enrollment");
     }
-    return enrollmentRepository.update(ctx.tenantId, enrollmentId, data);
+    const updated = await enrollmentRepository.update(ctx.tenantId, enrollmentId, data);
+    if (data.status === "LEFT" && existing.status !== "LEFT") await announceLeaving(ctx, updated);
+    return updated;
   },
 
   /* Move a student from their section in one year to a section in the next */
@@ -150,6 +165,7 @@ export const enrollmentService = {
 
     const summary = { promoted: 0, repeated: 0, left: 0, skipped: [] };
     const created = [];
+    const leavers = [];
 
     await transaction(async tx => {
       for (const enrollment of roster) {
@@ -182,9 +198,14 @@ export const enrollmentService = {
 
         if (action === "PROMOTE") summary.promoted++;
         else if (action === "REPEAT") summary.repeated++;
-        else summary.left++;
+        else {
+          summary.left++;
+          leavers.push(enrollment);
+        }
       }
     });
+    /* After commit: only students who really left are announced */
+    for (const enrollment of leavers) await announceLeaving(ctx, enrollment);
 
     return { ...summary, enrollments: created };
   },
