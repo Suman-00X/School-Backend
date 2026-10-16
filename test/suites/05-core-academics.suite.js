@@ -34,6 +34,19 @@ describe("attendance", () => {
   const register = (date, records, options) =>
     request("POST", `${A}/attendance`, { body: { sectionId: world.s1A.id, date, records }, ...options });
 
+  it("starts from a two-day edit window that only admins can change", async () => {
+    const policy = await get(`${A}/attendance/policy`, { as: h.tokens.teacher });
+    assert.equal(policy.data.editWindowDays, 2);
+    assert.deepEqual(policy.data.overrideRoles, ["ADMIN"]);
+    assert.equal(policy.message, "Registers can be changed until 2 day(s) after the date");
+
+    await patch(`${A}/attendance/policy`, { editWindowDays: 30 }, { as: h.tokens.principal }, 403);
+    await patch(`${A}/attendance/policy`, { overrideRoles: ["PRINCIPAL"] }, {}, 400);
+    /* These tests record July registers: open the window wide for them */
+    const wide = await patch(`${A}/attendance/policy`, { editWindowDays: 365 });
+    assert.equal(wide.message, "Attendance policy updated: registers lock after 365 day(s) after the date");
+  });
+
   it("takes and retakes a register idempotently", async () => {
     const first = await register("2026-07-06", [
       { studentId: world.s1.id, status: "PRESENT" },
@@ -92,6 +105,52 @@ describe("attendance", () => {
       { studentId: world.s1.id, status: "ABSENT" }
     ]);
     assert.equal(duplicate.status, 400);
+  });
+
+  it("locks registers after the edit window; override roles change them with a reason", async () => {
+    await patch(`${A}/attendance/policy`, { editWindowDays: 0 });
+    const marks = [
+      { studentId: world.s1.id, status: "PRESENT" },
+      { studentId: world.s2.id, status: "ABSENT" }
+    ];
+
+    const teacher = await register("2026-07-06", marks, { as: h.tokens.teacher });
+    assert.equal(teacher.status, 403);
+    assert.equal(
+      teacher.body.message,
+      "The register for 2026-07-06 was locked after 2026-07-06. Only ADMIN can change it now."
+    );
+    assert.equal((await register("2026-07-06", marks, { as: h.tokens.principal })).status, 403);
+
+    const noReason = await register("2026-07-06", marks);
+    assert.equal(noReason.status, 422);
+    assert.equal(noReason.body.message, "The register for 2026-07-06 is locked: give an overrideReason to change it");
+
+    const fixed = await request("POST", `${A}/attendance`, {
+      body: {
+        sectionId: world.s1A.id,
+        date: "2026-07-06",
+        records: marks,
+        overrideReason: "Parent showed a medical note"
+      }
+    });
+    assert.equal(fixed.status, 200);
+    assert.equal(fixed.body.message, "Attendance updated for 2 student(s) (locked register changed by override)");
+
+    const sheet = await get(`${A}/attendance/register?sectionId=${world.s1A.id}&date=2026-07-06`);
+    assert.equal(sheet.data.locked, true);
+    assert.equal(sheet.data.lockOverride.reason, "Parent showed a medical note");
+    assert.equal(sheet.data.lockOverride.by, h.admin.id);
+
+    /* The school can let the principal override too */
+    await patch(`${A}/attendance/policy`, { overrideRoles: ["ADMIN", "PRINCIPAL"] });
+    const principal = await request("POST", `${A}/attendance`, {
+      as: h.tokens.principal,
+      body: { sectionId: world.s1A.id, date: "2026-07-06", records: marks, overrideReason: "Register correction" }
+    });
+    assert.equal(principal.status, 200);
+
+    await patch(`${A}/attendance/policy`, { editWindowDays: 365, overrideRoles: ["ADMIN"] });
   });
 
   it("shows the register and percentage summaries", async () => {

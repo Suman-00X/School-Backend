@@ -29,7 +29,11 @@ export const attendanceSessions = pgTable(
       .notNull()
       .references(() => users.id),
     takenAt: timestamp("taken_at", { withTimezone: true }).notNull().defaultNow(),
-    remarks: text("remarks")
+    remarks: text("remarks"),
+    /* Set when an override role changed the register after it locked */
+    lockOverrideReason: text("lock_override_reason"),
+    lockOverriddenBy: uuid("lock_overridden_by").references(() => users.id),
+    lockOverriddenAt: timestamp("lock_overridden_at", { withTimezone: true })
   },
   t => [uniqueIndex("attendance_sessions_section_date_period_uq").on(t.sectionId, t.date, t.periodNumber)]
 );

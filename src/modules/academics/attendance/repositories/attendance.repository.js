@@ -2,6 +2,7 @@ import { and, between, count, eq, sql } from "drizzle-orm";
 import { createRepository } from "../../../../common/database/repository.js";
 import { db } from "../../../../common/database/postgres.js";
 import { attendanceRecords, attendanceSessions } from "../models/attendance.schema.js";
+import { attendancePolicies } from "../models/attendancePolicy.schema.js";
 
 const excluded = column => sql.raw(`excluded."${column.name}"`);
 
@@ -20,6 +21,9 @@ export const attendanceSessionRepository = {
           takenBy: excluded(attendanceSessions.takenBy),
           takenAt: new Date(),
           remarks: excluded(attendanceSessions.remarks),
+          lockOverrideReason: excluded(attendanceSessions.lockOverrideReason),
+          lockOverriddenBy: excluded(attendanceSessions.lockOverriddenBy),
+          lockOverriddenAt: excluded(attendanceSessions.lockOverriddenAt),
           isActive: true,
           updatedAt: new Date()
         }
@@ -63,4 +67,18 @@ export const attendanceRecordRepository = {
         )
       )
       .groupBy(attendanceRecords.studentId, attendanceRecords.status)
+};
+
+export const attendancePolicyRepository = {
+  ...createRepository({ table: attendancePolicies, queryKey: "attendancePolicies" }),
+
+  /* The school's policy, created with defaults the first time (safe under concurrency) */
+  ensure: async tenantId => {
+    await db
+      .insert(attendancePolicies)
+      .values({ tenantId })
+      .onConflictDoNothing({ target: attendancePolicies.tenantId });
+    const [policy] = await db.select().from(attendancePolicies).where(eq(attendancePolicies.tenantId, tenantId));
+    return policy;
+  }
 };

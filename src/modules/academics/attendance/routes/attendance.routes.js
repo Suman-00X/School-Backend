@@ -9,6 +9,8 @@ import { attendanceValidators as rules } from "../validators/attendance.validato
 const router = createRouter();
 
 /* Recording is idempotent per (section, date, period) */
+router.get("/policy", authorize(can.read), controller.getPolicy);
+router.patch("/policy", authorize(can.managePolicy), validate(rules.updatePolicy), controller.updatePolicy);
 router.post("/", authorize(can.record), validate(rules.record), controller.record);
 router.get("/register", authorize(can.read), validate(rules.register), controller.register);
 router.get("/summary", authorize(can.read), validate(rules.summary), controller.summary);

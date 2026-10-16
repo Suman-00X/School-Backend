@@ -1,9 +1,9 @@
 import { asc, between, eq } from "drizzle-orm";
 import { transaction } from "../../../../common/database/postgres.js";
 import { publish } from "../../../../common/events/events.js";
-import { notFound, unprocessable } from "../../../../common/http/errors.js";
+import { forbidden, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { tenantToday } from "../../../../common/tenancy/tenant.service.js";
-import { minDate } from "../../../../common/utils/date.util.js";
+import { addDays, minDate } from "../../../../common/utils/date.util.js";
 import { academicYearService } from "../../academic-years/index.js";
 import { calendarService } from "../../calendar/index.js";
 import { enrollmentService } from "../../enrollments/index.js";
@@ -11,7 +11,11 @@ import { sectionService } from "../../sections/index.js";
 import { ATTENDANCE_STATUSES, ATTENDANCE_WEIGHT } from "../../shared/constants/academic.constants.js";
 import { teachingScope } from "../../teacher-assignments/index.js";
 import { attendanceRecords, attendanceSessions } from "../models/attendance.schema.js";
-import { attendanceRecordRepository, attendanceSessionRepository } from "../repositories/attendance.repository.js";
+import {
+  attendancePolicyRepository,
+  attendanceRecordRepository,
+  attendanceSessionRepository
+} from "../repositories/attendance.repository.js";
 
 export const ATTENDANCE_RECORDED = "academics.attendance.recorded";
 
@@ -27,6 +31,25 @@ const loadSection = async (ctx, sectionId) => {
   if (!section) throw notFound("Section");
   const academicYear = await academicYearService.findById(ctx, section.academicYearId);
   return { section, academicYear };
+};
+
+/* Locked once the edit window after the date has passed */
+const lockState = (policy, date, today) => {
+  const lastEditable = addDays(date, policy.editWindowDays);
+  return { locked: lastEditable < today, editableUntil: lastEditable };
+};
+
+/* A locked register: override roles only, with a reason -> the override to record (or null) */
+const checkLock = (ctx, policy, date, today, overrideReason) => {
+  const { locked, editableUntil } = lockState(policy, date, today);
+  if (!locked) return null;
+  if (!policy.overrideRoles.includes(ctx.role)) {
+    throw forbidden(
+      `The register for ${date} was locked after ${editableUntil}. Only ${policy.overrideRoles.join(" or ")} can change it now.`
+    );
+  }
+  if (!overrideReason) throw unprocessable(`The register for ${date} is locked: give an overrideReason to change it`);
+  return { lockOverrideReason: overrideReason, lockOverriddenBy: ctx.userId, lockOverriddenAt: new Date() };
 };
 
 const emptyCounts = () => Object.fromEntries(ATTENDANCE_STATUSES.map(status => [status, 0]));
@@ -49,18 +72,27 @@ const summarise = (counts, workingDays) => {
   };
 };
 
+export const attendancePolicyService = {
+  get: ctx => attendancePolicyRepository.ensure(ctx.tenantId),
+  update: async (ctx, changes) => {
+    const policy = await attendancePolicyRepository.ensure(ctx.tenantId);
+    return attendancePolicyRepository.update(ctx.tenantId, policy.id, changes);
+  }
+};
+
 export const attendanceService = {
   /* Take (or retake) a register. -> { session, summary, created } */
-  record: async (ctx, { sectionId, date, periodNumber, subjectId, remarks, records }) => {
+  record: async (ctx, { sectionId, date, periodNumber, subjectId, remarks, records, overrideReason }) => {
     const { section, academicYear } = await loadSection(ctx, sectionId);
 
     await teachingScope.assertSection(ctx, sectionId, periodNumber ? { subjectId } : {});
 
-    if (date > (await tenantToday(ctx.tenantId)))
-      throw unprocessable("Attendance cannot be recorded for a future date");
+    const today = await tenantToday(ctx.tenantId);
+    if (date > today) throw unprocessable("Attendance cannot be recorded for a future date");
     const closure = await calendarService.closureOn(ctx, academicYear, date);
     if (closure)
       throw unprocessable(`Attendance cannot be recorded on ${date}: it is ${CLOSURE_LABELS[closure] ?? closure}`);
+    const override = checkLock(ctx, await attendancePolicyRepository.ensure(ctx.tenantId), date, today, overrideReason);
 
     const roster = await enrollmentService.findRoster(ctx, sectionId);
     const enrolled = new Set(roster.map(enrollment => enrollment.studentId));
@@ -79,7 +111,10 @@ export const attendanceService = {
           periodNumber,
           subjectId: subjectId ?? null,
           takenBy: ctx.userId,
-          remarks: remarks ?? null
+          remarks: remarks ?? null,
+          lockOverrideReason: override?.lockOverrideReason ?? null,
+          lockOverriddenBy: override?.lockOverriddenBy ?? null,
+          lockOverriddenAt: override?.lockOverriddenAt ?? null
         },
         { dbc: tx }
       );
@@ -114,6 +149,7 @@ export const attendanceService = {
 
     return {
       created: result.created,
+      overridden: Boolean(override),
       session: { id: result.id, sectionId, sectionName: section.sectionName, date, periodNumber },
       summary: { rosterSize: roster.length, marked: records.length, unmarked: roster.length - records.length, counts }
     };
@@ -136,6 +172,7 @@ export const attendanceService = {
       : [];
     const byStudent = new Map(marks.map(mark => [mark.studentId, mark]));
     const roster = await enrollmentService.findRoster(ctx, sectionId);
+    const policy = await attendancePolicyRepository.ensure(ctx.tenantId);
 
     return {
       section: { id: section.id, sectionName: section.sectionName, className: section.class?.className },
@@ -144,6 +181,10 @@ export const attendanceService = {
       taken: Boolean(session),
       takenAt: session?.takenAt ?? null,
       takenBy: session?.takenBy ?? null,
+      ...lockState(policy, date, await tenantToday(ctx.tenantId)),
+      lockOverride: session?.lockOverriddenAt
+        ? { reason: session.lockOverrideReason, by: session.lockOverriddenBy, at: session.lockOverriddenAt }
+        : null,
       students: roster.map(enrollment => ({
         studentId: enrollment.studentId,
         rollNumber: enrollment.rollNumber,

@@ -1,5 +1,5 @@
 import { z } from "../../../../common/validation/zod.js";
-import { date, id, idParams, optionalText } from "../../../../common/validation/schemas.js";
+import { date, id, idParams, optionalText, patchBody } from "../../../../common/validation/schemas.js";
 import { ATTENDANCE_STATUSES } from "../../shared/constants/academic.constants.js";
 
 const range = z
@@ -7,6 +7,18 @@ const range = z
   .refine(q => !q.from || !q.to || q.to >= q.from, { path: ["to"], message: "must be on or after from" });
 
 export const attendanceValidators = {
+  updatePolicy: {
+    body: patchBody(
+      z.object({
+        editWindowDays: z.number().int().min(0).max(365),
+        overrideRoles: z
+          .array(z.enum(["ADMIN", "PRINCIPAL"]))
+          .min(1)
+          .refine(roles => roles.includes("ADMIN"), "must include ADMIN")
+          .transform(roles => [...new Set(roles)])
+      })
+    )
+  },
   record: {
     body: z
       .object({
@@ -16,6 +28,8 @@ export const attendanceValidators = {
         periodNumber: z.number().int().min(0).max(12).default(0),
         subjectId: id().optional(),
         remarks: optionalText(500),
+        /* Required (and only allowed for override roles) once the register is locked */
+        overrideReason: optionalText(500),
         records: z
           .array(z.object({ studentId: id(), status: z.enum(ATTENDANCE_STATUSES), remarks: optionalText(300) }))
           .min(1)
