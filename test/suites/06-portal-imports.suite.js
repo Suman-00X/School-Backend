@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { h, world, request, get, settleJobs } from "../helpers/harness.js";
+import { h, world, request, get, patch, del, settleJobs } from "../helpers/harness.js";
 
 const A = "/api/v1/academics";
 const U = "/api/v1/users";
@@ -84,6 +84,8 @@ describe("CSV student import", () => {
     assert.match(template.buffer.toString(), /^firstName,lastName,email/);
   });
 
+  const startImport = id => request("POST", `/api/v1/administration/imports/${id}/start`, { as: h.tokens.office });
+
   it("imports good rows and reports bad ones", async () => {
     const csv = [
       "First Name,Last Name,Email,Admission Number,Class Name,Section Name,Parent First Name,Parent Last Name,Parent Email,Parent Relation",
@@ -94,10 +96,24 @@ describe("CSV student import", () => {
       "Dup,Admission,dup@test.school,ADM-1,Class 1,A,,,,"
     ].join("\n");
 
-    const accepted = await upload(csv);
+    const uploaded = await upload(csv);
+    assert.equal(uploaded.status, 201);
+    assert.equal(
+      uploaded.body.message,
+      "students.csv: 5 row(s), 10 column(s). 10 of 15 fields matched to columns; all required fields are mapped. Review the mapping, then start the import."
+    );
+    assert.equal(uploaded.body.data.status, "MAPPING");
+    /* The preview validates the first rows before anything is written */
+    assert.deepEqual(
+      uploaded.body.data.preview.map(r => r.ok),
+      [true, true, false, false, true]
+    );
+
+    const accepted = await startImport(uploaded.body.data.id);
     assert.equal(accepted.status, 202);
     assert.equal(accepted.body.message, "Import accepted: 5 row(s) queued");
     assert.match(accepted.headers.get("location"), /\/api\/v1\/administration\/imports\/[0-9a-f]{24}$/);
+    assert.equal((await startImport(uploaded.body.data.id)).status, 409, "starts once");
 
     await settleJobs();
     const job = await get(`/api/v1/administration/imports/${accepted.body.data.id}`, { as: h.tokens.office });
@@ -116,15 +132,98 @@ describe("CSV student import", () => {
     const children = await get(`${ME}/students`, { as: h.tokens.mother });
     assert.equal(children.data.length, 3);
 
-    const list = await get("/api/v1/administration/imports", { as: h.tokens.office });
+    const list = await get("/api/v1/administration/imports?status=COMPLETED", { as: h.tokens.office });
     assert.equal(list.meta.total, 1);
     assert.equal(list.data[0].rowErrors, undefined);
   });
 
+  it("matches the school's own column names to the form fields", async () => {
+    const csv = [
+      "Student First Name,Surname,E-mail,Pupil Code,Grade,Div,Father's Email,Notes",
+      "Zoya,Khan,zoya@test.school,ADM-300,Class 1,A,,quiet"
+    ].join("\n");
+    const uploaded = (await upload(csv)).body.data;
+    const columnOf = field => uploaded.fields.find(f => f.field === field).column;
+    assert.equal(columnOf("firstName"), "Student First Name");
+    assert.equal(columnOf("lastName"), "Surname");
+    assert.equal(columnOf("email"), "E-mail");
+    assert.equal(columnOf("className"), "Grade");
+    assert.equal(columnOf("sectionName"), "Div");
+    assert.equal(columnOf("parentEmail"), "Father's Email");
+    assert.deepEqual(uploaded.missingRequired, ["admissionNumber"]);
+    assert.deepEqual(
+      uploaded.columns.find(c => c.header === "Pupil Code"),
+      {
+        header: "Pupil Code",
+        mapped: false,
+        samples: ["ADM-300"]
+      }
+    );
+
+    const blocked = await startImport(uploaded.id);
+    assert.equal(blocked.status, 422);
+    assert.equal(blocked.body.message, "Map these required fields to a column first: Admission number");
+
+    const path = `/api/v1/administration/imports/${uploaded.id}`;
+    const twice = await request("PATCH", path, {
+      as: h.tokens.office,
+      body: { mapping: { admissionNumber: "Surname" } }
+    });
+    assert.equal(twice.status, 422);
+    assert.equal(twice.body.message, 'Column "Surname" is mapped to both lastName and admissionNumber');
+    const ghost = await request("PATCH", path, { as: h.tokens.office, body: { mapping: { admissionNumber: "Roll" } } });
+    assert.equal(ghost.body.message, 'The file has no column named "Roll"');
+
+    const fixed = await patch(
+      path,
+      { mapping: { admissionNumber: "Pupil Code", parentEmail: null } },
+      { as: h.tokens.office }
+    );
+    assert.equal(fixed.message, "Mapping updated: 6 of 15 fields matched to columns; all required fields are mapped");
+    assert.deepEqual(fixed.data.preview, [{ row: 2, ok: true }]);
+
+    /* Not wanted after all */
+    const cancelled = await del(path, { as: h.tokens.office });
+    assert.equal(cancelled.data.status, "CANCELLED");
+    assert.equal((await startImport(uploaded.id)).status, 409);
+  });
+
+  it("accepts a mapping with the upload", async () => {
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob(["Given,Family,Mail,Adm,Std,Sec\nVed,Iyer,ved@test.school,ADM-301,Class 1,A"], { type: "text/csv" }),
+      "s.csv"
+    );
+    form.append(
+      "mapping",
+      JSON.stringify({
+        firstName: "Given",
+        lastName: "Family",
+        email: "Mail",
+        admissionNumber: "Adm",
+        className: "Std",
+        sectionName: "Sec"
+      })
+    );
+    const res = await request("POST", "/api/v1/administration/imports/students", { as: h.tokens.office, form });
+    assert.equal(res.status, 201);
+    assert.deepEqual(res.body.data.missingRequired, []);
+
+    const bad = new FormData();
+    bad.append("file", new Blob(["a\n1"], { type: "text/csv" }), "s.csv");
+    bad.append("mapping", "{not json");
+    assert.equal(
+      (await request("POST", "/api/v1/administration/imports/students", { as: h.tokens.office, form: bad })).status,
+      400
+    );
+    await del(`/api/v1/administration/imports/${res.body.data.id}`, { as: h.tokens.office });
+  });
+
   it("rejects unreadable uploads up front", async () => {
-    const missingColumns = await upload("name,age\nx,1\n");
-    assert.equal(missingColumns.status, 422);
-    assert.match(missingColumns.body.message, /missing required column/);
+    const empty = await upload("First Name\n");
+    assert.equal(empty.status, 400);
+    assert.equal(empty.body.message, "The CSV file has no data rows");
 
     const noFile = await request("POST", "/api/v1/administration/imports/students", {
       as: h.tokens.office,

@@ -31,3 +31,22 @@ export const parseCsv = (buffer, { maxRows = 5000 } = {}) => {
     Object.fromEntries(Object.entries(record).map(([key, value]) => [key, value === "" ? undefined : value]))
   );
 };
+
+/* Parse an uploaded CSV as a table: the header row as written, and each data row as
+   an array of cells (empty -> undefined). For imports whose columns the user maps. */
+export const parseCsvTable = (buffer, { maxRows = 5000 } = {}) => {
+  let records;
+  try {
+    records = parse(buffer, { bom: true, skip_empty_lines: true, trim: true, relax_column_count: true });
+  } catch (error) {
+    throw badRequest(`The CSV file could not be read: ${error.message}`);
+  }
+  const [headers = [], ...rows] = records;
+  if (!headers.some(Boolean)) throw badRequest("The CSV file has no header row");
+  if (!rows.length) throw badRequest("The CSV file has no data rows");
+  if (rows.length > maxRows) throw badRequest(`The CSV file has ${rows.length} rows; the limit is ${maxRows}`);
+  return {
+    headers: headers.map(header => header.trim()),
+    rows: rows.map(cells => cells.map(cell => (cell === "" ? undefined : cell)))
+  };
+};

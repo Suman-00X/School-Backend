@@ -21,5 +21,8 @@ router.post(
 );
 router.get("/", authorize(can.read), validate(rules.list), controller.list);
 router.get("/:importId", authorize(can.read), validate(rules.getById), controller.getById);
+router.patch("/:importId", authorize(can.create), validate(rules.updateMapping), controller.updateMapping);
+router.post("/:importId/start", authorize(can.create), validate(rules.getById), controller.start);
+router.delete("/:importId", authorize(can.create), validate(rules.getById), controller.cancel);
 
 export default router;

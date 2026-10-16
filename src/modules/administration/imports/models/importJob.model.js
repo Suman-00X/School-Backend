@@ -1,7 +1,9 @@
 import mongoose from "mongoose";
 
 export const IMPORT_TYPES = ["STUDENTS"];
-export const IMPORT_STATUSES = ["QUEUED", "PROCESSING", "COMPLETED", "FAILED"];
+/* MAPPING: uploaded, waiting for the user to confirm which column is which field */
+export const IMPORT_STATUSES = ["MAPPING", "QUEUED", "PROCESSING", "COMPLETED", "FAILED", "CANCELLED"];
+export const PREVIEW_ROWS = 20;
 export const MAX_RECORDED_ERRORS = 1000;
 
 /* A bulk import and its progress. Per-row errors are kept for the report. */
@@ -9,10 +11,15 @@ const importJobSchema = new mongoose.Schema(
   {
     tenantId: { type: String, required: true },
     type: { type: String, enum: IMPORT_TYPES, required: true },
-    status: { type: String, enum: IMPORT_STATUSES, default: "QUEUED" },
+    status: { type: String, enum: IMPORT_STATUSES, default: "MAPPING" },
     fileName: { type: String },
     storageKey: { type: String },
     options: { type: Object, default: {} },
+    /* The sheet's header row as written, the confirmed field -> column mapping,
+       and the first rows for the mapping preview */
+    columns: [String],
+    mapping: { type: Object, default: {} },
+    sampleRows: { type: [[String]], default: [] },
     totalRows: { type: Number, default: 0 },
     processedRows: { type: Number, default: 0 },
     succeeded: { type: Number, default: 0 },
