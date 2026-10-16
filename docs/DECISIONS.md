@@ -4,22 +4,52 @@ Design decisions made while building roadmap phases 3–7 without you. Each entr
 
 **Legend:** 🔴 needs your input before production · 🟡 worth a look · 🟢 FYI, low risk · ✅ resolved after your review
 
-## Start here (morning summary)
+## Start here
 
-**What was built overnight:**
-- Phases 3–6 complete, and Phase 7 production work.
-- 13 modules and 300+ endpoints ([ENDPOINTS.md](ENDPOINTS.md)).
+**Round 2, after your review of D-01 to D-24:**
+
+| Your request | Status |
+|---|---|
+| D-01, D-12: login with JWT | ✅ Built and security-reviewed (D-01) |
+| D-08: attendance lock; admins can still change | ✅ Built (D-08) |
+| D-09, D-10: configurable grading systems, frozen report cards | ✅ Built (D-09, D-10, with review points) |
+| D-13: match sheet columns to form fields before import | ✅ Built (D-13) |
+| D-17, D-18, D-19, D-21: installment plans per student, concessions on receipts, late-fee slabs, partial online payments | ✅ Built (each entry has review points) |
+| D-20: BYOK Razorpay | ✅ Built; 🔴 one real test-mode run needed |
+| Questions on D-02, D-03, D-07, D-11, D-14, D-24 | Answered in each entry. D-11 lists what teachers can do today, with options |
 
 **State of the code:**
-- 156 end-to-end tests pass on real PostgreSQL 18 and MongoDB.
+- 223 end-to-end tests pass on real PostgreSQL 18 and MongoDB.
 - Lint is clean.
 - A fresh clone passes everything.
 - Every change is a local git commit; nothing was pushed.
 
-**Decisions that need you (🔴):**
+**Still open (🔴):**
 
 | # | Decision | Area |
 |---|---|---|
+| D-20 | Run one school through Razorpay test mode (order, checkout, webhook); refunds through Razorpay not built | Fees |
+| D-37 | PDFs cannot print non-Latin names yet; choose the fonts for your regions | Reports |
+| D-44 | Confirm backup targets and run one real restore drill | Ops |
+| D-45 | Row-level security: designed, build it before the first real school | Security |
+| D-47, D-48, D-49 | Library: lost-book charge, when fines are paid, due dates in the past | Library |
+| D-51, D-52 | Transport: teachers see parent phones; seats survive year-end and leaving | Transport |
+| D-54 | Hostel: one bed per student across years | Hostel |
+
+**Untested here because the tools are missing:**
+- the Docker image and compose stack (no Docker on this machine; CI builds the image)
+- a real `pg_dump`/`mongodump` round trip
+- the Sentry path (no DSN)
+
+**Also set before production:**
+- `DATA_ENCRYPTION_KEY` (D-56)
+- `METRICS_TOKEN`
+- `TRUST_PROXY_HOPS`
+- `REDIS_URL` (D-02)
+- `WEB_APP_URL` and SMTP
+- a host and image registry (D-42)
+
+---|---|---|
 | D-01 / D-12 | Phase 2 login is not built; the portal and payments are waiting for it | Scope |
 | D-20 | Each school brings its own Razorpay keys; verify one school in Razorpay test mode before go-live | Fees |
 | D-37 | PDFs cannot print non-Latin names yet; choose the fonts for your regions | Reports |
