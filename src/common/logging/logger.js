@@ -6,7 +6,17 @@ import env from "../config/env.config.js";
 export const logger = pino({
   level: env.logLevel,
   redact: {
-    paths: ["req.headers.authorization", "req.headers.cookie", "*.password", "*.passwordHash", "*.token"],
+    paths: [
+      "req.headers.authorization",
+      "req.headers.cookie",
+      "*.password",
+      "*.currentPassword",
+      "*.newPassword",
+      "*.passwordHash",
+      "*.token",
+      "*.refreshToken",
+      "*.accessToken"
+    ],
     censor: "[redacted]"
   },
   ...(env.nodeEnv === "development" && {

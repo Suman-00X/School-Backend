@@ -1,7 +1,9 @@
 import AuditLog from "./auditLog.model.js";
 
 const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-const SECRET_KEYS = new Set(["password", "passwordHash", "token", "refreshToken"]);
+/* Any key that names a secret: password, currentPassword, newPassword, refreshToken,
+   keySecret, webhookSecret, apiKey, otp… (matched by name, whatever the casing) */
+const SECRET_KEY = /pass(word)?|secret|token|api[-_]?key|otp|pin$|cvv|bank_?account|pan(number)?$/i;
 const MAX_ARRAY_ITEMS = 50;
 
 /* Copy of the body without secrets; large bulk arrays are summarized */
@@ -12,7 +14,7 @@ const sanitize = value => {
   if (value && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value)
-        .filter(([key]) => !SECRET_KEYS.has(key))
+        .filter(([key]) => !SECRET_KEY.test(key))
         .map(([key, v]) => [key, sanitize(v)])
     );
   }

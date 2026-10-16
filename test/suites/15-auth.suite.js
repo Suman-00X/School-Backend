@@ -197,6 +197,12 @@ describe("auth: passwords", () => {
     assert.equal((await request("GET", "/api/v1/me", { as: there.accessToken })).status, 401);
     assert.equal((await login(teacher.email)).status, 401);
     assert.equal((await login(teacher.email, "Moonrise2027")).status, 201);
+
+    /* The audit trail records the change, never the passwords */
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const entry = await h.modules.AuditLog.findOne({ permission: "auth.credentials.changeOwn" }).lean();
+    assert.ok(entry);
+    assert.doesNotMatch(JSON.stringify(entry), /Moonrise2027|Sunrise2026/);
   });
 
   it("resets a forgotten password without revealing accounts", async () => {
