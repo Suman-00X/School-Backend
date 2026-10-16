@@ -16,6 +16,11 @@ import v1 from "./routes.js";
 const app = express();
 
 app.disable("x-powered-by");
+
+/* Last line of defence: secret columns never leave the API, even if a query
+   (e.g. a relation `with: { user: true }`) selects them by mistake */
+const SECRET_FIELDS = new Set(["passwordHash", "refreshHash", "previousRefreshHash", "tokenHash"]);
+app.set("json replacer", (key, value) => (SECRET_FIELDS.has(key) ? undefined : value));
 app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS ?? 0));
 
 app.use(requestLogger);

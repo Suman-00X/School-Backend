@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { cache } from "../cache/cache.js";
 import { db } from "../database/postgres.js";
 import { tenants } from "../database/platform.schema.js";
@@ -13,6 +13,16 @@ export const getTenant = tenantId =>
     const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
     return tenant ?? null;
   });
+
+/* For sign-in: an active school by its code (case-insensitive), or null */
+export const findTenantByCode = async code => {
+  const [tenant] = await db
+    .select()
+    .from(tenants)
+    .where(and(eq(tenants.code, String(code).trim().toUpperCase()), eq(tenants.isActive, true)))
+    .limit(1);
+  return tenant ?? null;
+};
 
 export const invalidateTenant = tenantId => cache.del(key(tenantId));
 

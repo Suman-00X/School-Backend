@@ -39,5 +39,7 @@ export const notFound = (entity = "Resource") => new AppError(404, ERROR_CODES.N
 
 export const conflict = message => new AppError(409, ERROR_CODES.CONFLICT, message);
 
+export const tooManyRequests = message => new AppError(429, ERROR_CODES.TOO_MANY_REQUESTS, message);
+
 /* Well-formed input that breaks a business rule */
 export const unprocessable = message => new AppError(422, ERROR_CODES.UNPROCESSABLE_ENTITY, message);

@@ -62,3 +62,7 @@ export * from "./modules/inventory/categories/models/category.schema.js";
 export * from "./modules/inventory/vendors/models/vendor.schema.js";
 export * from "./modules/inventory/items/models/item.schema.js";
 export * from "./modules/inventory/stock/models/stockMovement.schema.js";
+
+/* auth */
+export * from "./modules/auth/sessions/models/authSession.schema.js";
+export * from "./modules/auth/credentials/models/authToken.schema.js";

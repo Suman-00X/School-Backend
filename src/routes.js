@@ -14,6 +14,7 @@ import libraryModule from "./modules/library/index.js";
 import hrModule from "./modules/hr/index.js";
 import transportModule from "./modules/transport/index.js";
 import inventoryModule from "./modules/inventory/index.js";
+import { authRoutes, publicAuthRoutes } from "./modules/auth/index.js";
 import { paymentWebhookRoutes } from "./modules/finance/payments/index.js";
 
 /* API v1, mounted at /api/v1. Every route needs a valid token,
@@ -22,10 +23,12 @@ const v1 = createRouter();
 
 /* Public endpoints (no token): verified by other means, e.g. webhook signatures */
 v1.use("/public/payments", paymentWebhookRoutes);
+v1.use("/auth", publicAuthRoutes);
 
 v1.use(authenticate);
 v1.use(auditTrail);
 
+v1.use("/auth", authRoutes);
 v1.use("/users", usersModule);
 v1.use("/academics", academicsModule);
 v1.use("/me", portalModule);

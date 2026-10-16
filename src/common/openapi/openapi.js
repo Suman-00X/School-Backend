@@ -29,9 +29,11 @@ const errorResponse = description => ({
   content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } }
 });
 
-const collectRoutes = (router, prefix, out) => {
-  for (const route of router.__routes) out.push({ ...route, fullPath: joinPath(prefix, route.path) });
-  for (const mount of router.__mounts) collectRoutes(mount.router, joinPath(prefix, mount.path), out);
+/* A router flagged `__public = true` (mounted before authentication) marks its routes public */
+const collectRoutes = (router, prefix, out, isPublic = false) => {
+  const open = isPublic || Boolean(router.__public);
+  for (const route of router.__routes) out.push({ ...route, fullPath: joinPath(prefix, route.path), isPublic: open });
+  for (const mount of router.__mounts) collectRoutes(mount.router, joinPath(prefix, mount.path), out, open);
   return out;
 };
 
@@ -58,7 +60,7 @@ export const buildOpenApi = (rootRouter, { basePath, title, version, description
 
     const openApiPath = route.fullPath.replace(/:(\w+)/g, "{$1}");
     const tag = route.fullPath.slice(basePath.length).split("/").filter(Boolean).slice(0, 2).join(" / ");
-    const isPublic = publicPaths.some(p => route.fullPath.startsWith(p));
+    const isPublic = route.isPublic || publicPaths.some(p => route.fullPath.startsWith(p));
 
     const operation = {
       tags: [tag || "general"],

@@ -19,3 +19,6 @@ export const paginated = (res, result, message = "Request successful") =>
 
 /* Soft deletes and other actions with nothing to return */
 export const done = (res, message) => send(res, 200, message, null);
+
+/* 202: accepted for processing (background work, or an answer that must not reveal more) */
+export const accepted = (res, data, message) => send(res, 202, message, data);

@@ -24,7 +24,7 @@ const spec = buildOpenApi(v1, {
 
 const rolesOf = operation => {
   const match = /Roles: ([^.]+)\./.exec(operation.description ?? "");
-  if (!match) return operation.security?.length === 0 ? "Public (signature checked)" : "Any signed-in user";
+  if (!match) return operation.security?.length === 0 ? "Public (no token)" : "Any signed-in user";
   const roles = match[1].split(", ");
   return roles.length === ALL_ROLES.length ? "Everyone" : roles.join(", ");
 };

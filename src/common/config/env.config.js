@@ -36,6 +36,20 @@ export default {
   redisUrl: str("REDIS_URL"),
 
   jwtSecret: str("JWT_SECRET"),
+
+  auth: {
+    /* Access tokens are short; refresh tokens rotate on every use */
+    accessTokenTtlSeconds: num("ACCESS_TOKEN_TTL_SECONDS", 15 * 60),
+    refreshTokenTtlDays: num("REFRESH_TOKEN_TTL_DAYS", 30),
+    /* Account lockout after repeated wrong passwords */
+    maxFailedLogins: num("AUTH_MAX_FAILED_LOGINS", 5),
+    lockoutMinutes: num("AUTH_LOCKOUT_MINUTES", 15),
+    /* Sign-in and reset requests per IP + email (refresh and links: 5× per IP) */
+    rateLimitWindowMs: num("AUTH_RATE_LIMIT_WINDOW_MS", 15 * 60 * 1000),
+    rateLimitMax: num("AUTH_RATE_LIMIT_MAX", 10)
+  },
+  /* Public URL of the web app (links in invitation and password-reset emails) */
+  webAppUrl: str("WEB_APP_URL", str("APP_URL", `http://localhost:${num("PORT", 3000)}`)),
   /* 32 bytes (hex or base64) for encrypting sensitive fields; required in production */
   dataEncryptionKey: str("DATA_ENCRYPTION_KEY"),
 

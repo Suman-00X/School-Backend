@@ -1,5 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
 import { createCrudService } from "../../../../common/crud/crudService.js";
+import { revokeUserTokens } from "../../../../common/auth/revocation.js";
 import { notFound, unprocessable } from "../../../../common/http/errors.js";
 import { users } from "../models/user.schema.js";
 import { userRepository } from "../repositories/user.repository.js";
@@ -19,6 +20,8 @@ export const accountService = {
 
     const user = await userRepository.update(ctx.tenantId, userId, { isActive: false, status: "INACTIVE" });
     if (!user) throw notFound("User");
+    /* Signed-in devices stop working now, not when their tokens expire */
+    await revokeUserTokens(userId);
     return user;
   },
 
@@ -32,6 +35,16 @@ export const accountService = {
   /* For other modules: an active account by email (case-insensitive), or null */
   findByEmail: (ctx, email) =>
     userRepository.findOne(ctx.tenantId, [eq(users.email, String(email).trim().toLowerCase())]),
+
+  /* For the auth module (sign-in, passwords) */
+  credentials: {
+    find: (ctx, email) => userRepository.findCredentials(ctx.tenantId, String(email).trim().toLowerCase()),
+    findById: (ctx, userId) => userRepository.findCredentialsById(ctx.tenantId, userId),
+    recordFailedLogin: (ctx, userId, policy) => userRepository.recordFailedLogin(ctx.tenantId, userId, policy),
+    recordLogin: (ctx, userId, extra) => userRepository.recordLogin(ctx.tenantId, userId, extra),
+    setPasswordHash: (ctx, userId, passwordHash, options) =>
+      userRepository.setPasswordHash(ctx.tenantId, userId, passwordHash, options)
+  },
 
   /* For other users/* submodules: create the account behind a new person.
      Pass { dbc: tx } to join the caller's transaction. */

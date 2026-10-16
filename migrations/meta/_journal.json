@@ -71,6 +71,13 @@
       "when": 1792109398513,
       "tag": "0009_inventory",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792153586597,
+      "tag": "0010_auth",
+      "breakpoints": true
     }
   ]
 }

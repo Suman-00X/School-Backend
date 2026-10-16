@@ -41,6 +41,7 @@ export const startHarness = async () => {
     STORAGE_DRIVER: "local",
     STORAGE_LOCAL_DIR: storageDir,
     RATE_LIMIT_MAX: "100000",
+    AUTH_RATE_LIMIT_MAX: "100000",
     METRICS_TOKEN: "test-metrics-token"
   });
   delete process.env.REDIS_URL;
@@ -83,7 +84,7 @@ export const stopHarness = async () => {
 };
 
 export const tokenFor = (userId, role, tenantId = h.tenant.id) =>
-  jwt.sign({ userId, tenantId, role }, "test-secret", { expiresIn: "1h" });
+  jwt.sign({ userId, tenantId, role, iatMs: Date.now() }, "test-secret", { expiresIn: "1h" });
 
 /* HTTP client. `as` is a token (default admin); null sends no Authorization. */
 export const request = async (method, url, { body, as = h.tokens.admin, headers = {}, raw, form } = {}) => {
@@ -99,6 +100,12 @@ export const request = async (method, url, { body, as = h.tokens.admin, headers 
   const buffer = Buffer.from(await response.arrayBuffer());
   let json = null;
   if ((response.headers.get("content-type") ?? "").includes("application/json")) json = JSON.parse(buffer.toString());
+  /* No response, in any test, may carry password or token hashes */
+  assert.doesNotMatch(
+    buffer.toString("latin1"),
+    /passwordHash|refreshHash|tokenHash|scrypt\$/,
+    `${method} ${url} leaked a secret`
+  );
   return { status: response.status, headers: response.headers, body: json, buffer };
 };
 
