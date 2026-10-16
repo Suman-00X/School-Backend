@@ -26,6 +26,8 @@ export const payments = pgTable(
       .references(() => students.id),
     amount: money("amount").notNull(),
     excessAmount: money("excess_amount").notNull().default(0),
+    /* Paid back so far (refunds that have not failed) */
+    refundedAmount: money("refunded_amount").notNull().default(0),
     /* The invoice's balance right after this payment (printed on the receipt) */
     balanceAfter: money("balance_after"),
     method: paymentMethod("method").notNull(),
@@ -46,7 +48,8 @@ export const payments = pgTable(
     uniqueIndex("payments_gateway_payment_uq").on(t.tenantId, t.gatewayProvider, t.gatewayPaymentId),
     index("payments_invoice_idx").on(t.invoiceId),
     index("payments_paid_at_idx").on(t.tenantId, t.status, t.paidAt),
-    check("payments_amount_chk", sql`${t.amount} > 0 AND ${t.excessAmount} >= 0 AND ${t.excessAmount} <= ${t.amount}`)
+    check("payments_amount_chk", sql`${t.amount} > 0 AND ${t.excessAmount} >= 0 AND ${t.excessAmount} <= ${t.amount}`),
+    check("payments_refunded_chk", sql`${t.refundedAmount} >= 0 AND ${t.refundedAmount} <= ${t.amount}`)
   ]
 );
 

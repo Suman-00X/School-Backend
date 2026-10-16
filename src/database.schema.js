@@ -41,6 +41,7 @@ export * from "./modules/finance/fee-structures/models/feeStructure.schema.js";
 export * from "./modules/finance/concessions/models/concession.schema.js";
 export * from "./modules/finance/invoices/models/invoice.schema.js";
 export * from "./modules/finance/payments/models/payment.schema.js";
+export * from "./modules/finance/payments/models/paymentRefund.schema.js";
 export * from "./modules/finance/credits/models/studentCredit.schema.js";
 export * from "./modules/finance/payment-settings/models/paymentGatewayAccount.schema.js";
 

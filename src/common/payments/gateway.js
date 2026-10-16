@@ -9,7 +9,9 @@ import env from "../config/env.config.js";
    gateway.createOrder(credentials, { amountMinor, currency, receipt, notes }) -> { orderId, amountMinor, currency, keyId }
    gateway.verifyPayment(credentials, { orderId, paymentId, signature })      -> boolean (checkout callback)
    gateway.verifyWebhook(credentials, rawBody, signatureHeader)               -> boolean
-   gateway.parseWebhook(body)                     -> { event, orderId, paymentId, amountMinor, captured } | null
+   gateway.parseWebhook(body)                     -> { event, orderId, paymentId, amountMinor, captured } |
+                                                     { event, refund: { refundId, paymentId, amountMinor, status } } | null
+   gateway.refund(credentials, { paymentId, amountMinor, notes }) -> { refundId, amountMinor, status: "PENDING" | "PROCESSED" | "FAILED" }
    gateway.testConnection(credentials)            -> { ok, status? }  (are the keys accepted?)
    gateway.modeOf(keyId)                          -> "test" | "live" */
 
@@ -35,8 +37,24 @@ const verifyBody = (credentials, rawBody, signature) =>
 
 const modeOf = keyId => (String(keyId ?? "").startsWith("rzp_live_") ? "live" : "test");
 
-/* Razorpay's payment.captured / payment.authorized webhook payload */
+/* Razorpay refund statuses -> ours */
+const REFUND_STATUSES = { created: "PENDING", pending: "PENDING", processed: "PROCESSED", failed: "FAILED" };
+
+/* Razorpay's payment.captured / payment.authorized and refund.* webhook payloads */
 const parseRazorpayWebhook = body => {
+  const refund = body?.payload?.refund?.entity;
+  if (String(body?.event ?? "").startsWith("refund.") && refund) {
+    return {
+      event: body.event,
+      refund: {
+        refundId: refund.id,
+        paymentId: refund.payment_id,
+        amountMinor: refund.amount,
+        currency: refund.currency,
+        status: REFUND_STATUSES[refund.status] ?? (body.event === "refund.failed" ? "FAILED" : "PENDING")
+      }
+    };
+  }
   const payment = body?.payload?.payment?.entity;
   if (!payment) return null;
   return {
@@ -73,6 +91,24 @@ export const razorpayGateway = {
   verifyWebhook: verifyBody,
   parseWebhook: parseRazorpayWebhook,
 
+  /* Refund (part of) a captured payment back to the payer's original method */
+  refund: async (credentials, { paymentId, amountMinor, notes }) => {
+    requireKeys(credentials);
+    const response = await fetch(`${RAZORPAY_API}/payments/${encodeURIComponent(paymentId)}/refund`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: basicAuth(credentials) },
+      body: JSON.stringify({ amount: amountMinor, speed: "normal", notes })
+    });
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null);
+      const error = new Error(`Razorpay refund failed (${response.status})`);
+      error.gatewayMessage = detail?.error?.description ?? null;
+      throw error;
+    }
+    const refund = await response.json();
+    return { refundId: refund.id, amountMinor: refund.amount, status: REFUND_STATUSES[refund.status] ?? "PENDING" };
+  },
+
   /* A cheap authenticated read: 200 = keys accepted, 401 = rejected */
   testConnection: async credentials => {
     requireKeys(credentials);
@@ -103,7 +139,12 @@ export const mockGateway = {
   verifyWebhook: verifyBody,
   parseWebhook: body => {
     const event = parseRazorpayWebhook(body);
-    return event && { ...event, captured: body.event === "payment.captured" };
+    return event?.refund ? event : event && { ...event, captured: body.event === "payment.captured" };
+  },
+  /* Processed at once, like most real refunds */
+  refund: async (credentials, { amountMinor }) => {
+    requireKeys(credentials);
+    return { refundId: `rfnd_mock_${randomUUID().replaceAll("-", "").slice(0, 14)}`, amountMinor, status: "PROCESSED" };
   },
   testConnection: async credentials => {
     requireKeys(credentials);

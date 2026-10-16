@@ -7,7 +7,7 @@ import { academicYearService } from "../../../academics/academic-years/index.js"
 import { concessionService } from "../../concessions/index.js";
 import { creditService } from "../../credits/index.js";
 import { installmentPlanService } from "../../installment-plans/index.js";
-import { paymentService } from "../../payments/index.js";
+import { paymentService, refundService } from "../../payments/index.js";
 import { OPEN_INVOICE_STATUSES } from "../../shared/constants/finance.constants.js";
 import { statusFor } from "../../shared/utils/invoiceMath.util.js";
 import { invoices } from "../models/invoice.schema.js";
@@ -119,7 +119,7 @@ export const invoiceService = {
       with: withDetails
     });
     const live = rows.filter(invoice => invoice.status !== "CANCELLED");
-    const [payments, grants, assigned, credit] = await Promise.all([
+    const [payments, grants, assigned, credit, refunds] = await Promise.all([
       /* Including money that reached a cancelled invoice (kept as credit) */
       paymentService.forStudent(
         ctx,
@@ -128,8 +128,13 @@ export const invoiceService = {
       ),
       concessionService.grantsInYear(ctx, year.id, [studentId]),
       installmentPlanService.assignedInYear(ctx, year.id, [studentId]),
-      creditService.forStudent(ctx, studentId)
+      creditService.forStudent(ctx, studentId),
+      refundService.forInvoices(
+        ctx,
+        rows.map(invoice => invoice.id)
+      )
     ]);
+    const liveRefunds = refunds.filter(refund => refund.status !== "FAILED");
     const [plan] = await installmentPlanService.findManyByIds(ctx, [assigned.get(studentId)].filter(Boolean));
     const applied = concessionSummary(live.flatMap(invoice => invoice.lines));
 
@@ -155,7 +160,9 @@ export const invoiceService = {
         lateFees: sum(live.map(i => i.lateFee)),
         lateFeesWaived: sum(live.map(i => i.lateFeeWaivedAmount)),
         billed: sum(live.map(i => i.total)),
+        /* Net of refunds: refunded money is no longer on the invoices */
         paid: sum(live.map(i => i.amountPaid)),
+        refunded: sum(liveRefunds.map(r => r.amount)),
         balance: sum(live.map(i => i.balance)),
         overdue: sum(
           live.filter(i => OPEN_INVOICE_STATUSES.includes(i.status) && i.dueDate < today).map(i => i.balance)
@@ -164,6 +171,7 @@ export const invoiceService = {
       credit: { balance: credit.balance },
       invoices: rows.map(invoice => view(invoice, today)),
       payments,
+      refunds,
       creditEntries: credit.entries
     };
   },
@@ -196,6 +204,17 @@ export const invoiceService = {
   findOpenDueWithin: days => invoiceRepository.findOpenDueWithin(days),
 
   lockForUpdate: (tenantId, invoiceId, options) => invoiceRepository.lockForUpdate(tenantId, invoiceId, options),
+
+  /* Take refunded money off a locked invoice. The caller makes sure it was paid. */
+  removePayment: (tenantId, invoice, amount, { dbc }) => {
+    const amountPaid = fromMinor(toMinor(invoice.amountPaid) - toMinor(amount));
+    return invoiceRepository.update(
+      tenantId,
+      invoice.id,
+      { amountPaid, status: statusFor(invoice.total, amountPaid) },
+      { dbc }
+    );
+  },
 
   /* Add money to a locked invoice. The caller makes sure it does not exceed the balance. */
   applyPayment: (tenantId, invoice, amount, { dbc }) => {

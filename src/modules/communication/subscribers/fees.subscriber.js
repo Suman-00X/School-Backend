@@ -5,7 +5,7 @@ import { getTenant } from "../../../common/tenancy/tenant.service.js";
 import { daysBetween, todayIn } from "../../../common/utils/date.util.js";
 import { studentService } from "../../users/students/index.js";
 import { INVOICES_ISSUED, invoiceService } from "../../finance/invoices/index.js";
-import { PAYMENT_RECEIVED, paymentService } from "../../finance/payments/index.js";
+import { PAYMENT_RECEIVED, REFUND_PROCESSED, paymentService, refundService } from "../../finance/payments/index.js";
 import { notificationService } from "../notifications/index.js";
 import { recipients } from "../shared/services/recipients.service.js";
 import { messages } from "../shared/templates/messages.js";
@@ -36,6 +36,29 @@ subscribe(INVOICES_ISSUED, "communication.invoiceIssued", async ({ tenantId, inv
       channels: ["IN_APP", "EMAIL"]
     });
   }
+});
+
+/* Refund processed -> the student and their parents, once per refund */
+subscribe(REFUND_PROCESSED, "communication.refundProcessed", async ({ tenantId, refundId }) => {
+  const ctx = { tenantId, role: "SYSTEM" };
+  const refund = await refundService.findById(ctx, refundId);
+  if (!refund || refund.status !== "PROCESSED" || !(await claimOnce(`refund:${refundId}`))) return;
+  const tenant = await getTenant(tenantId);
+  const [student] = await studentService.findManyByIds(ctx, [refund.studentId]);
+  await notificationService.notify(ctx, {
+    userIds: await recipients.forStudents(ctx, [refund.studentId]),
+    type: "REFUND_PROCESSED",
+    ...messages.refundProcessed({
+      studentName: nameOf(student),
+      amount: refund.amount,
+      refundNumber: refund.refundNumber,
+      receiptNumber: refund.payment?.receiptNumber,
+      toOriginal: refund.method === "ORIGINAL",
+      currency: tenant?.currency
+    }),
+    data: { refundId, paymentId: refund.paymentId, invoiceId: refund.invoiceId, studentId: refund.studentId },
+    channels: ["IN_APP", "EMAIL"]
+  });
 });
 
 /* Payment confirmation with the receipt number */

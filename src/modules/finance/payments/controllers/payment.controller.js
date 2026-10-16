@@ -2,6 +2,12 @@ import { sendFile } from "../../../../common/export/exporters.js";
 import { created, ok, paginated } from "../../../../common/http/responses.js";
 import { paymentService } from "../services/payment.service.js";
 import { receiptService } from "../services/receipt.service.js";
+import { refundService } from "../services/refund.service.js";
+
+const refundMessage = refund =>
+  `Refund ${refund.refundNumber} of ${Number(refund.amount).toFixed(2)} ${
+    refund.status === "PROCESSED" ? "processed" : "submitted to the payment gateway"
+  } for receipt ${refund.payment.receiptNumber}`;
 
 /* "Payment confirmed. Receipt RCPT26-000004. 200.00 more than the balance is kept as credit" */
 const confirmedMessage = payment =>
@@ -36,6 +42,17 @@ export const paymentController = {
     const { buffer, fileName } = await receiptService.pdf(req.context, req.params.paymentId);
     return sendFile(res, { buffer, fileName, format: "pdf" });
   },
+
+  refund: async (req, res) => {
+    const refund = await refundService.create(req.context, req.params.paymentId, req.body);
+    return created(res, refund, refundMessage(refund));
+  },
+
+  listRefunds: async (req, res) =>
+    paginated(res, await refundService.list(req.context, req.query), "Refunds retrieved successfully"),
+
+  getRefund: async (req, res) =>
+    ok(res, await refundService.getById(req.context, req.params.refundId), "Refund retrieved successfully"),
 
   /* Razorpay -> us, for one school. Always 200 once the signature is valid, so it stops retrying. */
   webhook: async (req, res) => {

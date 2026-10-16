@@ -5,7 +5,7 @@ import { lateFeeRuleRoutes } from "./late-fee-rules/index.js";
 import { feeStructureRoutes } from "./fee-structures/index.js";
 import { concessionGrantRoutes, concessionRoutes } from "./concessions/index.js";
 import { invoiceRoutes, statementRoutes } from "./invoices/index.js";
-import { invoicePaymentRoutes, paymentRoutes } from "./payments/index.js";
+import { invoicePaymentRoutes, paymentRoutes, refundRoutes } from "./payments/index.js";
 import { invoiceCreditRoutes, studentCreditRoutes } from "./credits/index.js";
 import { paymentSettingsRoutes } from "./payment-settings/index.js";
 
@@ -23,6 +23,7 @@ router.use("/invoices", invoicePaymentRoutes);
 router.use("/invoices", invoiceCreditRoutes);
 router.use("/invoices", invoiceRoutes);
 router.use("/payments", paymentRoutes);
+router.use("/refunds", refundRoutes);
 router.use("/students", statementRoutes);
 router.use("/students", studentCreditRoutes);
 router.use("/payment-settings", paymentSettingsRoutes);

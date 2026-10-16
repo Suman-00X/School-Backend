@@ -26,6 +26,12 @@ paymentRoutes.post("/confirmations", authorize(can.collect), validate(rules.conf
 paymentRoutes.get("/", authorize(can.read), validate(rules.list), controller.list);
 paymentRoutes.get("/:paymentId", authorize(can.read), validate(rules.getById), controller.getById);
 paymentRoutes.get("/:paymentId/receipt", authorize(can.read), validate(rules.getById), controller.receipt);
+paymentRoutes.post("/:paymentId/refunds", authorize(can.refund), validate(rules.refund), controller.refund);
+
+/* /api/v1/finance/refunds */
+export const refundRoutes = createRouter();
+refundRoutes.get("/", authorize(can.read), validate(rules.listRefunds), controller.listRefunds);
+refundRoutes.get("/:refundId", authorize(can.read), validate(rules.getRefund), controller.getRefund);
 
 /* /api/v1/public/payments/razorpay/:tenantId/webhook (no token: signed with the school's webhook secret) */
 export const paymentWebhookRoutes = createRouter();

@@ -14,6 +14,7 @@ import { MIN_ONLINE_PAYMENT, OPEN_INVOICE_STATUSES } from "../../shared/constant
 import { nextReceiptNumber } from "../../shared/utils/codes.util.js";
 import { payments } from "../models/payment.schema.js";
 import { paymentRepository } from "../repositories/payment.repository.js";
+import { refundService } from "./refund.service.js";
 
 export const PAYMENT_RECEIVED = "finance.payment.received";
 
@@ -238,6 +239,7 @@ export const paymentService = {
     const gateway = paymentGateway();
     if (!gateway.verifyWebhook(credentials, rawBody, signature)) throw unprocessable("Invalid webhook signature");
     const event = gateway.parseWebhook(JSON.parse(rawBody.toString()));
+    if (event?.refund) return refundService.fromGateway(tenantId, gateway.name, event.refund);
     if (!event?.captured) return { handled: false };
     /* Defence in depth: the captured amount and currency must be the order's */
     const school = await getTenant(tenantId);

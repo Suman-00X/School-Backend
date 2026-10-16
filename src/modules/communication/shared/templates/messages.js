@@ -24,6 +24,15 @@ export const messages = {
   }),
 
   /* credit: the part that was more than the invoice's balance, kept for later fees */
+  refundProcessed: ({ studentName, amount, refundNumber, receiptNumber, toOriginal, currency }) => ({
+    title: `Refund processed (${refundNumber})`,
+    body:
+      `${money(amount, currency)} from payment ${receiptNumber} for ${studentName}'s fees has been refunded (${refundNumber}).` +
+      (toOriginal
+        ? " It goes back to the card, UPI or bank account that paid; banks usually take 5–7 working days."
+        : "")
+  }),
+
   paymentReceived: ({ studentName, amount, receiptNumber, credit = 0, currency }) => ({
     title: `Payment received (${receiptNumber})`,
     body:

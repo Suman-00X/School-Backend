@@ -83,6 +83,27 @@ export const creditService = {
     });
   },
 
+  /* For refunds (inside the refund's transaction) */
+  balance: (ctx, studentId, { dbc } = {}) => balanceOf(ctx, studentId, { dbc }),
+
+  /* Pay credit back as part of a payment refund -> remaining balance, or null if not enough */
+  takeForRefund: async (ctx, { studentId, paymentId, amount, notes }, { dbc }) => {
+    const remaining = await balances.take(ctx.tenantId, studentId, amount, { dbc });
+    if (remaining === null) return null;
+    await entries.create(
+      ctx.tenantId,
+      { studentId, entryType: "REFUNDED", amount, paymentId, method: "REFUND", notes, createdBy: ctx.userId ?? null },
+      { dbc }
+    );
+    return remaining;
+  },
+
+  /* A refund failed at the gateway: its money is the student's again */
+  restoreFromFailedRefund: async (ctx, { studentId, paymentId, amount, notes }, { dbc }) => {
+    await entries.create(ctx.tenantId, { studentId, entryType: "REFUND_REVERSED", amount, paymentId, notes }, { dbc });
+    return balances.add(ctx.tenantId, studentId, amount, { dbc });
+  },
+
   /* For other submodules */
   appliedTo: (ctx, invoiceId) =>
     entries.findMany(ctx.tenantId, {

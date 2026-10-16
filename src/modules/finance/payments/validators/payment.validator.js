@@ -3,7 +3,9 @@ import { date, id, idParams, listQuery, optionalText, text } from "../../../../c
 import {
   OFFLINE_PAYMENT_METHODS,
   PAYMENT_METHODS,
-  PAYMENT_STATUSES
+  PAYMENT_STATUSES,
+  REFUND_METHODS,
+  REFUND_STATUSES
 } from "../../shared/constants/finance.constants.js";
 import { amount } from "../../shared/validators/finance.validators.js";
 
@@ -36,5 +38,36 @@ export const paymentValidators = {
     })
   },
   getById: { params: idParams("paymentId") },
-  webhook: { params: idParams("tenantId") }
+  webhook: { params: idParams("tenantId") },
+
+  /* Default amount: everything still refundable */
+  refund: {
+    params: idParams("paymentId"),
+    body: z
+      .object({
+        amount: amount().optional(),
+        method: z.enum(REFUND_METHODS).optional(),
+        reason: text(500),
+        reference: optionalText(100)
+      })
+      .refine(r => !r.method || ["ORIGINAL", "CASH"].includes(r.method) || r.reference, {
+        path: ["reference"],
+        message: "is required when paying back by cheque, UPI or bank transfer"
+      })
+  },
+  listRefunds: {
+    query: listQuery({
+      studentId: id().optional(),
+      paymentId: id().optional(),
+      status: z.enum(REFUND_STATUSES).optional(),
+      /* Gateway refunds the books could not fully cover */
+      needsReview: z
+        .enum(["true", "false"])
+        .transform(v => v === "true")
+        .optional(),
+      from: date().optional(),
+      to: date().optional()
+    })
+  },
+  getRefund: { params: idParams("refundId") }
 };

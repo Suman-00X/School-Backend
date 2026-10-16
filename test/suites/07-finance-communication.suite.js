@@ -344,6 +344,7 @@ describe("finance: payments", () => {
       lateFeesWaived: 0,
       billed: 5400,
       paid: 5400,
+      refunded: 0,
       balance: 0,
       overdue: 0
     });

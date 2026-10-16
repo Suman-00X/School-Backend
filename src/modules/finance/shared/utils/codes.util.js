@@ -12,3 +12,9 @@ export const nextReceiptNumber = (tenantId, yearStartDate, options) => {
   const yy = toYearYY(yearStartDate);
   return nextCode(tenantId, `RECEIPT-${yy}`, n => `RCPT${yy}-${pad(n, 6)}`, options);
 };
+
+/* RFND26-000001: money paid back from a payment */
+export const nextRefundNumber = (tenantId, yearStartDate, options) => {
+  const yy = toYearYY(yearStartDate);
+  return nextCode(tenantId, `REFUND-${yy}`, n => `RFND${yy}-${pad(n, 6)}`, options);
+};

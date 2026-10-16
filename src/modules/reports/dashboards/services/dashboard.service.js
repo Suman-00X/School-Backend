@@ -46,6 +46,8 @@ export const dashboardService = {
       attendanceToday: attendance,
       fees: {
         ...fees,
+        /* Receipts minus money paid back */
+        netCollectedThisYear: Math.round((fees.collectedThisYear - fees.refundedThisYear) * 100) / 100,
         collectionRate: fees.billed ? Math.round(((fees.billed - fees.outstanding) / fees.billed) * 1000) / 10 : null
       },
       exams: { papersInNext14Days: upcomingPapers }
