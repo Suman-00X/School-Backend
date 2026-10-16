@@ -3,17 +3,19 @@ import { transaction } from "../../../../common/database/postgres.js";
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { allocationService } from "../../allocations/index.js";
 import { hostelService } from "../../hostels/index.js";
+import { resourceService } from "../../resources/index.js";
 import { freeBeds } from "../../shared/utils/hostel.util.js";
 import { hostelRooms } from "../models/hostelRoom.schema.js";
 import { hostelRoomRepository } from "../repositories/hostelRoom.repository.js";
 
 const withHostel = { hostel: { columns: { id: true, name: true, code: true, residentGender: true } } };
 
-/* Adds occupied / free bed counts to rooms (one query for all of them) */
+/* Adds today's occupied / free bed counts to rooms (one query for all of them) */
 const withOccupancy = async (ctx, rooms) => {
-  const beds = await allocationService.activeBeds(
+  const beds = await allocationService.bookedBeds(
     ctx,
     rooms.map(room => room.id),
+    null,
     { withStudent: false }
   );
   return rooms.map(room => {
@@ -31,17 +33,20 @@ const assertNumberFree = async (ctx, hostelId, roomNumber, exceptId) => {
   if (taken) throw conflict(`Room ${roomNumber} already exists in this hostel`);
 };
 
-/* Capacity and status changes must not strand current residents */
-const assertResidentsFit = (room, changes, takenBeds) => {
-  if (!takenBeds.length) return;
+/* Capacity and status changes must not strand current or upcoming residents */
+const assertResidentsFit = (room, changes, bookings) => {
+  if (!bookings.length) return;
   const label = `Room ${room.roomNumber}`;
+  const takenBeds = [...new Set(bookings.map(booking => booking.bedNumber))];
   if (changes.status === "CLOSED") {
-    throw conflict(`${label} has ${takenBeds.length} resident(s); vacate or transfer them before closing it`);
+    throw conflict(
+      `${label} has ${bookings.length} current or upcoming allocation(s); vacate, cancel or transfer them before closing it`
+    );
   }
   if (changes.capacity !== undefined) {
     if (changes.capacity < takenBeds.length) {
       throw conflict(
-        `${label} has ${takenBeds.length} resident(s); its capacity cannot be reduced to ${changes.capacity}`
+        `${label} has ${takenBeds.length} bed(s) in use now or later; its capacity cannot be reduced to ${changes.capacity}`
       );
     }
     const outside = takenBeds.filter(bed => bed > changes.capacity).sort((a, b) => a - b);
@@ -93,12 +98,7 @@ export const roomService = {
         await assertNumberFree(ctx, room.hostelId, data.roomNumber, roomId);
       }
       if (data.capacity !== undefined || data.status === "CLOSED") {
-        const beds = await allocationService.activeBeds(ctx, [roomId], { dbc: tx, withStudent: false });
-        assertResidentsFit(
-          room,
-          data,
-          beds.map(bed => bed.bedNumber)
-        );
+        assertResidentsFit(room, data, await allocationService.notEndedInRooms(ctx, [roomId], { dbc: tx }));
       }
       await hostelRoomRepository.update(ctx.tenantId, roomId, data, { dbc: tx });
     });
@@ -109,10 +109,13 @@ export const roomService = {
     transaction(async tx => {
       const [room] = await hostelRoomRepository.lockForUpdate(ctx.tenantId, [roomId], { dbc: tx });
       if (!room) throw notFound("Room");
-      const beds = await allocationService.activeBeds(ctx, [roomId], { dbc: tx, withStudent: false });
+      const beds = await allocationService.notEndedInRooms(ctx, [roomId], { dbc: tx });
       if (beds.length) {
-        throw conflict(`Room ${room.roomNumber} has ${beds.length} resident(s); vacate or transfer them first`);
+        throw conflict(
+          `Room ${room.roomNumber} has ${beds.length} current or upcoming allocation(s); vacate, cancel or transfer them first`
+        );
       }
+      await resourceService.removeAllFor(ctx, { roomId }, { dbc: tx });
       return hostelRoomRepository.softDelete(ctx.tenantId, roomId, { dbc: tx });
     }),
 
@@ -120,6 +123,19 @@ export const roomService = {
 
   /* Lock rooms (in id order) inside the caller's transaction -> rows, missing ones left out */
   lockForUpdate: (ctx, roomIds, { dbc }) => hostelRoomRepository.lockForUpdate(ctx.tenantId, roomIds, { dbc }),
+
+  findById: (ctx, roomId) => hostelRoomRepository.findById(ctx.tenantId, roomId),
+
+  /* Rooms that take residents (AVAILABLE), with their hostel, for availability searches */
+  findBookable: (ctx, { hostelId, roomType }) =>
+    hostelRoomRepository.findMany(ctx.tenantId, {
+      conditions: [
+        eq(hostelRooms.status, "AVAILABLE"),
+        hostelId && eq(hostelRooms.hostelId, hostelId),
+        roomType && eq(hostelRooms.roomType, roomType)
+      ].filter(Boolean),
+      with: withHostel
+    }),
 
   findAllForHostel: (ctx, hostelId) =>
     hostelRoomRepository.findMany(ctx.tenantId, { conditions: [eq(hostelRooms.hostelId, hostelId)] }),

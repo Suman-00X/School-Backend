@@ -149,7 +149,7 @@ Self-service lives under `/api/v1/me` (portal), plus `my-…` endpoints in libra
 | Files | `/files` | Student, staff and general documents |
 | Library | `/library` | Catalogue (ISBN), copies, loans, renewals, fines, overdue reminders |
 | Transport | `/transport` | Vehicles (compliance dates), routes and stops, seat assignments, rosters |
-| Hostel | `/hostel` | Hostels, rooms, bed allocations, transfers, occupancy |
+| Hostel | `/hostel` | Hostels, rooms, bed allocations by date range (pre-booking, transfers, extensions, year-end roll-over), bed availability, occupancy, resources (lockers, mess and laundry plans) and their assignments |
 | HR | `/hr` | Staff attendance, leave types, requests and balances, salary structures, payroll runs, payslips |
 | Inventory | `/inventory` | Categories, vendors, items, stock ledger (weighted average cost), low-stock, valuation and consumption reports |
 

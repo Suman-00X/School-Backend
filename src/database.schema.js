@@ -50,6 +50,8 @@ export * from "./modules/finance/ledger/models/ledger.schema.js";
 export * from "./modules/hostel/hostels/models/hostel.schema.js";
 export * from "./modules/hostel/rooms/models/hostelRoom.schema.js";
 export * from "./modules/hostel/allocations/models/hostelAllocation.schema.js";
+export * from "./modules/hostel/resources/models/hostelResource.schema.js";
+export * from "./modules/hostel/resource-assignments/models/hostelResourceAssignment.schema.js";
 
 /* library */
 export * from "./modules/library/policy/models/libraryPolicy.schema.js";

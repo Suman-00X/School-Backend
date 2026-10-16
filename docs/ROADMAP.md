@@ -86,7 +86,7 @@ Status as of 2026-10-16: **156 end-to-end tests** pass on embedded PostgreSQL 18
   - fines and waivers
   - daily overdue reminders
 - ✅ Transport: vehicles with compliance expiry dates, routes and stops, seat capacity under lock, rosters
-- ✅ Hostel: hostels, rooms, bed allocations with gender rules, transfers, occupancy
+- ✅ Hostel: hostels, rooms, bed allocations by date range with gender rules (pre-booking, transfers, extensions, roll-over, leavers), availability, occupancy, assignable resources
 - ✅ HR and payroll:
   - staff attendance
   - leave types, requests, approvals and balances

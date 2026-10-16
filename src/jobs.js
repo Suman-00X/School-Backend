@@ -10,3 +10,4 @@ import "./modules/communication/subscribers/index.js";
 import "./modules/library/loans/jobs/overdueReminder.job.js";
 import "./modules/auth/credentials/jobs/credential.job.js";
 import "./modules/transport/assignments/jobs/studentLeft.job.js";
+import "./modules/hostel/allocations/jobs/studentLeft.job.js";

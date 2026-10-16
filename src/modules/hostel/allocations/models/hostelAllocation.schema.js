@@ -1,24 +1,26 @@
 import { relations, sql } from "drizzle-orm";
-import { check, date, index, integer, pgEnum, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, date, index, integer, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { baseColumns } from "../../../../common/database/columns.js";
-import { academicYears } from "../../../academics/academic-years/models/academicYear.schema.js";
 import { users } from "../../../users/accounts/models/user.schema.js";
 import { students } from "../../../users/students/models/student.schema.js";
 import { hostels } from "../../hostels/models/hostel.schema.js";
 import { hostelRooms } from "../../rooms/models/hostelRoom.schema.js";
-import { ALLOCATION_STATUSES } from "../../shared/constants/hostel.constants.js";
+import { ALLOCATION_SOURCES, BOOKING_STATUSES, END_REASONS } from "../../shared/constants/hostel.constants.js";
 
-export const hostelAllocationStatus = pgEnum("hostel_allocation_status", ALLOCATION_STATUSES);
+export const hostelBookingStatus = pgEnum("hostel_booking_status", BOOKING_STATUSES);
+export const hostelAllocationSource = pgEnum("hostel_allocation_source", ALLOCATION_SOURCES);
+export const hostelEndReason = pgEnum("hostel_end_reason", END_REASONS);
 
-/* A student's bed for an academic year. Vacating keeps the row (status VACATED)
-   as history; a transfer vacates one row and starts another. */
+/* A student's bed for a date range [from_date, to_date] (to_date null = open-ended).
+   Not tied to an academic year: beds can be booked ahead and changed over between years.
+   The database refuses overlaps (hand-written exclusion constraints, btree_gist):
+     hostel_allocations_bed_no_overlap      one bed, one ACTIVE allocation per day
+     hostel_allocations_student_no_overlap  one student, one ACTIVE allocation per day
+   Ending early shortens to_date; cancelling keeps the row as history (status CANCELLED). */
 export const hostelAllocations = pgTable(
   "hostel_allocations",
   {
     ...baseColumns(),
-    academicYearId: uuid("academic_year_id")
-      .notNull()
-      .references(() => academicYears.id),
     studentId: uuid("student_id")
       .notNull()
       .references(() => students.id),
@@ -30,30 +32,28 @@ export const hostelAllocations = pgTable(
       .notNull()
       .references(() => hostelRooms.id),
     bedNumber: integer("bed_number").notNull(),
-    allocatedOn: date("allocated_on").notNull(),
-    vacatedOn: date("vacated_on"),
-    status: hostelAllocationStatus("status").notNull().default("ACTIVE"),
-    /* The allocation this one replaced when the student was transferred */
-    transferredFromId: uuid("transferred_from_id").references(() => hostelAllocations.id),
+    fromDate: date("from_date").notNull(),
+    toDate: date("to_date"),
+    status: hostelBookingStatus("status").notNull().default("ACTIVE"),
+    source: hostelAllocationSource("source").notNull().default("DIRECT"),
+    /* The allocation this one continues (the bed before a transfer, last year's bed for a roll-over) */
+    previousAllocationId: uuid("previous_allocation_id").references(() => hostelAllocations.id),
+    /* Set when an action (vacate, transfer, leaving, cancellation) ended the allocation */
+    endReason: hostelEndReason("end_reason"),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    endedBy: uuid("ended_by").references(() => users.id),
     allocatedBy: uuid("allocated_by").references(() => users.id),
-    vacatedBy: uuid("vacated_by").references(() => users.id),
     notes: text("notes")
   },
   t => [
-    /* One bed per student per year, and one student per bed */
-    /* One bed per student at a time, across years (beds are physical) */
-    uniqueIndex("hostel_allocations_student_uq")
-      .on(t.studentId)
-      .where(sql`${t.isActive} = true AND ${t.status} = 'ACTIVE'`),
-    uniqueIndex("hostel_allocations_room_bed_uq")
-      .on(t.roomId, t.bedNumber)
-      .where(sql`${t.isActive} = true AND ${t.status} = 'ACTIVE'`),
-    index("hostel_allocations_tenant_year_idx").on(t.tenantId, t.academicYearId, t.hostelId),
-    index("hostel_allocations_student_idx").on(t.studentId),
+    index("hostel_allocations_tenant_hostel_idx").on(t.tenantId, t.hostelId, t.fromDate),
+    index("hostel_allocations_room_idx").on(t.roomId, t.bedNumber),
+    index("hostel_allocations_student_idx").on(t.studentId, t.fromDate),
     check("hostel_allocations_bed_chk", sql`${t.bedNumber} >= 1`),
+    check("hostel_allocations_dates_chk", sql`${t.toDate} IS NULL OR ${t.toDate} >= ${t.fromDate}`),
     check(
-      "hostel_allocations_vacated_chk",
-      sql`(${t.status} = 'ACTIVE' AND ${t.vacatedOn} IS NULL) OR (${t.status} = 'VACATED' AND ${t.vacatedOn} >= ${t.allocatedOn})`
+      "hostel_allocations_cancelled_chk",
+      sql`${t.status} <> 'CANCELLED' OR (${t.endReason} IS NOT NULL AND ${t.endedAt} IS NOT NULL)`
     )
   ]
 );

@@ -1,9 +1,13 @@
-import { GENDER_FOR_RESIDENTS } from "../constants/hostel.constants.js";
+import { GENDER_FOR_RESIDENTS, RESOURCE_TYPE_LABELS } from "../constants/hostel.constants.js";
 
 export const fullName = user => (user ? [user.firstName, user.lastName].filter(Boolean).join(" ") : null);
 
 /* "Room 101, Boys Hostel" */
 export const roomLabel = (room, hostel) => `Room ${room.roomNumber}${hostel ? `, ${hostel.name}` : ""}`;
+
+/* "L-12 (locker)", "Veg (mess plan)", "Stand 3 (bicycle stand)" */
+export const resourceLabel = resource =>
+  `${resource.name} (${(resource.customType ?? RESOURCE_TYPE_LABELS[resource.resourceType]).toLowerCase()})`;
 
 /* Bed numbers 1..capacity that are not in `taken` */
 export const freeBeds = (capacity, taken) => {

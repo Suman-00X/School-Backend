@@ -147,7 +147,9 @@ Hostel, library, transport, HR and inventory have no foreign keys into each othe
 |---|---|---|---|
 | hostels | `hostels` | Hostel with resident gender (BOYS/GIRLS/COED) and warden | Partial unique name and code |
 | rooms | `hostel_rooms` | Rooms with capacity (beds), type, monthly fee, status | Partial unique (hostel, room number). CHECK 1 ≤ capacity ≤ 50 |
-| allocations | `hostel_allocations` | A student's bed for a year; vacate and transfer history | **One active bed per student** and **one student per bed** (partial uniques), plus a room row lock |
+| allocations | `hostel_allocations` | A student's bed for a date range `[from_date, to_date]` (open-ended when `to_date` is null), not tied to an academic year: pre-bookings, changeovers, transfers and roll-overs link to the allocation they continue | **No two ACTIVE allocations of one bed, and none of one student, share a day**: GiST exclusion constraints on `daterange(from_date, to_date, '[]')` (btree_gist), plus a room row lock. CHECK to_date ≥ from_date |
+| resources | `hostel_resources` | Lockers, cupboards, study tables (in a room or hostel-wide), mess and laundry plans (hostel-wide), custom types; capacity and monthly fee (stored, not invoiced) | Partial unique (hostel, name). CHECK 1 ≤ capacity ≤ 10000, plans have no room |
+| resource-assignments | `hostel_resource_assignments` | A student's hold on a resource for a date range, tied to a bed allocation (ends with it) or standalone | Capacity per day checked under a resource row lock. Exclusion constraints: one hold of a resource per student per day, one mess (and one laundry) plan per student per day |
 
 **HR**
 

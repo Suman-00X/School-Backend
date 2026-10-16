@@ -54,6 +54,9 @@ const fromPostgres = error => {
         ERROR_CODES.VALIDATION_ERROR,
         `${pg.column ? toField(pg.column) : "A required field"} is required`
       );
+    /* Exclusion constraint: e.g. two bookings of one resource overlap in time */
+    case "23P01":
+      return new AppError(409, ERROR_CODES.CONFLICT, "This overlaps an existing booking for the same dates");
     case "23514":
       return new AppError(
         422,

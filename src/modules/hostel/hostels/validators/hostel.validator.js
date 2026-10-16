@@ -1,5 +1,6 @@
 import { z } from "../../../../common/validation/zod.js";
 import {
+  date,
   id,
   idParams,
   listQuery,
@@ -35,5 +36,6 @@ export const hostelValidators = {
   getById: { params },
   update: { params, body: patchBody(fields) },
   remove: { params },
-  occupancy: { params }
+  /* ?on=YYYY-MM-DD (default today) */
+  occupancy: { params, query: z.object({ on: date().optional() }) }
 };

@@ -134,6 +134,20 @@
       "when": 1792182903134,
       "tag": "0018_ledger_refund_approval",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792183106109,
+      "tag": "0019_hostel_allocations_drop",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792183107182,
+      "tag": "0020_hostel_flexible_allocations",
+      "breakpoints": true
     }
   ]
 }

@@ -16,8 +16,8 @@ export const hostelController = {
   },
 
   occupancy: async (req, res) => {
-    const result = await hostelService.occupancy(req.context, req.params.hostelId);
+    const result = await hostelService.occupancy(req.context, req.params.hostelId, req.query);
     const { occupied, capacity } = result.totals;
-    return ok(res, result, `${result.hostel.name}: ${occupied} of ${capacity} beds occupied`);
+    return ok(res, result, `${result.hostel.name}: ${occupied} of ${capacity} beds occupied on ${result.on}`);
   }
 };
