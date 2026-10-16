@@ -64,6 +64,13 @@
       "when": 1792109163831,
       "tag": "0008_transport",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792109398513,
+      "tag": "0009_inventory",
+      "breakpoints": true
     }
   ]
 }

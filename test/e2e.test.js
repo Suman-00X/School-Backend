@@ -18,6 +18,7 @@ await import("./suites/09-files-homework.suite.js");
 await import("./suites/10-library.suite.js");
 await import("./suites/11-transport.suite.js");
 await import("./suites/12-hostel.suite.js");
+await import("./suites/13-inventory.suite.js");
 await import("./suites/14-hr.suite.js");
 /* keep last */
 await import("./suites/99-year-end.suite.js");

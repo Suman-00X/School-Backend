@@ -56,3 +56,9 @@ export * from "./modules/hr/payroll/models/payroll.schema.js";
 export * from "./modules/transport/vehicles/models/vehicle.schema.js";
 export * from "./modules/transport/routes/models/route.schema.js";
 export * from "./modules/transport/assignments/models/assignment.schema.js";
+
+/* inventory */
+export * from "./modules/inventory/categories/models/category.schema.js";
+export * from "./modules/inventory/vendors/models/vendor.schema.js";
+export * from "./modules/inventory/items/models/item.schema.js";
+export * from "./modules/inventory/stock/models/stockMovement.schema.js";

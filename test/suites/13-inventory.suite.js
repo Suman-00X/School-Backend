@@ -518,3 +518,10 @@ describe("inventory: reports", () => {
     await get(`${I}/reports/valuation`, { as: h.tokens.mother }, 403);
   });
 });
+
+describe("inventory: ledger integrity", () => {
+  it("keeps the stock ledger append-only in the database", async () => {
+    await assert.rejects(h.pool.query("UPDATE stock_movements SET quantity_change = 1000"), { code: "ZA409" });
+    await assert.rejects(h.pool.query("DELETE FROM stock_movements"), { code: "ZA409" });
+  });
+});

@@ -13,6 +13,7 @@ import hostelModule from "./modules/hostel/index.js";
 import libraryModule from "./modules/library/index.js";
 import hrModule from "./modules/hr/index.js";
 import transportModule from "./modules/transport/index.js";
+import inventoryModule from "./modules/inventory/index.js";
 import { paymentWebhookRoutes } from "./modules/finance/payments/index.js";
 
 /* API v1, mounted at /api/v1. Every route needs a valid token,
@@ -37,5 +38,6 @@ v1.use("/hostel", hostelModule);
 v1.use("/library", libraryModule);
 v1.use("/hr", hrModule);
 v1.use("/transport", transportModule);
+v1.use("/inventory", inventoryModule);
 
 export default v1;
