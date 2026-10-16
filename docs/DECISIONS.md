@@ -183,6 +183,12 @@ Each school defines **result policies** (`/academics/result-policies`): grading 
 ### 🟢 D-10: Report cards are frozen when published (done)
 Live report cards are still computed from marks. Publishing (an exam or an assessment scheme) also stores an immutable snapshot per student in MongoDB `report_snapshots`, as version N (`result_publications`). Re-publishing adds a version, withdrawing hides it from the portal and keeps it, and staff can compare live results with any version. The portal and its PDFs read only snapshots.
 
+- **Hardening after review:**
+  - Students with marks still missing are not ranked and don't count in averages.
+  - Pass/fail and grade bands use the exact percentage; rounding is for display only.
+  - Snapshots left behind by a publication that crashed before committing are cleaned up on the next publish, and are never listed.
+  - **Limit:** snapshots are protected from edits by the application. A database administrator could still change them in MongoDB directly.
+
 ### Review points for D-09 / D-10
 - 🟡 **Grace counts in the total** (`graceCountsInTotal`, default true), and the subject's grade uses the graced marks. Some boards keep grace out of the aggregate: set it to false.
 - 🟡 **In assessment schemes, an absence counted as zero is 0% for that exam,** not an automatic fail of the year. The weighted result decides. Excluded absences (exempt, medical when excluded) drop that exam, and the other exams' weights are rescaled. Theory/practical pass rules apply in each exam's own result; the weighted subject is judged on its weighted total.
@@ -300,6 +306,12 @@ Stripe-style integer minor units in the API would be stricter, but they're awkwa
 - **Webhooks are per school:** `POST /api/v1/public/payments/razorpay/:tenantId/webhook`, verified with that school's webhook secret. The old shared `/public/payments/webhook` is removed: it could not know whose secret to check. The settings response shows the URL to paste into the Razorpay dashboard.
 - The gateway takes the credentials on every call; there are no `RAZORPAY_*` environment variables any more. `PAYMENT_PROVIDER=mock` is still a global switch for development and tests (default: `razorpay` in production, `mock` elsewhere); the mock checks signatures with the school's own secrets, so tests exercise the real verification.
 - **Still to do before go-live:** run one school through Razorpay **test mode** with real keys (order, checkout, webhook). Refunds through Razorpay are not implemented.
+
+- **Hardening after review:**
+  - A webhook is settled only if its amount and currency match the order; otherwise it is logged and left pending.
+  - Webhooks are exempt from the global per-IP rate limit, because every school's webhooks arrive from Razorpay's few IPs and are signed.
+  - The server refuses to start with `PAYMENT_PROVIDER=mock` in production.
+- **Not handled yet:** refunds made in the Razorpay dashboard (`refund.*` webhooks are ignored), so a refunded invoice stays PAID until the accountant records it.
 
 ### 🟡 D-21: Partial online payments; overpayment becomes student credit (built after review)
 > Product owner: "We will allow partial payment online also."

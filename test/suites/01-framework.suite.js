@@ -80,4 +80,14 @@ describe("framework", () => {
     );
     await get(`/api/v1/academics/academic-years/${year.data.id}`, {}, 404);
   });
+
+  it("refuses to start production with the mock payment gateway", async () => {
+    const { spawnSync } = await import("node:child_process");
+    const run = spawnSync(process.execPath, ["-e", 'import("./src/common/config/env.config.js")'], {
+      env: { ...process.env, NODE_ENV: "production", PAYMENT_PROVIDER: "mock" },
+      encoding: "utf8"
+    });
+    assert.notEqual(run.status, 0);
+    assert.match(run.stderr, /PAYMENT_PROVIDER=mock is not allowed in production/);
+  });
 });

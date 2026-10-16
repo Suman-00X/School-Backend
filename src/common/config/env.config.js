@@ -20,6 +20,11 @@ const list = key =>
 
 const nodeEnv = str("NODE_ENV", "development");
 
+/* The mock gateway accepts any keys and invents payments: never in production */
+if (nodeEnv === "production" && str("PAYMENT_PROVIDER") === "mock") {
+  throw new Error("PAYMENT_PROVIDER=mock is not allowed in production. Remove it (Razorpay is the default).");
+}
+
 export default {
   nodeEnv,
   isProduction: nodeEnv === "production",

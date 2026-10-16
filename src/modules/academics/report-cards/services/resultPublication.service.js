@@ -104,6 +104,8 @@ const publishVersion = async (ctx, { kind, sourceId, lock, compute, after }) => 
       );
 
       insertedFor = publication.id;
+      /* version N+1 is not committed anywhere, so any snapshot carrying it is a leftover */
+      await reportSnapshotRepository.removeUncommittedVersion(ctx.tenantId, kind, sourceId, version);
       await reportSnapshotRepository.insertMany(
         ctx.tenantId,
         docs.map(doc => ({

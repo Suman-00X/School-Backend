@@ -39,6 +39,8 @@ export const securityMiddlewares = () => [
   rateLimit({
     windowMs: env.rateLimitWindowMs,
     limit: env.rateLimitMax,
+    /* Gateway webhooks arrive from a few gateway IPs for every school, and are signed */
+    skip: req => req.path.startsWith("/api/v1/public/payments/"),
     standardHeaders: "draft-8",
     legacyHeaders: false,
     handler: tooMany

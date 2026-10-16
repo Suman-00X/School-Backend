@@ -781,6 +781,48 @@ describe("results: publication and report snapshots", () => {
     assert.equal(await ReportSnapshot.countDocuments({ tenantId: h.tenant.id, sourceId: t.term2.id }), 7);
   });
 
+  it("recovers from snapshots left behind by a publication that never committed", async () => {
+    const { ReportSnapshot } = await import("../../src/modules/academics/report-cards/models/reportSnapshot.model.js");
+    /* What a crash between the Mongo insert and the PostgreSQL commit leaves behind */
+    await ReportSnapshot.collection.insertOne({
+      tenantId: h.tenant.id,
+      kind: "EXAM",
+      sourceId: t.term2.id,
+      studentId: crypto.randomUUID(),
+      version: 2,
+      publicationId: crypto.randomUUID(),
+      publishedAt: new Date()
+    });
+    const revised = await post(`${A}/exams/${t.term2.id}/result-publication/versions`, {});
+    assert.match(revised.message, /^Term 2 results re-published as version 2/);
+    assert.equal(await ReportSnapshot.countDocuments({ tenantId: h.tenant.id, sourceId: t.term2.id, version: 2 }), 7);
+    const listed = await get(`${A}/report-cards/snapshots?examId=${t.term2.id}&limit=100`);
+    assert.ok(listed.data.every(snapshot => snapshot.publicationId));
+  });
+
+  it("never ranks or averages students whose marks are incomplete", async () => {
+    const { assignRanks, statisticsOf } =
+      await import("../../src/modules/academics/result-policies/services/resultEngine.service.js");
+    const policy = {
+      rankingMethod: "COMPETITION",
+      gradingMode: "MARKS",
+      rankFailedStudents: false,
+      percentageDecimals: 2
+    };
+    const rows = [
+      { result: "INCOMPLETE", percentage: 45, subjects: [] },
+      { result: "PASS", percentage: 40, subjects: [] }
+    ];
+    assignRanks(policy, rows);
+    assert.deepEqual(
+      rows.map(r => r.rank),
+      [null, 1]
+    );
+    const stats = statisticsOf(policy, rows);
+    assert.equal(stats.highestPercentage, 40);
+    assert.equal(stats.incomplete, 1);
+  });
+
   it("analyses the exam with compartments on the dashboard and in exports", async () => {
     const { data } = await get(`${R}/dashboards/academics?examId=${t.term1.id}`);
     assert.deepEqual([data.overall.passed, data.overall.compartment, data.overall.failed], [6, 1, 0]);

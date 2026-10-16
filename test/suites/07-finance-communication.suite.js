@@ -290,6 +290,24 @@ describe("finance: payments", () => {
     );
   });
 
+  it("never settles a webhook whose amount or currency differs from the order", async () => {
+    const { gatewaySignature: sign } = h.modules.gateway;
+    const order = await post(`${F}/invoices/${world.inv1.id}/payment-orders`, {}, { as: h.tokens.office });
+    for (const entity of [
+      { id: "pay_low", order_id: order.data.orderId, amount: 100 },
+      { id: "pay_usd", order_id: order.data.orderId, amount: 400000, currency: "USD" }
+    ]) {
+      const body = JSON.stringify({ event: "payment.captured", payload: { payment: { entity } } });
+      const hook = await request("POST", webhookUrl(h.tenant.id), {
+        as: null,
+        raw: body,
+        headers: { "x-razorpay-signature": sign(WEBHOOK_SECRET, body) }
+      });
+      assert.equal(hook.body.data.handled, false);
+    }
+    assert.notEqual((await get(`${F}/invoices/${world.inv1.id}`)).data.status, "PAID");
+  });
+
   it("settles a payment that arrives by webhook first", async () => {
     const { gatewaySignature: sign } = h.modules.gateway;
     const order = await post(`${F}/invoices/${world.inv1.id}/payment-orders`, {}, { as: h.tokens.office });

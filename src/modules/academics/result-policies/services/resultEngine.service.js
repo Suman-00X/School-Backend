@@ -54,8 +54,12 @@ const treatmentOf = (policy, reason) =>
     reason ?? "ABSENT"
   ];
 
+/* Exact percentage: pass/fail and grade bands are decided on this, never on a rounded figure */
+const exactPercent = (obtained, max) => (max > 0 ? (obtained / max) * 100 : null);
+
+/* For display only */
 const percentOf = (policy, obtained, max) =>
-  max > 0 ? roundTo((obtained / max) * 100, policy.percentageDecimals, policy.roundingMode) : null;
+  max > 0 ? roundTo(exactPercent(obtained, max), policy.percentageDecimals, policy.roundingMode) : null;
 
 /* A policy row (+ subject rules) -> the config the engine reads. Rules are keyed by subject id. */
 export const toConfig = policy => {
@@ -127,7 +131,8 @@ const judge = (ctx, line, counted, grace) => {
   const { policy, scale } = ctx;
   const awarded = marks2(sum(counted.map(c => awardedOf(c, grace))) + grace.extra);
   const percentage = percentOf(policy, awarded, line.maxMarks);
-  const band = usesBands(policy) ? gradingService.gradeFor(scale, percentage) : null;
+  const exact = exactPercent(awarded, line.maxMarks);
+  const band = usesBands(policy) ? gradingService.gradeFor(scale, exact) : null;
 
   let passed = !line.forcedFail;
   if (policy.usePaperPassMarks) {
@@ -139,7 +144,7 @@ const judge = (ctx, line, counted, grace) => {
     }
   }
   const minPercent = line.minPercent ?? policy.subjectMinPercent;
-  if (minPercent !== null && minPercent !== undefined) passed &&= percentage >= minPercent;
+  if (minPercent !== null && minPercent !== undefined) passed &&= exact >= minPercent;
   if (usesBands(policy) && policy.requirePassingGrade && band) passed &&= band.isPassing;
   return { passed, awarded, percentage, band };
 };
@@ -365,7 +370,9 @@ const totalsOf = (ctx, lines) => {
     sum(counted.map(line => (policy.graceCountsInTotal ? (line.marksAwarded ?? 0) : (line.marksObtained ?? 0))))
   );
   const percentage = recorded.length && totalMax ? percentOf(policy, totalObtained, totalMax) : null;
-  const overall = usesBands(policy) ? gradingService.gradeFor(scale, percentage) : null;
+  const overall = usesBands(policy)
+    ? gradingService.gradeFor(scale, percentage === null ? null : exactPercent(totalObtained, totalMax))
+    : null;
 
   let gpa = null;
   if (policy.gradingMode === "GPA") {
@@ -417,7 +424,8 @@ const applyGrace = (ctx, lines) => {
 
 const finish = (ctx, lines, coScholastic) => {
   const totals = totalsOf(ctx, lines);
-  const result = outcomeOf(ctx.policy, lines, totals.percentage, coScholastic);
+  const exact = totals.percentage === null ? null : exactPercent(totals.totalObtained, totals.totalMax);
+  const result = outcomeOf(ctx.policy, lines, exact, coScholastic);
   return { lines, totals, result };
 };
 
@@ -459,7 +467,13 @@ export const assignRanks = (policy, rows, field = "rank") => {
   for (const row of rows) row[field] = null;
   if (policy.rankingMethod === "NONE") return rows;
   const ranked = rows
-    .filter(row => rankValue(policy, row) !== null && (policy.rankFailedStudents || row.result !== "FAIL"))
+    /* Students with marks still missing are not ranked: a partial total is not comparable */
+    .filter(
+      row =>
+        rankValue(policy, row) !== null &&
+        row.result !== "INCOMPLETE" &&
+        (policy.rankFailedStudents || row.result !== "FAIL")
+    )
     .sort((a, b) => rankValue(policy, b) - rankValue(policy, a));
   ranked.forEach((row, index) => {
     const previous = ranked[index - 1];
@@ -476,13 +490,14 @@ export const statisticsOf = (policy, students) => {
   const decided = students.filter(s => s.result !== "INCOMPLETE");
   const passed = decided.filter(s => s.result === "PASS").length;
   const compartment = decided.filter(s => s.result === "COMPARTMENT").length;
-  const percentages = students.map(s => s.percentage).filter(p => p !== null);
-  const gpas = students.map(s => s.gpa).filter(g => g !== null && g !== undefined);
+  /* Averages and the highest figure come from complete results only */
+  const percentages = decided.map(s => s.percentage).filter(p => p !== null);
+  const gpas = decided.map(s => s.gpa).filter(g => g !== null && g !== undefined);
   const subjectIds = [...new Map(students.flatMap(s => s.subjects).map(line => [line.subject.id, line])).values()];
 
   return {
     students: students.length,
-    appeared: percentages.length,
+    appeared: students.filter(s => s.percentage !== null).length,
     passed,
     compartment,
     failed: decided.length - passed - compartment,

@@ -44,6 +44,7 @@ const parseRazorpayWebhook = body => {
     orderId: payment.order_id,
     paymentId: payment.id,
     amountMinor: payment.amount,
+    currency: payment.currency,
     captured: body.event === "payment.captured" || payment.status === "captured"
   };
 };

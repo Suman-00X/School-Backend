@@ -4,6 +4,7 @@ import { publish } from "../../../../common/events/events.js";
 import { notFound, unprocessable } from "../../../../common/http/errors.js";
 import { fromMinor, toMinor } from "../../../../common/money/money.js";
 import { paymentGateway } from "../../../../common/payments/gateway.js";
+import { logger } from "../../../../common/logging/logger.js";
 import { getTenant } from "../../../../common/tenancy/tenant.service.js";
 import { academicYearService } from "../../../academics/academic-years/index.js";
 import { creditService } from "../../credits/index.js";
@@ -62,7 +63,8 @@ const announce = payment =>
    than the balance at that moment (all of it, if the invoice was cancelled meanwhile)
    is kept as the student's credit, never added to the invoice. Safe to call twice
    (checkout callback and webhook both arrive): the second call is a no-op. */
-const settleGatewayPayment = async ({ tenantId, provider, orderId, gatewayPaymentId }) => {
+/* expectedMinor: the amount the gateway reports (webhooks); a mismatch is never settled */
+const settleGatewayPayment = async ({ tenantId, provider, orderId, gatewayPaymentId, expectedMinor }) => {
   const settled = await transaction(async tx => {
     const [payment] = await tx
       .select()
@@ -78,6 +80,13 @@ const settleGatewayPayment = async ({ tenantId, provider, orderId, gatewayPaymen
       .for("update");
     if (!payment) return null;
     if (payment.status === "SUCCEEDED") return { payment, fresh: false };
+    if (expectedMinor !== undefined && expectedMinor !== toMinor(payment.amount)) {
+      logger.warn(
+        { tenantId, orderId, expectedMinor, orderMinor: toMinor(payment.amount) },
+        "Gateway amount differs from the payment order; left pending for review"
+      );
+      return { payment, fresh: false, mismatch: true };
+    }
 
     const invoice = await invoiceService.lockForUpdate(tenantId, payment.invoiceId, { dbc: tx });
     const open = OPEN_INVOICE_STATUSES.includes(invoice.status);
@@ -115,6 +124,7 @@ const settleGatewayPayment = async ({ tenantId, provider, orderId, gatewayPaymen
   });
 
   if (settled?.fresh) await announce(settled.payment);
+  if (settled?.mismatch) return null;
   return settled?.payment ?? null;
 };
 
@@ -229,11 +239,18 @@ export const paymentService = {
     if (!gateway.verifyWebhook(credentials, rawBody, signature)) throw unprocessable("Invalid webhook signature");
     const event = gateway.parseWebhook(JSON.parse(rawBody.toString()));
     if (!event?.captured) return { handled: false };
+    /* Defence in depth: the captured amount and currency must be the order's */
+    const school = await getTenant(tenantId);
+    if (event.currency && school && event.currency !== school.currency) {
+      logger.warn({ tenantId, orderId: event.orderId, currency: event.currency }, "Webhook currency differs; ignored");
+      return { handled: false };
+    }
     const payment = await settleGatewayPayment({
       tenantId,
       provider: gateway.name,
       orderId: event.orderId,
-      gatewayPaymentId: event.paymentId
+      gatewayPaymentId: event.paymentId,
+      expectedMinor: Number.isInteger(event.amountMinor) ? event.amountMinor : undefined
     });
     return { handled: Boolean(payment) };
   },

@@ -41,7 +41,10 @@ export const reportSnapshotService = {
     const visible = await teachingScope.sectionIds(ctx);
     if (sectionId && visible && !visible.includes(sectionId))
       throw forbidden("You can only do this for sections you teach");
+    /* Only snapshots of committed publications (never leftovers of a failed attempt) */
+    const committed = (await resultPublicationRepository.findMany(ctx.tenantId, {})).map(p => p.id);
     const filter = {
+      publicationId: { $in: committed },
       ...sourceFilter({ examId, schemeId }),
       ...(studentId && { studentId }),
       ...(version && { version }),
