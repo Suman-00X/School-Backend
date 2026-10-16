@@ -1,7 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import { check, date, index, pgEnum, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { activeRows, baseColumns } from "../../../../common/database/columns.js";
-import { libraryBooks } from "../../books/models/book.schema.js";
+import { libraryBooks, libraryItemType } from "../../books/models/book.schema.js";
 import { COPY_STATUSES } from "../../shared/constants/library.constants.js";
 import { money } from "../../shared/models/money.columns.js";
 
@@ -18,9 +18,13 @@ export const libraryCopies = pgTable(
     accessionNumber: text("accession_number").notNull(),
     barcode: text("barcode"),
     status: libraryCopyStatus("status").notNull().default("AVAILABLE"),
-    /* Replacement value, charged when the copy is lost on loan */
+    /* Overrides the book's item type for this copy (null: the book's) */
+    itemType: libraryItemType("item_type"),
+    /* Replacement value, charged when the copy is lost on loan; caps late fines */
     price: money("price"),
     acquiredOn: date("acquired_on"),
+    /* Where it came from (vendor, donation): staff only, like price and condition */
+    source: text("source"),
     conditionNotes: text("condition_notes")
   },
   t => [
@@ -30,6 +34,7 @@ export const libraryCopies = pgTable(
       .on(t.tenantId, t.barcode)
       .where(sql`${activeRows(t)} AND ${t.barcode} IS NOT NULL`),
     index("library_copies_book_idx").on(t.bookId, t.status),
+    index("library_copies_acquired_idx").on(t.tenantId, t.acquiredOn),
     check("library_copies_price_chk", sql`${t.price} IS NULL OR ${t.price} >= 0`)
   ]
 );

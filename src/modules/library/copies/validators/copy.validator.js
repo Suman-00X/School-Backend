@@ -1,6 +1,6 @@
 import { z } from "../../../../common/validation/zod.js";
 import { date, id, idParams, listQuery, optionalText, patchBody } from "../../../../common/validation/schemas.js";
-import { COPY_STATUSES, MANUAL_COPY_STATUSES } from "../../shared/constants/library.constants.js";
+import { COPY_STATUSES, ITEM_TYPES, MANUAL_COPY_STATUSES } from "../../shared/constants/library.constants.js";
 import { accessionNumber, amount } from "../../shared/utils/schemas.util.js";
 
 const barcode = () =>
@@ -19,6 +19,10 @@ export const copyValidators = {
       count: z.number().int().min(1).max(100),
       price: amount().optional(),
       acquiredOn: date().optional(),
+      /* Vendor or donor */
+      source: optionalText(200),
+      /* Overrides the book's item type (e.g. a reference copy) */
+      itemType: z.enum(ITEM_TYPES).optional(),
       conditionNotes: optionalText(500)
     })
   },
@@ -39,11 +43,13 @@ export const copyValidators = {
     params,
     body: patchBody(
       z.object({
-        /* ISSUED is set and cleared by circulation only */
+        /* ISSUED and ON_HOLD are set and cleared by circulation only */
         status: z.enum(MANUAL_COPY_STATUSES),
         barcode: barcode().nullable(),
+        itemType: z.enum(ITEM_TYPES).nullable(),
         price: amount().nullable(),
         acquiredOn: date().nullable(),
+        source: optionalText(200),
         conditionNotes: optionalText(500)
       })
     )

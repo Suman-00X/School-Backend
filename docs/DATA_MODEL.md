@@ -126,11 +126,18 @@ Hostel, library, transport, HR and inventory have no foreign keys into each othe
 
 | Submodule | Table | Purpose | Key constraints |
 |---|---|---|---|
-| policy | `library_policies` | One per school: loan days, limits per role, fine per day, grace days, renewals | Unique `tenant_id`. Created with defaults on first read (`ON CONFLICT DO NOTHING`) |
-| books | `library_books` | Catalogue: title, `authors text[]`, ISBN (normalised, checksum-validated), category, optional subject | Partial unique ISBN when present. CHECK published year |
-| copies | `library_copies` | Physical copies with accession number `ACC-000001`, barcode, price, status | Unique accession number (never reused). Partial unique barcode |
-| loans | `library_loans` | Issue → return/lost; borrower and their role at issue time; due date, renewals, late fine, lost charge | **One open loan per copy** (partial unique, plus a row lock). Generated `fine_outstanding`. CHECK status ↔ return date, paid + waived ≤ fine |
-| loans | `library_fine_payments` | Fine payments with receipt `LIBR-000001` | Unique receipt. CHECK amount > 0 |
+| policy | `library_policies` | One per school: fine block threshold, overdue block, closed days in fines, lost-copy fee and minimum, lost-and-found window, hold pickup days, reminders | Unique `tenant_id`. Created with the default rules on first read (`ON CONFLICT DO NOTHING`). CHECKs on amounts and days |
+| circulation-rules | `library_circulation_rules` | Loan days, loan limit, renewals, fine per day, grace days, maximum fine per borrower role (students optionally by class) and item type | Unique scope (role, class, item type, empty ones included) among active rows. CHECK class only for students, no `REFERENCE` rule |
+| books | `library_books` | Catalogue: title, `authors text[]`, ISBN (normalised, checksum-validated), item type, category, optional subject, staff-only notes | Partial unique ISBN when present. CHECK published year |
+| copies | `library_copies` | Physical copies with accession number `ACC-000001`, barcode, status (incl. `ON_HOLD`, `MISSING`), item type override, price, source | Unique accession number (never reused). Partial unique barcode |
+| loans | `library_loans` | Issue → return/lost (→ found); borrower role and item type at issue; the rule's terms copied at issue; late fine, lost, damage charges; paid, waived, credited | **One open loan per copy** (partial unique, plus row locks). Generated `fine_outstanding`. CHECKs: due ≥ issue, status ↔ return date, lost/found dates, paid − credited + waived ≤ charges |
+| loans | `library_fine_payments` | Fine payments with receipt `LIBR-000001` (cash, UPI, card, library credit) | Unique receipt. CHECK amount > 0 |
+| loans | `library_fine_waivers` | Partial or full waivers with reason and who waived | CHECK amount > 0 |
+| loans | `library_credit_entries` | Library credit ledger per borrower (+ reversed charges, − fines paid from credit) | CHECK amount ≠ 0; balance checked under the borrower lock |
+| holds | `library_holds` | Reservations: WAITING (queued by `requested_at`) → READY (copy kept until `pickup_by`) → FULFILLED / EXPIRED / CANCELLED | Partial unique open hold per borrower and title; one READY hold per copy. CHECK state ↔ copy and dates |
+| stock-checks | `library_stock_checks`, `library_stock_check_scans` | Stock-takes and their scans (FOUND, UNEXPECTED, UNKNOWN) | One OPEN check per school (partial unique). A copy is scanned once per check (partial unique) |
+
+Lock order in the library: borrower (advisory lock), then loan, then book, then its copies and holds. Every change to a title's copies or holds takes the book row lock first, so hold allocation is serial per title.
 
 **Transport**
 

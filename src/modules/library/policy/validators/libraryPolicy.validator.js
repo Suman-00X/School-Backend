@@ -2,17 +2,23 @@ import { z } from "../../../../common/validation/zod.js";
 import { patchBody } from "../../../../common/validation/schemas.js";
 import { amount } from "../../shared/utils/schemas.util.js";
 
-const days = (max = 365) => z.number().int().min(1).max(max);
-const limit = (max = 100) => z.number().int().min(0).max(max);
+const days = (min, max) => z.number().int().min(min).max(max);
 
 const fields = z.object({
-  studentLoanDays: days(),
-  staffLoanDays: days(),
-  maxActiveLoansStudent: limit(),
-  maxActiveLoansStaff: limit(),
-  maxRenewals: limit(20),
-  finePerDay: amount({ max: 10_000 }),
-  fineGraceDays: limit(90)
+  /* null: fines never block borrowing */
+  fineBlockThreshold: amount({ max: 100_000 }).nullable(),
+  blockOnOverdue: z.boolean(),
+  skipClosedDaysInFines: z.boolean(),
+  capFineAtPrice: z.boolean(),
+  lostProcessingFee: amount({ max: 100_000 }),
+  lostMinimumCharge: amount({ max: 100_000 }),
+  lostIncludesLateFine: z.boolean(),
+  lostFoundRefundDays: days(0, 365),
+  holdPickupDays: days(1, 30),
+  maxHoldsPerBorrower: days(0, 50),
+  dueSoonDays: days(0, 30),
+  overdueReminderEveryDays: days(1, 90),
+  notifyParents: z.boolean()
 });
 
 export const libraryPolicyValidators = {

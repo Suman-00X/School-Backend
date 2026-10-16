@@ -1,7 +1,10 @@
 import { relations, sql } from "drizzle-orm";
-import { check, index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, index, integer, pgEnum, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { activeRows, baseColumns } from "../../../../common/database/columns.js";
 import { subjects } from "../../../academics/subjects/models/subject.schema.js";
+import { ITEM_TYPES } from "../../shared/constants/library.constants.js";
+
+export const libraryItemType = pgEnum("library_item_type", ITEM_TYPES);
 
 /* A title in the catalogue. Physical copies are library_copies. */
 export const libraryBooks = pgTable(
@@ -21,9 +24,13 @@ export const libraryBooks = pgTable(
     edition: text("edition"),
     language: text("language"),
     category: text("category"),
+    /* Decides the circulation rule; a copy may override it (e.g. one reference copy) */
+    itemType: libraryItemType("item_type").notNull().default("BOOK"),
     subjectId: uuid("subject_id").references(() => subjects.id),
     shelfLocation: text("shelf_location"),
-    description: text("description")
+    description: text("description"),
+    /* Staff only: never shown in the public catalogue */
+    internalNotes: text("internal_notes")
   },
   t => [
     uniqueIndex("library_books_tenant_isbn_uq")

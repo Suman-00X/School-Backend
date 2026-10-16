@@ -100,7 +100,7 @@ src/
     communication/       notifications announcements subscribers (event → message)
     reports/             dashboards exports
     files/               documents
-    library/             policy books copies loans
+    library/             policy circulation-rules books copies loans holds stock-checks reports
     transport/           vehicles routes assignments
     hostel/              hostels rooms allocations
     hr/                  staff-attendance leaves payroll

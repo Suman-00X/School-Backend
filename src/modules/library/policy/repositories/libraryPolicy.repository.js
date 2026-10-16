@@ -7,12 +7,15 @@ const base = createRepository({ table: libraryPolicies, queryKey: "libraryPolici
 export const libraryPolicyRepository = {
   ...base,
 
-  /* The school's policy, inserting the defaults on first use.
-     ON CONFLICT makes concurrent first reads safe. */
-  findOrCreate: async (tenantId, { dbc = db } = {}) => {
-    const existing = await base.findOne(tenantId, [], { dbc });
-    if (existing) return existing;
-    await dbc.insert(libraryPolicies).values({ tenantId }).onConflictDoNothing({ target: libraryPolicies.tenantId });
-    return base.findOne(tenantId, [], { dbc });
+  /* Inserts the school's policy with the defaults -> the new row, or null when one
+     already exists. A concurrent insert waits on the unique index until the first
+     commits, so whoever gets a row back is the only one seeding. */
+  insertDefault: async (tenantId, { dbc = db } = {}) => {
+    const [row] = await dbc
+      .insert(libraryPolicies)
+      .values({ tenantId })
+      .onConflictDoNothing({ target: libraryPolicies.tenantId })
+      .returning();
+    return row ?? null;
   }
 };

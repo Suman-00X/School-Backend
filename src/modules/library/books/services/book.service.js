@@ -3,32 +3,68 @@ import { transaction } from "../../../../common/database/postgres.js";
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { subjectService } from "../../../academics/subjects/index.js";
 import { copyService } from "../../copies/index.js";
+import { COPY_STATUSES } from "../../shared/constants/library.constants.js";
 import { libraryBooks } from "../models/book.schema.js";
 import { bookRepository } from "../repositories/book.repository.js";
 
 const withSubject = { subject: { columns: { id: true, subjectName: true, subjectCode: true } } };
 
-/* { total, available, issued, lost, damaged, withdrawn } per book id.
+/* "ON_HOLD" -> "onHold" */
+const countKey = status => status.toLowerCase().replace(/_(\w)/g, (_, char) => char.toUpperCase());
+
+/* { total, available, issued, onHold, lost, damaged, withdrawn, missing } per book id.
    `total` is the collection: every copy that has not been withdrawn. */
 const copyCountsFor = async (ctx, bookIds) => {
-  const counts = new Map(
-    bookIds.map(id => [id, { total: 0, available: 0, issued: 0, lost: 0, damaged: 0, withdrawn: 0 }])
-  );
+  const empty = () => Object.fromEntries([["total", 0], ...COPY_STATUSES.map(status => [countKey(status), 0])]);
+  const counts = new Map(bookIds.map(id => [id, empty()]));
   for (const { bookId, status, copies } of await bookRepository.countCopiesByStatus(ctx.tenantId, bookIds)) {
     const entry = counts.get(bookId);
-    entry[status.toLowerCase()] = copies;
+    entry[countKey(status)] = copies;
     if (status !== "WITHDRAWN") entry.total += copies;
   }
   return counts;
 };
 
 const withCopyCounts = async (ctx, books) => {
-  const counts = await copyCountsFor(
-    ctx,
-    books.map(book => book.id)
-  );
-  return books.map(book => ({ ...book, copies: counts.get(book.id) }));
+  const ids = books.map(book => book.id);
+  const [counts, holds] = await Promise.all([
+    copyCountsFor(ctx, ids),
+    bookRepository.countWaitingHolds(ctx.tenantId, ids)
+  ]);
+  const waiting = new Map(holds.map(row => [row.bookId, row.waiting]));
+  return books.map(book => ({ ...book, copies: counts.get(book.id), holdsWaiting: waiting.get(book.id) ?? 0 }));
 };
+
+/* What students, parents and teachers see: no internal notes, prices or condition */
+const PUBLIC_FIELDS = [
+  "id",
+  "title",
+  "subtitle",
+  "authors",
+  "isbn",
+  "publisher",
+  "publishedYear",
+  "edition",
+  "language",
+  "category",
+  "itemType",
+  "subject",
+  "shelfLocation",
+  "description"
+];
+
+const toPublic = book => ({
+  ...Object.fromEntries(PUBLIC_FIELDS.map(field => [field, book[field] ?? null])),
+  availability: {
+    total: book.copies.available + book.copies.issued + book.copies.onHold,
+    available: book.copies.available,
+    onLoan: book.copies.issued,
+    onHold: book.copies.onHold,
+    holdsWaiting: book.holdsWaiting
+  },
+  /* Reference titles are read in the library */
+  canBeBorrowed: book.itemType !== "REFERENCE"
+});
 
 const checkSubject = async (ctx, subjectId) => {
   if (subjectId && !(await subjectService.findById(ctx, subjectId))) {
@@ -46,18 +82,22 @@ const checkIsbn = async (ctx, isbn, exceptBookId) => {
   if (existing) throw conflict(`A book with ISBN ${isbn} is already in the catalogue: ${existing.title}`);
 };
 
+const listConditions = (ctx, { q, category, subjectId, itemType, available }) =>
+  [
+    q && bookRepository.searchCondition(q),
+    category && eq(libraryBooks.category, category),
+    subjectId && eq(libraryBooks.subjectId, subjectId),
+    itemType && eq(libraryBooks.itemType, itemType),
+    available === true && bookRepository.availableCondition(ctx.tenantId)
+  ].filter(Boolean);
+
 export const bookService = {
-  list: async (ctx, { page, limit, q, category, subjectId, available }) => {
+  list: async (ctx, { page, limit, ...filters }) => {
     const result = await bookRepository.list(ctx.tenantId, {
       page,
       limit,
       with: withSubject,
-      conditions: [
-        q && bookRepository.searchCondition(q),
-        category && eq(libraryBooks.category, category),
-        subjectId && eq(libraryBooks.subjectId, subjectId),
-        available === true && bookRepository.availableCondition(ctx.tenantId)
-      ].filter(Boolean)
+      conditions: listConditions(ctx, filters)
     });
     return { ...result, rows: await withCopyCounts(ctx, result.rows) };
   },
@@ -67,6 +107,26 @@ export const bookService = {
     if (!book) throw notFound("Book");
     const [withCounts] = await withCopyCounts(ctx, [book]);
     return withCounts;
+  },
+
+  /* Public catalogue (every role): search and availability, no staff-only fields */
+  catalogue: async (ctx, query) => {
+    const result = await bookService.list(ctx, query);
+    return { ...result, rows: result.rows.map(toPublic) };
+  },
+
+  catalogueEntry: async (ctx, bookId) => {
+    const book = await bookService.getById(ctx, bookId);
+    const copies = await bookRepository.circulatingCopies(ctx.tenantId, bookId);
+    return {
+      ...toPublic(book),
+      copies: copies.map(copy => ({
+        accessionNumber: copy.accessionNumber,
+        status: copy.status,
+        itemType: copy.itemType ?? book.itemType,
+        dueDate: copy.status === "ISSUED" ? copy.dueDate : null
+      }))
+    };
   },
 
   create: async (ctx, data) => {
@@ -84,7 +144,7 @@ export const bookService = {
     return bookService.getById(ctx, bookId);
   },
 
-  /* Removes the book and its copies; not while any copy is on loan */
+  /* Removes the book and its copies; not while a copy is on loan or a hold is open */
   remove: async (ctx, bookId) => {
     return transaction(async tx => {
       const book = await bookRepository.lockForUpdate(ctx.tenantId, bookId, { dbc: tx });
@@ -96,6 +156,8 @@ export const bookService = {
           `${onLoan} copy(ies) of ${book.title} are on loan; they must be returned before the book is removed`
         );
       }
+      const holds = await bookRepository.countOpenHolds(ctx.tenantId, bookId, { dbc: tx });
+      if (holds) throw conflict(`${holds} hold(s) on ${book.title} are open; cancel them before the book is removed`);
       await copyService.removeAllOfBook(ctx, bookId, { dbc: tx });
       return bookRepository.softDelete(ctx.tenantId, bookId, { dbc: tx });
     });

@@ -56,8 +56,11 @@ export * from "./modules/hostel/resource-assignments/models/hostelResourceAssign
 /* library */
 export * from "./modules/library/policy/models/libraryPolicy.schema.js";
 export * from "./modules/library/books/models/book.schema.js";
+export * from "./modules/library/circulation-rules/models/circulationRule.schema.js";
 export * from "./modules/library/copies/models/copy.schema.js";
 export * from "./modules/library/loans/models/loan.schema.js";
+export * from "./modules/library/holds/models/hold.schema.js";
+export * from "./modules/library/stock-checks/models/stockCheck.schema.js";
 
 /* hr */
 export * from "./modules/hr/leaves/models/leave.schema.js";

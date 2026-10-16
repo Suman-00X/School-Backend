@@ -1,13 +1,12 @@
 import { definePermissions } from "../../../../common/auth/authorize.middleware.js";
-import { ROLES } from "../../../../common/auth/roles.js";
-import { EVERYONE, FINE_WAIVERS, LIBRARIANS } from "../../shared/constants/library.permissions.js";
+import { EVERYONE, FINE_WAIVERS, LIBRARIANS, LIBRARY_READERS } from "../../shared/constants/library.permissions.js";
 
 export const LOAN_PERMISSIONS = definePermissions("library.loans", {
-  /* Issue, return, renew, collect fines */
+  /* Issue, return, renew, lost and found, collect fines */
   circulate: LIBRARIANS,
-  /* Every loan; the principal needs them to decide on waivers */
-  read: [...LIBRARIANS, ROLES.PRINCIPAL],
+  /* Every loan and borrower account; the principal needs them to decide on waivers */
+  read: LIBRARY_READERS,
   waiveFine: FINE_WAIVERS,
-  /* GET /library/my-loans */
+  /* GET /library/my-loans, /library/my-fines */
   readOwn: EVERYONE
 });

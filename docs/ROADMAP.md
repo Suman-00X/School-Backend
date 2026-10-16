@@ -82,9 +82,13 @@ Status as of 2026-10-16: **156 end-to-end tests** pass on embedded PostgreSQL 18
 - ✅ School logo on report cards and receipts
 - ✅ Homework: attachments, submissions, late rules, grading and returns, notifications
 - ✅ Library:
-  - catalogue with ISBN checks, copies, loans, renewals
-  - fines and waivers
-  - daily overdue reminders
+  - catalogue with ISBN checks and a public catalogue, copies, loans, renewals
+  - circulation rules per borrower category and item type; due dates on open days; back-dated loans
+  - fines that accrue daily, part-payments, partial waivers, library credit; blocks with override
+  - lost and damaged copies, lost-and-found reversal
+  - holds with a queue, pickup window and expiry
+  - stock-taking, reports, self-service
+  - reminders: due soon, overdue (parents too), hold ready, fine charged
 - ✅ Transport: vehicles with compliance expiry dates, routes and stops, seat capacity under lock, rosters
 - ✅ Hostel: hostels, rooms, bed allocations by date range with gender rules (pre-booking, transfers, extensions, roll-over, leavers), availability, occupancy, assignable resources
 - ✅ HR and payroll:

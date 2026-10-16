@@ -2,6 +2,8 @@ import { and, asc, count, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { db } from "../../../../common/database/postgres.js";
 import { libraryCopies } from "../../copies/models/copy.schema.js";
+import { libraryHolds } from "../../holds/models/hold.schema.js";
+import { libraryLoans } from "../../loans/models/loan.schema.js";
 import { normalizeIsbn } from "../../shared/utils/isbn.util.js";
 import { libraryBooks } from "../models/book.schema.js";
 
@@ -11,7 +13,8 @@ const likePattern = text => `%${text.replace(/[\\%_]/g, char => `\\${char}`)}%`;
 export const bookRepository = {
   ...createRepository({ table: libraryBooks, queryKey: "libraryBooks", orderBy: asc(libraryBooks.title) }),
 
-  /* Lock a book for the rest of the transaction (adding copies vs removing the book) */
+  /* Lock a book for the rest of the transaction. Every change to a book's copies
+     or holds takes this lock first (book, then copy), so hold allocation is serial. */
   lockForUpdate: async (tenantId, bookId, { dbc }) => {
     const [row] = await dbc
       .select()
@@ -49,5 +52,57 @@ export const bookRepository = {
           .from(libraryCopies)
           .where(and(scoped(libraryCopies, tenantId), inArray(libraryCopies.bookId, bookIds)))
           .groupBy(libraryCopies.bookId, libraryCopies.status)
-      : []
+      : [],
+
+  /* -> [{ bookId, waiting }]: the hold queue of each book */
+  countWaitingHolds: (tenantId, bookIds) =>
+    bookIds.length
+      ? db
+          .select({ bookId: libraryHolds.bookId, waiting: count() })
+          .from(libraryHolds)
+          .where(
+            scoped(libraryHolds, tenantId, inArray(libraryHolds.bookId, bookIds), eq(libraryHolds.status, "WAITING"))
+          )
+          .groupBy(libraryHolds.bookId)
+      : [],
+
+  /* Open holds on a book (inside the caller's transaction) */
+  countOpenHolds: (tenantId, bookId, { dbc }) =>
+    dbc.$count(
+      libraryHolds,
+      scoped(
+        libraryHolds,
+        tenantId,
+        eq(libraryHolds.bookId, bookId),
+        inArray(libraryHolds.status, ["WAITING", "READY"])
+      )
+    ),
+
+  /* The public view of a book's copies: shelf status and, when out, the due date */
+  circulatingCopies: (tenantId, bookId) =>
+    db
+      .select({
+        accessionNumber: libraryCopies.accessionNumber,
+        status: libraryCopies.status,
+        itemType: libraryCopies.itemType,
+        dueDate: libraryLoans.dueDate
+      })
+      .from(libraryCopies)
+      .leftJoin(
+        libraryLoans,
+        and(
+          eq(libraryLoans.copyId, libraryCopies.id),
+          eq(libraryLoans.status, "ISSUED"),
+          eq(libraryLoans.isActive, true)
+        )
+      )
+      .where(
+        scoped(
+          libraryCopies,
+          tenantId,
+          eq(libraryCopies.bookId, bookId),
+          inArray(libraryCopies.status, ["AVAILABLE", "ISSUED", "ON_HOLD"])
+        )
+      )
+      .orderBy(asc(libraryCopies.accessionNumber))
 };

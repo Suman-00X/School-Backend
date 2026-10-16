@@ -147,7 +147,7 @@ Self-service lives under `/api/v1/me` (portal), plus `my-…` endpoints in libra
 | Communication | `/communication` | Notifications (in-app, email, SMS) and announcements to audiences |
 | Reports | `/reports` | Dashboards (overview, attendance, fees, academics) and exports |
 | Files | `/files` | Student, staff and general documents |
-| Library | `/library` | Catalogue (ISBN), copies, loans, renewals, fines, overdue reminders |
+| Library | `/library` | Policy and circulation rules, catalogue (ISBN) and public catalogue, copies, loans (back-dated, blocks, lost and found), fines (part-payments, partial waivers, credit), holds, stock-taking, reports, reminders |
 | Transport | `/transport` | Vehicles (compliance dates), routes and stops, seat assignments, rosters |
 | Hostel | `/hostel` | Hostels, rooms, bed allocations by date range (pre-booking, transfers, extensions, year-end roll-over), bed availability, occupancy, resources (lockers, mess and laundry plans) and their assignments |
 | HR | `/hr` | Staff attendance, leave types, requests and balances, salary structures, payroll runs, payslips |
@@ -241,3 +241,15 @@ For many students (any spreadsheet layout, saved as CSV):
 2. Students and parents see it at `/me/students/:id/homework`.
 3. The student submits with `POST /me/homework/:id/submission` (multipart: text and/or file). The student can resubmit until the work is graded.
 4. The teacher reviews `GET /academics/homework/:id/submissions` and grades or returns each one with `POST …/submissions/:sid/grading`.
+
+### Library
+
+1. **Set up:** `PATCH /library/policy` (fine block threshold, overdue block, closed days in fines, lost-copy charges and the lost-and-found window, hold pickup days, reminders, parent notices). `POST /library/circulation-rules` sets loan days, loan limit, renewals, fine per day, grace days and maximum fine for a borrower role (students optionally by class) and an item type (`BOOK`, `PERIODICAL`, `MEDIA`; `REFERENCE` is never lent). The most specific rule applies, and its terms are copied onto each loan.
+2. **Catalogue:** `POST /library/books`, then `POST /library/books/:id/copies { count, price, acquiredOn, source, itemType? }`. Everyone searches `GET /library/catalogue` (availability and due dates, no prices or staff notes).
+3. **Issue:** `POST /library/loans { accessionNumber, borrowerUserId }`. The due date is moved to the next open day of the school calendar. `issuedOn` (with `backdateReason`) records a past loan. A borrower with overdue items or fines above the threshold is refused (422) unless `overrideReason` is sent.
+4. **Fines:** they accrue daily, capped at the copy's price or the rule's maximum. `POST /library/loans/:id/fine-payment` takes any part of what has accrued, also while the book is out; `POST …/fine-waiver { amount?, reason }` waives part or all. The return settles the fine against what was paid.
+5. **Lost and damaged:** `POST /library/loans/:id/return { condition: "LOST" }` charges max(price + processing fee, minimum charge); `{ condition: "DAMAGED", damageCharge }` charges for damage. `POST /library/loans/:id/recovery` puts a found copy back; within the policy's window the replacement charge is reversed and what was paid towards it becomes library credit (`method: "LIBRARY_CREDIT"` spends it).
+6. **Holds:** `POST /library/my-holds { bookId }` (a parent adds `borrowerUserId`) or `POST /library/holds` at the desk. A returned copy is kept (`ON_HOLD`) for the first reader in the queue, who is notified; uncollected holds expire nightly and the copy moves on. Renewals are refused while others wait.
+7. **Stock-taking:** `POST /library/stock-checks`, `POST …/scans { codes }`, `GET …/missing`, `GET …/unexpected`, then `POST …/closure` marks unscanned copies `MISSING`.
+8. **Reports:** `GET /library/reports/current-loans | overdue | fines-collected | fines-outstanding | most-borrowed | inactive-borrowers | acquisitions`, as JSON or `?format=csv|xlsx`.
+9. **Self-service:** `GET /library/my-loans` (loans and history), `/library/my-holds`, `/library/my-fines` (outstanding, credit, payments, blocks).

@@ -8,7 +8,7 @@ const params = idParams("loanId");
 const filters = {
   status: z.enum(LOAN_STATUSES).optional(),
   overdue: booleanQuery(),
-  /* Loans with an unpaid fine */
+  /* Loans with an unpaid (assessed) fine */
   withFine: booleanQuery(),
   bookId: id().optional()
 };
@@ -21,8 +21,13 @@ export const loanValidators = {
         copyId: id().optional(),
         accessionNumber: accessionNumber().optional(),
         borrowerUserId: id(),
-        /* Overrides the policy's loan period (e.g. for a loan recorded late) */
-        dueDate: date().optional()
+        /* Defaults to today; a past date records a loan after the fact */
+        issuedOn: date().optional(),
+        backdateReason: text(500).optional(),
+        /* Overrides the rule's loan period; never before the issue date or today */
+        dueDate: date().optional(),
+        /* Lend despite a block (overdue items, fines above the limit) */
+        overrideReason: text(500).optional()
       })
       .refine(body => Boolean(body.copyId) !== Boolean(body.accessionNumber), {
         message: "send either copyId or accessionNumber",
@@ -36,8 +41,14 @@ export const loanValidators = {
   getById: { params },
   returnLoan: {
     params,
-    body: z.object({ condition: z.enum(RETURN_CONDITIONS).default("OK"), notes: optionalText(500) })
+    body: z.object({
+      condition: z.enum(RETURN_CONDITIONS).default("OK"),
+      notes: optionalText(500),
+      /* Repair or replacement cost, for a DAMAGED return */
+      damageCharge: positiveAmount(100_000).optional()
+    })
   },
+  recordFound: { params, body: z.object({ notes: optionalText(500) }) },
   renew: { params },
   payFine: {
     params,
@@ -47,5 +58,8 @@ export const loanValidators = {
       reference: optionalText(100)
     })
   },
-  waiveFine: { params, body: z.object({ reason: text(500) }) }
+  /* No amount: everything owed so far */
+  waiveFine: { params, body: z.object({ amount: positiveAmount().optional(), reason: text(500) }) },
+  account: { params: idParams("userId") },
+  myFines: {}
 };

@@ -1,5 +1,6 @@
 import { z } from "../../../../common/validation/zod.js";
 import { id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { ITEM_TYPES } from "../../shared/constants/library.constants.js";
 import { booleanQuery, isbn } from "../../shared/utils/schemas.util.js";
 
 const fields = z.object({
@@ -18,25 +19,30 @@ const fields = z.object({
   edition: optionalText(50),
   language: optionalText(50),
   category: optionalText(100),
+  itemType: z.enum(ITEM_TYPES).optional(),
   subjectId: id().nullable().optional(),
   shelfLocation: optionalText(50),
-  description: optionalText(2000)
+  description: optionalText(2000),
+  internalNotes: optionalText(2000)
 });
 
 const params = idParams("bookId");
 
+const search = listQuery({
+  q: z.string().trim().min(1).max(100).optional(),
+  category: z.string().trim().min(1).max(100).optional(),
+  subjectId: id().optional(),
+  itemType: z.enum(ITEM_TYPES).optional(),
+  available: booleanQuery()
+});
+
 export const bookValidators = {
   create: { body: fields },
-  list: {
-    query: listQuery({
-      q: z.string().trim().min(1).max(100).optional(),
-      category: z.string().trim().min(1).max(100).optional(),
-      subjectId: id().optional(),
-      available: booleanQuery()
-    })
-  },
+  list: { query: search },
   getById: { params },
   /* `authors` has a default; drop it so a PATCH never resets the authors */
   update: { params, body: patchBody(fields.extend({ authors: z.array(text(200)).max(20) })) },
-  remove: { params }
+  remove: { params },
+  catalogue: { query: search },
+  catalogueEntry: { params }
 };
