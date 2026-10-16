@@ -11,7 +11,8 @@ Only **open** items are here: things that need your decision, or that you may wa
 | 🔴 | D-45: build row-level security now, or later? |
 | 🟡 | D-11: what teachers can do (you said you will come back to it) |
 | 🟡 | The fee and result choices to confirm (D-17 to D-21, D-09/D-10) |
-| 🟡 | Library, hostel and finance (refunds, ledger) decisions from this round, added below when those parts are merged |
+| 🔴 | D-62: ledger opening balances for a school that starts mid-year |
+| 🟡 | D-63 refunds and ledger, D-64 hostel: choices to confirm; library decisions added when it is merged |
 | Later | D-44: restore drill, once there is drill data |
 
 **Before go-live** (checklist; details in OPERATIONS.md):
@@ -22,6 +23,13 @@ Only **open** items are here: things that need your decision, or that you may wa
 ---
 
 ## Needs your decision
+
+### 🔴 D-62: Ledger opening balances when a school starts with existing fees
+The general ledger starts empty, and invoices or payments made before it existed have no entries. For a school that moves to this system mid-year, choose one:
+- **(a)** A one-off backfill script that posts every open invoice and credit balance on the cut-over day.
+- **(b)** An opening journal entry against *3000 Opening balance equity*.
+
+Today manual entries cannot touch receivables or student credit, by design, so (a) would be a script. For brand-new schools nothing is needed.
 
 ### 🔴 D-45: Tenant isolation: what exists, and row-level security
 **Your question: is RLS, or any multi-tenant isolation, implemented?** Isolation is implemented **in the application, everywhere**. Database-level row-level security (RLS) is **not**.
@@ -44,6 +52,24 @@ Only **open** items are here: things that need your decision, or that you may wa
 ---
 
 ## Worth a look
+
+### 🟡 D-63: Refunds and the ledger: points to confirm
+- **Approvals:**
+  - An accountant's refund needs an **administrator's** approval, at any amount.
+  - An **admin's own** refund needs nobody: it is recorded as approved by them.
+  - Alternatives: an amount below which an accountant refunds alone, or a second admin for admin refunds.
+- **Credit paid back** from the student-credit screen (`POST /finance/students/:id/credit-refunds`) does not need approval yet. Should it follow the same request-and-approve flow?
+- **Refund numbers** are taken at request time, so rejected requests leave gaps. Accountants cannot withdraw their own request; an admin rejects it.
+- **Gateway settlements:** Razorpay payouts into the bank, and their fees, are entered as manual journal entries (Dr Bank, Dr charges / Cr Gateway clearing). The alternative is importing them automatically from Razorpay's settlement API.
+- **Concessions are posted gross:** fee income per fee head, plus a *Concessions* contra-income account. This maps one-to-one to Tally or Zoho Books. The alternative is posting net, but then concessions disappear from the books.
+
+### 🟡 D-64: Hostel, flexible assignments: points to confirm
+- **Pre-booking:** a student with an active enrollment in any year can be booked, so next year's room can be booked in March. Leavers' bookings are cancelled automatically.
+- **Dates:** `toDate` is the last night. A transfer from day D ends the old bed on D−1. A booking that has not started can be cancelled; a stay that has started must be vacated, and a future move-out date is allowed.
+- **Roll-over at year end** continues each resident in the same bed for the new year, as a new linked booking. It skips leavers, beds already taken and residents who no longer fit the hostel's gender rule, with a reason each. It is best-effort, not all-or-nothing.
+- **Resources tied to a bed** (locker, cupboard) move and shrink with it. On a transfer, hostel-wide items (mess plan, laundry plan) continue and room items end. A student has at most one mess plan and one laundry plan per day.
+- **Fees:** the monthly fee of a resource is stored on the resource only, and nothing is invoiced yet. When hostel fees are invoiced, the fee will be copied onto each assignment so later price changes do not rewrite history.
+- **Old allocation data** was dropped by the migration, not converted. That is safe only because no school is live. Tell me if any real data exists.
 
 ### 🟡 D-11: What teachers can access (record-level scope)
 A teacher can act on a section if they are its **class teacher** or are **assigned a subject** in it. Inside such a section:
