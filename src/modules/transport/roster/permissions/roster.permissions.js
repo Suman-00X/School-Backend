@@ -2,5 +2,5 @@ import { definePermissions } from "../../../../common/auth/authorize.middleware.
 import { TRANSPORT_READERS } from "../../shared/constants/transport.permissions.js";
 
 export const ROSTER_PERMISSIONS = definePermissions("transport.roster", {
-  read: TRANSPORT_READERS
+  read: { roles: TRANSPORT_READERS, label: "View and print route rosters" }
 });

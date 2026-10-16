@@ -2,6 +2,6 @@ import { definePermissions } from "../../../../common/auth/authorize.middleware.
 import { INVENTORY_MANAGERS, INVENTORY_READERS } from "../../shared/constants/inventory.permissions.js";
 
 export const VENDOR_PERMISSIONS = definePermissions("inventory.vendors", {
-  manage: INVENTORY_MANAGERS,
-  read: INVENTORY_READERS
+  manage: { roles: INVENTORY_MANAGERS, label: "Add and edit vendors" },
+  read: { roles: INVENTORY_READERS, label: "View vendors" }
 });

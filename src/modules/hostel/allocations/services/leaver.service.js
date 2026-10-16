@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { ROLES } from "../../../../common/auth/roles.js";
 import { transaction } from "../../../../common/database/postgres.js";
 import { tenantToday } from "../../../../common/tenancy/tenant.service.js";
+import { accessService } from "../../../administration/access/index.js";
 import { notificationService } from "../../../communication/notifications/index.js";
 import { accountService } from "../../../users/accounts/index.js";
 import { resourceAssignmentService } from "../../resource-assignments/index.js";
@@ -9,6 +10,7 @@ import { residents } from "../../shared/services/residents.service.js";
 import { notEnded } from "../../shared/utils/dateRange.util.js";
 import { resourceLabel, roomLabel } from "../../shared/utils/hostel.util.js";
 import { hostelAllocations as allocations } from "../models/hostelAllocation.schema.js";
+import { ALLOCATION_PERMISSIONS } from "../permissions/allocation.permissions.js";
 import { hostelAllocationRepository } from "../repositories/hostelAllocation.repository.js";
 import { allocationInternals } from "./allocation.service.js";
 
@@ -30,6 +32,17 @@ const summary = (student, day, beds, resources) => {
     title: `Hostel: ${student.name} left the school`,
     body: `${student.name} (${student.studentCode}) left the school on ${day}. ${lines.join(" ")}`
   };
+};
+
+/* Who runs the beds: the hostel manager accounts, plus anyone granted bed allocation through
+   module ownership or an operator role (not ADMIN, who is not told of every leaver) */
+const allocationManagers = async ctx => {
+  const granted = await accessService.usersGranted(ctx, ALLOCATION_PERMISSIONS.manage);
+  const accounts = [
+    ...(await accountService.findByRoles(ctx, [ROLES.HOSTEL_MANAGER])),
+    ...(await accountService.findManyByIds(ctx, granted))
+  ];
+  return [...new Set(accounts.filter(account => account.status === "ACTIVE").map(account => account.id))];
 };
 
 export const leaverService = {
@@ -78,11 +91,8 @@ export const leaverService = {
         beds.map(bed => bed.allocationId),
         { dbc: tx, with: { room: { columns: { roomNumber: true } }, hostel: { columns: { name: true } } } }
       );
-      const managers = (await accountService.findByRoles(ctx, [ROLES.HOSTEL_MANAGER])).filter(
-        account => account.status === "ACTIVE"
-      );
       await notificationService.notify(ctx, {
-        userIds: managers.map(account => account.id),
+        userIds: await allocationManagers(ctx),
         type: "MESSAGE",
         ...summary(
           student,

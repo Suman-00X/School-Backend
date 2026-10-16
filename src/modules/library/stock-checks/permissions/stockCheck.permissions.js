@@ -3,6 +3,6 @@ import { LIBRARIANS, LIBRARY_READERS } from "../../shared/constants/library.perm
 
 export const STOCK_CHECK_PERMISSIONS = definePermissions("library.stockChecks", {
   /* Start, scan and close */
-  manage: LIBRARIANS,
-  read: LIBRARY_READERS
+  manage: { roles: LIBRARIANS, label: "Run stock checks" },
+  read: { roles: LIBRARY_READERS, label: "View stock checks" }
 });

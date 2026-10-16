@@ -2,6 +2,7 @@ import { createRouter } from "./common/http/router.js";
 import { authenticate } from "./common/auth/authenticate.middleware.js";
 import { auditTrail } from "./common/audit/audit.middleware.js";
 import { tenantContext } from "./common/tenancy/tenantContext.middleware.js";
+import { registerGrantsResolver } from "./common/auth/grants.js";
 import usersModule from "./modules/users/index.js";
 import academicsModule from "./modules/academics/index.js";
 import portalModule from "./modules/portal/index.js";
@@ -17,6 +18,10 @@ import transportModule from "./modules/transport/index.js";
 import inventoryModule from "./modules/inventory/index.js";
 import { authRoutes, publicAuthRoutes } from "./modules/auth/index.js";
 import { paymentWebhookRoutes } from "./modules/finance/payments/index.js";
+import { accessGrants } from "./modules/administration/access/index.js";
+
+/* authorize() also honours operator roles and module ownership (administration/access) */
+registerGrantsResolver(accessGrants.resolve);
 
 /* API v1, mounted at /api/v1. Every route needs a valid token,
    and every successful write is recorded in the audit trail. */

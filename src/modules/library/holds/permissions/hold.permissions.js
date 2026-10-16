@@ -3,8 +3,8 @@ import { EVERYONE, LIBRARIANS, LIBRARY_READERS } from "../../shared/constants/li
 
 export const HOLD_PERMISSIONS = definePermissions("library.holds", {
   /* Place and cancel holds for any borrower at the desk */
-  manage: LIBRARIANS,
-  read: LIBRARY_READERS,
+  manage: { roles: LIBRARIANS, label: "Place and cancel holds for borrowers" },
+  read: { roles: LIBRARY_READERS, label: "View every hold" },
   /* /library/my-holds: your own (a parent: your children's) */
-  own: EVERYONE
+  own: { roles: EVERYONE, selfService: true, label: "Place and cancel own holds" }
 });

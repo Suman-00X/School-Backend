@@ -71,7 +71,7 @@ src/
 
   common/                FRAMEWORK ONLY: no school/business logic
     config/              environment
-    auth/                roles, authenticate (JWT), authorize + definePermissions
+    auth/                roles, authenticate (JWT), authorize + definePermissions, permission catalogue, grants hook
     validation/          zod setup, validate() middleware, shared schema building blocks
     http/                AppError + error factories, response helpers, error handler, security
     database/            postgres/mongo clients, base columns, createRepository, platform tables
@@ -96,7 +96,7 @@ src/
                          enrollments calendar attendance timetable grading exams marks result-policies
                          report-cards assessment-schemes homework
     portal/              /me: profile, learning, fees, homework (students, parents, teachers)
-    administration/      settings, imports, audit-logs
+    administration/      settings, imports, audit-logs, access (permission catalogue, owners, operator roles)
     finance/             fee-heads installment-plans late-fee-rules fee-structures concessions invoices
                          payments credits payment-settings ledger
     communication/       notifications announcements subscribers (event → message)

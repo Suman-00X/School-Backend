@@ -118,7 +118,7 @@ Clients should branch on `error.code` and `details[].field`, and display `messag
 
 ## Roles
 
-An access token carries `{ userId, tenantId, role, sid }`. Each endpoint allows a fixed set of roles, listed in [ENDPOINTS.md](ENDPOINTS.md). Some data is also limited to the records a person is linked to.
+An access token carries `{ userId, tenantId, role, sid }`. Each endpoint allows a fixed set of roles, listed in [ENDPOINTS.md](ENDPOINTS.md), plus, in the add-on modules, anyone granted its permission by an operator role or module ownership ([below](#module-owners-and-operators)). Some data is also limited to the records a person is linked to.
 
 | Role | Who | Scope |
 |---|---|---|
@@ -132,6 +132,21 @@ An access token carries `{ userId, tenantId, role, sid }`. Each endpoint allows 
 
 Self-service lives under `/api/v1/me` (portal), plus `my-…` endpoints in library, transport and hostel, and `/hr/me/…` for staff (own attendance, leave, payslips).
 
+### Module owners and operators
+
+The add-on modules (library, transport, hostel, HR, inventory) each have a built-in **owner** role: `LIBRARIAN`, `TRANSPORT_MANAGER`, `HOSTEL_MANAGER`, `HR_MANAGER`, `INVENTORY_MANAGER`. Beyond the roles, an endpoint also lets in anyone with a live **assignment** that grants its permission (`/administration/access`):
+
+| What | Who sets it up | What it gives |
+|---|---|---|
+| **Operator role** (`/operator-roles`): a named set of permissions from one module, e.g. "Transport desk: view routes, assign students, print rosters" | ADMIN, or the module's owners | Exactly those permissions, to every holder |
+| **Operator assignment** (`POST /assignments { operatorRoleId, userId, validFrom?, validTo? }`) | ADMIN, or the module's owners | One user holds the role between the dates (inclusive). A user may hold several roles in several modules |
+| **Owner assignment** (`POST /assignments { kind: "OWNER", module, userId }`) | ADMIN only | A staff account acts as the module's administrator (everything its owner role can do, including managing its operators), on top of its own role |
+
+- **Permission catalogue:** `GET /administration/access/permissions?module=&grantable=true` lists every permission key with its module, resource, action and label, grouped, for building role editors.
+- **Owner-only permissions** never go into an operator role: managing operators (`<module>.access.manage`) and approval-type actions the module marks (stock adjustments, leave decisions, cancelling approved leave, payroll finalization). **Self-service** permissions (`my-…`, `/hr/me/…`, applying for leave) follow the account's role only.
+- **Effective access:** `GET /administration/access/users/:userId/access` (ADMIN: every module; an owner: their modules) and `GET /administration/access/me/access` show each permission with where it comes from (`ROLE`, `OPERATOR`, `OWNER`).
+- **Changes apply on the next request:** revoking (`DELETE /assignments/:id`, the row stays as history with status `REVOKED`) or editing a role takes effect at once. Assignments are listed with a status as of today: `SCHEDULED`, `ACTIVE`, `EXPIRED`, `REVOKED`.
+
 ---
 
 ## Modules
@@ -142,7 +157,7 @@ Self-service lives under `/api/v1/me` (portal), plus `my-…` endpoints in libra
 | Academics | `/academics` | Years (with archiving), classes, subjects, sections, teacher assignments, enrollments and promotion, calendar, attendance, timetable, grade scales, exams and papers, marks, report cards, homework |
 | Auth | `/auth` | Sign-in, refresh, sign-out, devices, invitations, password reset and change |
 | Portal | `/me` | Student, parent and teacher self-service, and the notification inbox |
-| Administration | `/administration` | School settings and logo, CSV imports, audit log |
+| Administration | `/administration` | School settings and logo, CSV imports, audit log, access (permission catalogue, module owners, operator roles) |
 | Finance | `/finance` | Fee heads, installment plans and per-student assignment, structures, late-fee rules and waivers, concessions, invoices, payments (counter and online, partial), student credit, refunds with administrator approval, receipts and refund receipts, statements, the school's own Razorpay keys, double-entry general ledger |
 | Communication | `/communication` | Notifications (in-app, email, SMS) and announcements to audiences |
 | Reports | `/reports` | Dashboards (overview, attendance, fees, academics) and exports |

@@ -1,5 +1,5 @@
 import { eq, gte, lte } from "drizzle-orm";
-import { ROLES } from "../../../../common/auth/roles.js";
+import { hasPermission } from "../../../../common/auth/grants.js";
 import { transaction } from "../../../../common/database/postgres.js";
 import { conflict, forbidden, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { tenantToday } from "../../../../common/tenancy/tenant.service.js";
@@ -10,6 +10,7 @@ import { payrollLock } from "../../shared/services/payrollLock.service.js";
 import { workCalendar } from "../../shared/services/workCalendar.service.js";
 import { lockKey } from "../../shared/utils/locks.util.js";
 import { leaveRequests } from "../models/leave.schema.js";
+import { LEAVE_REQUEST_PERMISSIONS } from "../permissions/leave.permissions.js";
 import { leaveRequestRepository } from "../repositories/leave.repository.js";
 import { leaveTypeService } from "./leaveType.service.js";
 
@@ -164,23 +165,27 @@ export const leaveRequestService = {
     return { ...(await leaveRequestService.getById(ctx, requestId)), markedDates };
   },
 
-  /* The applicant cancels while PENDING; ADMIN can also cancel approved leave
-     (its LEAVE marks are removed). */
+  /* The applicant cancels while PENDING; HR's administrators (cancelAny) can also cancel
+     anyone's request, approved leave included (its LEAVE marks are removed). */
   cancel: async (ctx, requestId, { reason } = {}) => {
+    const [mayCancelAny, mayReadAll] = await Promise.all([
+      hasPermission(ctx, LEAVE_REQUEST_PERMISSIONS.cancelAny),
+      hasPermission(ctx, LEAVE_REQUEST_PERMISSIONS.read)
+    ]);
     const clearedDates = await transaction(async tx => {
       const request = await leaveRequestRepository.lockForUpdate(ctx.tenantId, requestId, { dbc: tx });
       const isApplicant = request?.userId === ctx.userId;
-      const isAdmin = ctx.role === ROLES.ADMIN;
-      if (!isApplicant && !isAdmin) {
-        /* Other employees must not learn the request exists; the principal (who can list it) is told why */
-        if (!request || ctx.role !== ROLES.PRINCIPAL) throw notFound("Leave request");
-        throw forbidden("Only the applicant or an administrator can cancel a leave request");
+      if (!isApplicant && !mayCancelAny) {
+        /* Other employees must not learn the request exists; those who can list it are told why */
+        if (!request || !mayReadAll) throw notFound("Leave request");
+        throw forbidden("Only the applicant or an HR administrator can cancel a leave request");
       }
+      if (!request) throw notFound("Leave request");
       if (!["PENDING", "APPROVED"].includes(request.status)) {
         throw conflict(`This leave request is already ${request.status.toLowerCase()}`);
       }
-      if (request.status === "APPROVED" && !isAdmin) {
-        throw conflict("Approved leave can only be cancelled by an administrator");
+      if (request.status === "APPROVED" && !mayCancelAny) {
+        throw conflict("Approved leave can only be cancelled by an HR administrator");
       }
 
       let cleared = [];

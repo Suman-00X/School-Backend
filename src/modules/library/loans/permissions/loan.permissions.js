@@ -3,10 +3,11 @@ import { EVERYONE, FINE_WAIVERS, LIBRARIANS, LIBRARY_READERS } from "../../share
 
 export const LOAN_PERMISSIONS = definePermissions("library.loans", {
   /* Issue, return, renew, lost and found, collect fines */
-  circulate: LIBRARIANS,
+  circulate: { roles: LIBRARIANS, label: "Issue, return and renew books; collect fines" },
   /* Every loan and borrower account; the principal needs them to decide on waivers */
-  read: LIBRARY_READERS,
-  waiveFine: FINE_WAIVERS,
+  read: { roles: LIBRARY_READERS, label: "View every loan and borrower account" },
+  /* Forgiving money: never given to an operator */
+  waiveFine: { roles: FINE_WAIVERS, ownerOnly: true, label: "Waive fines" },
   /* GET /library/my-loans, /library/my-fines */
-  readOwn: EVERYONE
+  readOwn: { roles: EVERYONE, selfService: true, label: "View own loans and fines" }
 });

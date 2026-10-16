@@ -189,6 +189,13 @@ Lock order in the library: borrower (advisory lock), then loan, then book, then 
 | items | `inventory_items` | SKU, unit, reorder level, stock on hand, weighted average cost, discontinued flag | Partial unique SKU. CHECK stock, reorder level and cost ≥ 0 |
 | stock | `stock_movements` | **Append-only ledger** (RECEIPT, ISSUE, RETURN, ADJUSTMENT) with balance and average cost after each movement, numbered `STK-000001` | CHECK direction per type, balance ≥ 0. **A trigger rejects UPDATE and DELETE.** Movements lock the item row |
 
+**Access (administration/access)**: who may act in the add-on modules beyond their role
+
+| Submodule | Table | Purpose | Key constraints |
+|---|---|---|---|
+| access | `operator_roles` | A school-defined set of permission keys (`text[]`) from ONE add-on module (library, transport, hostel, hr, inventory) | Partial unique (tenant, module, `lower(name)`). CHECK 1–100 permissions, **every key starts with the role's module**. The service also checks each key is in the catalogue and not owner-only or self-service |
+| access | `access_assignments` | OPERATOR (holds an operator role) or OWNER (acts as the module's administrator) for a user, with optional `valid_from`/`valid_to` (inclusive). Revoked rows stay as history | CHECK operator role ↔ kind, dates in order. **No two not-revoked assignments of one role to one user share a day**: GiST exclusion constraint (btree_gist), plus the role's row lock. Ownerships: advisory lock per (module, user) |
+
 ### Relationships (core)
 
 ```mermaid

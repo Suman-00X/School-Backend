@@ -297,7 +297,7 @@ describe("hr: leave", () => {
 
     const byApplicant = await cancel(world.teacherLeave.id, h.tokens.teacher);
     assert.equal(byApplicant.status, 409);
-    assert.equal(byApplicant.body.message, "Approved leave can only be cancelled by an administrator");
+    assert.equal(byApplicant.body.message, "Approved leave can only be cancelled by an HR administrator");
     assert.equal((await cancel(world.teacherLeave.id, h.tokens.teacher2)).status, 404, "others cannot see it");
     assert.equal((await cancel(world.teacherLeave.id, h.tokens.principal)).status, 403);
     const byAdmin = await cancel(world.teacherLeave.id, h.tokens.admin, { reason: "Plans changed" });

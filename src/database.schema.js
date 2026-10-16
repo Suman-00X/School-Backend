@@ -78,6 +78,10 @@ export * from "./modules/inventory/vendors/models/vendor.schema.js";
 export * from "./modules/inventory/items/models/item.schema.js";
 export * from "./modules/inventory/stock/models/stockMovement.schema.js";
 
+/* administration */
+export * from "./modules/administration/access/models/operatorRole.schema.js";
+export * from "./modules/administration/access/models/accessAssignment.schema.js";
+
 /* auth */
 export * from "./modules/auth/sessions/models/authSession.schema.js";
 export * from "./modules/auth/credentials/models/authToken.schema.js";

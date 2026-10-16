@@ -3,8 +3,9 @@ import { INVENTORY_READERS, STOCK_ADJUSTERS, STOCK_KEEPERS } from "../../shared/
 
 export const STOCK_PERMISSIONS = definePermissions("inventory.stock", {
   /* RECEIPT, ISSUE, RETURN */
-  move: STOCK_KEEPERS,
-  /* ADJUSTMENT (stock counts, damage, loss): additionally required for that type */
-  adjust: STOCK_ADJUSTERS,
-  read: INVENTORY_READERS
+  move: { roles: STOCK_KEEPERS, label: "Receive, issue and take back stock" },
+  /* ADJUSTMENT (stock counts, damage, loss): additionally required for that type.
+     Approval-type: never given to an operator */
+  adjust: { roles: STOCK_ADJUSTERS, ownerOnly: true, label: "Adjust stock (counts, damage, loss)" },
+  read: { roles: INVENTORY_READERS, label: "View the stock ledger" }
 });

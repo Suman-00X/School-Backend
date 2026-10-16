@@ -2,5 +2,5 @@ import { definePermissions } from "../../../../common/auth/authorize.middleware.
 import { LIBRARY_READERS } from "../../shared/constants/library.permissions.js";
 
 export const LIBRARY_REPORT_PERMISSIONS = definePermissions("library.reports", {
-  read: LIBRARY_READERS
+  read: { roles: LIBRARY_READERS, label: "View library reports" }
 });
