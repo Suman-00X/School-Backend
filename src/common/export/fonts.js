@@ -29,7 +29,12 @@ export const SCRIPT_FONTS = {
 
 const SCRIPT_TESTS = Object.keys(SCRIPT_FONTS).map(script => [script, new RegExp(`\\p{Script=${script}}`, "u")]);
 const NEUTRAL = /[\p{Script=Common}\p{Script=Inherited}]/u;
-const NON_LATIN = new RegExp(Object.keys(SCRIPT_FONTS).map(s => `\\p{Script=${s}}`).join("|"), "u");
+const NON_LATIN = new RegExp(
+  Object.keys(SCRIPT_FONTS)
+    .map(s => `\\p{Script=${s}}`)
+    .join("|"),
+  "u"
+);
 
 export const fontFile = (family, bold) => path.join(DIR, `${family}-${bold ? "Bold" : "Regular"}.ttf`);
 
@@ -51,9 +56,7 @@ export const scriptRuns = text => {
 const BOLD_NAMES = new Set(["Helvetica-Bold", "Body-Bold", "Times-Bold", "Courier-Bold"]);
 const fontName = (script, bold) => `${script ? SCRIPT_FONTS[script] : "NotoSans"}${bold ? "-Bold" : ""}`;
 
-const REGISTERED = new Set(
-  ["NotoSans", ...Object.values(SCRIPT_FONTS)].flatMap(family => [family, `${family}-Bold`])
-);
+const REGISTERED = new Set(["NotoSans", ...Object.values(SCRIPT_FONTS)].flatMap(family => [family, `${family}-Bold`]));
 
 /* Draw one run; if a font's shaping tables trip the layout engine, draw it unshaped
    rather than failing the whole document */
