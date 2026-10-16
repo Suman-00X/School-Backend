@@ -10,6 +10,7 @@ How to run, deploy, observe, back up and restore the backend. Decisions behind t
 - [Migrations](#migrations)
 - [Onboarding a school](#onboarding-a-school)
 - [Observability](#observability)
+- [Logs and debugging](#logs-and-debugging)
 - [Backups and restore](#backups-and-restore)
 - [Academic-year archiving](#academic-year-archiving)
 - [Security checklist](#security-checklist)
@@ -90,6 +91,38 @@ It emails the admin, and prints, a 7-day set-password link: `WEB_APP_URL/set-pas
 - **Error tracking:** every unexpected error goes through one function, `reportError`. That covers HTTP 500s and jobs that fail their last attempt. Each is logged and counted. To also send them to Sentry, set `SENTRY_DSN` and `npm install @sentry/node`. Personal data is not sent (`sendDefaultPii: false`, no request bodies).
 
 Note: metrics are kept per process. Prometheus scrapes each API and worker instance; aggregate with `sum by (…)`.
+
+## Logs and debugging
+
+Every process (API and worker) writes **one JSON object per line to stdout**: no log files to rotate. The platform collects stdout (Docker, ECS/CloudWatch, Cloud Run, Kubernetes + Loki/ELK/Datadog).
+
+| You want | Do |
+|---|---|
+| Follow the API locally | `docker compose logs -f api` (or `npm run dev`, which prints coloured lines) |
+| One user's failing request | Ask for the `requestId` from the error response (also in the `X-Request-Id` header), then search the logs for it |
+| Everything a school did | Filter on `tenantId` |
+| More detail temporarily | `LOG_LEVEL=debug`, then restart |
+
+**Fields on every line:** `level`, `time` (ISO), `service`, `env`, `version` (`APP_VERSION`), `pid`, `msg`.
+
+**Request lines** (one per request; `info` when it worked, `warn` for 4xx and slow requests, `error` for 5xx):
+- `req.id`, the requestId
+- `method`, `route` (the template), `res.statusCode`, `responseTime` (ms)
+- `tenantId`, `userId`, `role`
+- for failures, `error: { code, message }`: exactly what the client saw
+
+**Other lines worth alerting on:**
+
+| Message | Level | Meaning |
+|---|---|---|
+| `Unhandled error` | error | A 500. Carries the stack (`err`), the route and the tenant. Also sent to error tracking |
+| `Job <name> failed; will retry` / `failed for good` | warn / error | Carries the job name, attempt, tenant and duration |
+| `Slow database query` | warn | Query slower than `SLOW_QUERY_MS`. Carries the SQL shape only, never parameter values |
+| `PostgreSQL connection error`, `MongoDB disconnected` / `reconnected` | error / warn | Database connectivity |
+| `Unhandled promise rejection`, `Uncaught exception; exiting` | error / fatal | A bug outside a request or job. On an uncaught exception the process exits and the orchestrator restarts it |
+| `Report snapshot seal mismatch` | error | A published report card was changed outside the application |
+
+**Never logged:** passwords, tokens, cookies, `Authorization` headers, request bodies, query parameter values.
 
 ## Backups and restore
 

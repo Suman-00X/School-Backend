@@ -11,8 +11,37 @@ export let db = null;
 
 /* The app passes in every module's tables (see src/database.schema.js),
    so the framework never imports module code */
+/* Time every query on a connection; slow ones are logged with their SQL (never the
+   parameter values, which can hold personal data) */
+const timeQueries = client => {
+  if (client.__timed) return;
+  client.__timed = true;
+  const query = client.query.bind(client);
+  client.query = (...args) => {
+    const started = process.hrtime.bigint();
+    const result = query(...args);
+    if (result && typeof result.then === "function") {
+      result.then(
+        () => {
+          const ms = Number(process.hrtime.bigint() - started) / 1e6;
+          if (ms > env.slowQueryMs) {
+            const text = typeof args[0] === "string" ? args[0] : args[0]?.text;
+            logger.warn({ durationMs: Math.round(ms), sql: String(text ?? "").slice(0, 1000) }, "Slow database query");
+          }
+        },
+        () => {}
+      );
+    }
+    return result;
+  };
+};
+
 export const initPostgres = schema => {
   pool = new pg.Pool({ connectionString: env.databaseUrl, max: env.pgPoolMax });
+  pool.on("connect", timeQueries);
+  /* An idle connection dropped by the server (restart, failover): log it, do not crash.
+     The pool replaces the connection on next use. */
+  pool.on("error", error => logger.error({ err: error }, "PostgreSQL connection error"));
   db = drizzle({ client: pool, schema });
   return db;
 };

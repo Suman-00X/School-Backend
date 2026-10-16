@@ -2,6 +2,9 @@ import app from "./app.js";
 import env from "./common/config/env.config.js";
 import { logger } from "./common/logging/logger.js";
 import { startInfrastructure, stopInfrastructure } from "./bootstrap.js";
+import { installProcessGuards } from "./common/observability/processGuards.js";
+
+installProcessGuards("api");
 
 try {
   await startInfrastructure();
@@ -14,7 +17,10 @@ try {
   }
 
   const server = app.listen(env.port, () => {
-    logger.info({ port: env.port }, "API listening");
+    logger.info(
+      { port: env.port, logLevel: env.logLevel, jobs: process.env.REDIS_URL ? "redis" : "in-process" },
+      "API listening"
+    );
   });
 
   const shutdown = signal => {

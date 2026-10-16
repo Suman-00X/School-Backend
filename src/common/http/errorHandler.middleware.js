@@ -106,7 +106,8 @@ export const errorHandler = (err, req, res, next) => {
   const requestId = req.id;
 
   if (!appError) {
-    (req.log ?? logger).error({ err }, "Unhandled error");
+    res.locals.error = { code: ERROR_CODES.INTERNAL_ERROR, message: err?.message };
+    (req.log ?? logger).error({ err, route: req.routePattern, tenantId: req.context?.tenantId }, "Unhandled error");
     reportError(err, { source: "http", requestId, route: req.routePattern, tenantId: req.context?.tenantId });
     return res.status(500).json({
       success: false,
@@ -115,6 +116,8 @@ export const errorHandler = (err, req, res, next) => {
     });
   }
 
+  /* What the client was told, for the request log line */
+  res.locals.error = { code: appError.code, message: appError.message };
   return res.status(appError.status).json({
     success: false,
     message: appError.message,

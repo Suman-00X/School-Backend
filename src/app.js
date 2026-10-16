@@ -6,7 +6,7 @@ import env from "./common/config/env.config.js";
 import { db } from "./common/database/postgres.js";
 import { httpMetrics } from "./common/observability/httpMetrics.middleware.js";
 import { renderMetrics } from "./common/observability/metrics.js";
-import { requestLogger } from "./common/logging/requestLogger.middleware.js";
+import { requestLogger, requestStart } from "./common/logging/requestLogger.middleware.js";
 import { securityMiddlewares } from "./common/http/security.js";
 import { errorHandler, notFoundHandler } from "./common/http/errorHandler.middleware.js";
 import { buildOpenApi, docsPage, DOCS_CSP } from "./common/openapi/openapi.js";
@@ -23,6 +23,7 @@ const SECRET_FIELDS = new Set(["passwordHash", "refreshHash", "previousRefreshHa
 app.set("json replacer", (key, value) => (SECRET_FIELDS.has(key) ? undefined : value));
 app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS ?? 0));
 
+app.use(requestStart);
 app.use(requestLogger);
 app.use(httpMetrics);
 

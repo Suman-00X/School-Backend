@@ -1,5 +1,8 @@
 import { logger } from "./common/logging/logger.js";
 import { startInfrastructure, stopInfrastructure } from "./bootstrap.js";
+import { installProcessGuards } from "./common/observability/processGuards.js";
+
+installProcessGuards("worker");
 
 /* Background worker: processes queued jobs and schedules (requires REDIS_URL).
    Run one or more next to the API: `npm run worker`. */

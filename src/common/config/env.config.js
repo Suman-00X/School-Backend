@@ -33,6 +33,11 @@ export default {
   /* Public base URL of this API (links in emails, payment callbacks, download URLs) */
   appUrl: str("APP_URL", `http://localhost:${num("PORT", 3000)}`),
   logLevel: str("LOG_LEVEL", nodeEnv === "test" ? "silent" : "info"),
+  /* Release identifier on every log line (e.g. the git SHA, set by the deploy) */
+  appVersion: str("APP_VERSION", "dev"),
+  /* Requests and database queries slower than this are logged as warnings */
+  slowRequestMs: num("SLOW_REQUEST_MS", 1000),
+  slowQueryMs: num("SLOW_QUERY_MS", 500),
 
   databaseUrl: str("DATABASE_URL"),
   pgPoolMax: num("PG_POOL_MAX", 10),

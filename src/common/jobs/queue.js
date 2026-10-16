@@ -30,6 +30,11 @@ const instrument = (name, handler, attempts) => async (data, info) => {
   } catch (error) {
     const final = info.attempt >= attempts;
     jobRuns.inc({ job: name, outcome: final ? "failed" : "retried" });
+    const durationMs = Math.round(Number(process.hrtime.bigint() - start) / 1e6);
+    logger[final ? "error" : "warn"](
+      { err: error, job: name, attempt: info.attempt, of: attempts, tenantId: data?.tenantId, durationMs },
+      final ? `Job ${name} failed for good` : `Job ${name} failed; will retry`
+    );
     if (final) reportError(error, { source: "job", job: name, tenantId: data?.tenantId });
     throw error;
   } finally {
