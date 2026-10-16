@@ -109,21 +109,21 @@ Status as of 2026-10-16: **156 end-to-end tests** pass on embedded PostgreSQL 18
 - ✅ Encryption of sensitive fields at rest
 - 🟡 Multiple languages:
   - plan written
-  - ⬜ Unicode fonts in PDFs for non-Latin names (D-37)
+  - ✅ Unicode fonts in every PDF: Indian scripts, Arabic/Urdu, ₹ (D-37)
+- ✅ Logging for operations: request lines with user, route, timing and the error shown; slow requests and queries; job failures; database connection events; crash guards
+- ✅ Module administrator roles for HR, library, transport, hostel and inventory (D-51)
 
 ---
 
 ## Suggested next steps
 
 1. **Row-level security** (D-45), before real schools' data goes in.
-2. **Unicode PDF fonts** (D-37) for the regions you launch in.
-3. Go-live checks:
+2. Go-live checks:
    - test Razorpay with real test keys (D-20)
    - run a restore drill (D-44)
    - choose a host and registry (D-42)
-4. **Frontend** (web portals, then mobile).
-5. Product extensions:
-   - push notifications
-   - transport fees on invoices
-   - a LIBRARIAN role
-   - parent notifications for library and transport
+3. **Frontend** (web portals, then mobile).
+4. Product extensions:
+   - push notifications (mobile app)
+   - transport and hostel fees on invoices
+   - library fines and payroll posted to the general ledger
