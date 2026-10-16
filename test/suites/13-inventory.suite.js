@@ -372,6 +372,11 @@ describe("inventory: stock movements", () => {
       },
       { tenantId: h.tenant.id, itemId: world.paper.id, stockOnHand: 2, reorderLevel: 2 }
     );
+
+    /* The office is told in-app */
+    const inbox = await get("/api/v1/me/notifications?limit=50", { as: h.tokens.office });
+    const notice = inbox.data.find(n => n.title === "Low stock: A4 paper 80 gsm");
+    assert.equal(notice?.body, "Only 2 REAM of A4 paper 80 gsm left (reorder level 2). Time to restock.");
   });
 
   it("keeps an immutable ledger with a running balance", async () => {

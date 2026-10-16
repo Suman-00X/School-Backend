@@ -490,7 +490,7 @@ The spec gave TEACHER read access, and rosters list the primary parent's phone. 
   - An ISSUE needs a recipient (a user or free text).
   - A RETURN is not linked to an issue and not capped at what was issued.
   - A RECEIPT may have no vendor (donations, opening stock).
-- **Low stock:** an item is low when stock ≤ its reorder level. The `inventory.item.lowStock` event fires only when an item crosses that level. **No subscriber sends a message for it yet.**
+- **Low stock:** an item is low when stock ≤ its reorder level. The `inventory.item.lowStock` event fires only when an item crosses that level. It now notifies ADMIN and STAFF in-app, once per movement (added at merge).
 - **GSTIN:** checked for format only, when the school's country is IN.
 - **Unit:** whole units (PCS, BOX…) take whole quantities, and an item's unit cannot change once it has stock movements.
 

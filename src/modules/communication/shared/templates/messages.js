@@ -50,6 +50,11 @@ export const messages = {
         : `"${title}" has been graded${marksAwarded !== null && marksAwarded !== undefined ? `: ${marksAwarded}/${maxMarks}` : ""}.`
   }),
 
+  lowStock: ({ itemName, stockOnHand, reorderLevel, unit }) => ({
+    title: `Low stock: ${itemName}`,
+    body: `Only ${stockOnHand} ${unit} of ${itemName} left (reorder level ${reorderLevel}). Time to restock.`
+  }),
+
   importCompleted: ({ succeeded, failed }) => ({
     title: "Student import finished",
     body: `${succeeded} student(s) admitted, ${failed} row(s) need attention. Open the import to see the report.`
