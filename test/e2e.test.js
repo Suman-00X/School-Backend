@@ -28,5 +28,6 @@ await import("./suites/18-refunds.suite.js");
 await import("./suites/19-ledger.suite.js");
 await import("./suites/20-tenancy.suite.js");
 await import("./suites/21-access.suite.js");
+await import("./suites/22-attendance-modes.suite.js");
 /* keep last */
 await import("./suites/99-year-end.suite.js");

@@ -1,9 +1,16 @@
 import { notFound, unprocessable } from "../../../../common/http/errors.js";
 import { getTenant, tenantToday } from "../../../../common/tenancy/tenant.service.js";
-import { eachDay, minDate } from "../../../../common/utils/date.util.js";
+import { eachDay, isoWeekday, minDate } from "../../../../common/utils/date.util.js";
+import {
+  attendanceModeService,
+  attendancePolicyService,
+  dayOf,
+  registerKey
+} from "../../../academics/attendance/index.js";
 import { enrollmentService } from "../../../academics/enrollments/index.js";
 import { reportCardService } from "../../../academics/report-cards/index.js";
 import { sectionService } from "../../../academics/sections/index.js";
+import { timetableService } from "../../../academics/timetable/index.js";
 import { analyticsQueries } from "../../dashboards/index.js";
 import { exportQueries } from "../repositories/export.queries.js";
 
@@ -43,7 +50,9 @@ export const exportService = {
     };
   },
 
-  /* Register grid: one row per student, one column per day (P/A/L/H/E) */
+  /* Register grid: one row per student, P/A/L/H/E per register, in the class's mode
+     each day: one column (DAILY), FN and AN (TWO_SESSIONS), or one per period plus the
+     day's status (PERIOD_WISE: the timetable's periods and any period recorded) */
   attendance: async (ctx, { sectionId, from, to }) => {
     const section = await sectionService.findById(ctx, sectionId);
     if (!section) throw notFound("Section");
@@ -51,11 +60,49 @@ export const exportService = {
     const days = eachDay(from, end);
     if (days.length > MAX_ATTENDANCE_DAYS) throw unprocessable(`Export at most ${MAX_ATTENDANCE_DAYS} days at a time`);
 
-    const [roster, marks] = await Promise.all([
+    const [roster, marks, lessons, modeOf, policy] = await Promise.all([
       enrollmentService.findRoster(ctx, sectionId, { includeLeft: true }),
-      exportQueries.attendanceMarks(ctx.tenantId, sectionId, from, end)
+      exportQueries.attendanceMarks(ctx.tenantId, sectionId, from, end),
+      timetableService.lessonsOf(ctx, sectionId),
+      attendanceModeService.resolver(ctx),
+      attendancePolicyService.get(ctx)
     ]);
-    const markOf = new Map(marks.map(m => [`${m.studentId}:${m.date}`, CODES[m.status]]));
+    const markOf = new Map(marks.map(m => [`${m.studentId}:${m.date}:${registerKey(m)}`, m]));
+    const registersOn = new Map();
+    for (const m of marks) {
+      const taken = registersOn.get(m.date) ?? new Map();
+      taken.set(registerKey(m), { kind: m.kind, periodNumber: m.periodNumber });
+      registersOn.set(m.date, taken);
+    }
+
+    const columns = days.flatMap(day => {
+      const label = day.slice(5);
+      const mode = modeOf(section.classId, day);
+      if (mode === "DAILY") return [{ key: day, header: label, day, register: "DAY" }];
+      if (mode === "TWO_SESSIONS") {
+        return ["FN", "AN"].map(register => ({
+          key: `${day} ${register}`,
+          header: `${label} ${register}`,
+          day,
+          register
+        }));
+      }
+      const periods = new Set(lessons.filter(l => l.weekday === isoWeekday(day)).map(l => l.period.periodNumber));
+      for (const register of registersOn.get(day)?.values() ?? []) periods.add(register.periodNumber);
+      return [
+        ...[...periods]
+          .sort((a, b) => a - b)
+          .map(n => ({ key: `${day} P${n}`, header: `${label} P${n}`, day, register: `P${n}` })),
+        { key: `${day} Day`, header: `${label} Day`, day, register: null }
+      ];
+    });
+
+    const cell = (studentId, { day, register }) => {
+      if (register) return CODES[markOf.get(`${studentId}:${day}:${register}`)?.status] ?? "";
+      const taken = [...(registersOn.get(day)?.values() ?? [])];
+      const own = new Map(taken.map(r => [registerKey(r), markOf.get(`${studentId}:${day}:${registerKey(r)}`)]));
+      return CODES[dayOf(taken, own, policy.periodPresenceThreshold).status] ?? "";
+    };
     const name = `${section.class?.className}-${section.sectionName}`;
 
     return {
@@ -64,12 +111,12 @@ export const exportService = {
       rows: roster.map(e => ({
         rollNumber: e.rollNumber,
         name: `${e.student?.user?.firstName ?? ""} ${e.student?.user?.lastName ?? ""}`.trim(),
-        ...Object.fromEntries(days.map(day => [day, markOf.get(`${e.studentId}:${day}`) ?? ""]))
+        ...Object.fromEntries(columns.map(column => [column.key, cell(e.studentId, column)]))
       })),
       columns: [
         { key: "rollNumber", header: "Roll no." },
         { key: "name", header: "Student", width: 24 },
-        ...days.map(day => ({ key: day, header: day.slice(5), width: 6 }))
+        ...columns.map(({ key, header }) => ({ key, header, width: header.length > 5 ? 9 : 6 }))
       ]
     };
   },

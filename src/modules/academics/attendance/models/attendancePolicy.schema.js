@@ -4,7 +4,8 @@ import { baseColumns } from "../../../../common/database/columns.js";
 
 /* One per school (created with defaults on first read).
    A register can be taken or changed until `edit_window_days` after its date;
-   after that it is locked and only `override_roles` may change it, giving a reason. */
+   after that it is locked and only `override_roles` may change it, giving a reason.
+   How often attendance is taken (the mode) is scheduled in attendance_mode_rules. */
 export const attendancePolicies = pgTable(
   "attendance_policies",
   {
@@ -13,7 +14,9 @@ export const attendancePolicies = pgTable(
     overrideRoles: text("override_roles")
       .array()
       .notNull()
-      .default(sql`'{ADMIN}'::text[]`)
+      .default(sql`'{ADMIN}'::text[]`),
+    /* Period-wise attendance: a day counts as present when at least this % of its periods was attended */
+    periodPresenceThreshold: integer("period_presence_threshold").notNull().default(50)
   },
   t => [
     uniqueIndex("attendance_policies_tenant_uq").on(t.tenantId),
@@ -21,6 +24,7 @@ export const attendancePolicies = pgTable(
     check(
       "attendance_policies_roles_chk",
       sql`${t.overrideRoles} <@ ARRAY['ADMIN','PRINCIPAL']::text[] AND cardinality(${t.overrideRoles}) > 0`
-    )
+    ),
+    check("attendance_policies_threshold_chk", sql`${t.periodPresenceThreshold} BETWEEN 1 AND 100`)
   ]
 );

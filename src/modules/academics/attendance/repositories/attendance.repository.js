@@ -1,7 +1,11 @@
-import { and, between, count, eq, sql } from "drizzle-orm";
-import { createRepository } from "../../../../common/database/repository.js";
+import { and, asc, between, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { db } from "../../../../common/database/postgres.js";
+import { classes } from "../../classes/models/class.schema.js";
+import { sections } from "../../sections/models/section.schema.js";
+import { subjects } from "../../subjects/models/subject.schema.js";
 import { attendanceRecords, attendanceSessions } from "../models/attendance.schema.js";
+import { attendanceModeRules } from "../models/attendanceModeRule.schema.js";
 import { attendancePolicies } from "../models/attendancePolicy.schema.js";
 
 const excluded = column => sql.raw(`excluded."${column.name}"`);
@@ -9,13 +13,18 @@ const excluded = column => sql.raw(`excluded."${column.name}"`);
 export const attendanceSessionRepository = {
   ...createRepository({ table: attendanceSessions, queryKey: "attendanceSessions" }),
 
-  /* Create or refresh the register for (section, date, period). -> { id, created } */
+  /* Create or refresh the register for (section, date, kind, period). -> { id, created } */
   upsert: async (tenantId, values, { dbc = db } = {}) => {
     const [row] = await dbc
       .insert(attendanceSessions)
       .values({ ...values, tenantId, isActive: true })
       .onConflictDoUpdate({
-        target: [attendanceSessions.sectionId, attendanceSessions.date, attendanceSessions.periodNumber],
+        target: [
+          attendanceSessions.sectionId,
+          attendanceSessions.date,
+          attendanceSessions.kind,
+          attendanceSessions.periodNumber
+        ],
         set: {
           subjectId: excluded(attendanceSessions.subjectId),
           takenBy: excluded(attendanceSessions.takenBy),
@@ -30,6 +39,58 @@ export const attendanceSessionRepository = {
       })
       .returning({ id: attendanceSessions.id, created: sql`(xmax = 0)`.mapWith(Boolean) });
     return row;
+  },
+
+  /* Registers of some sections in [from, to], with the period's subject */
+  findInRange: (tenantId, { sectionIds, from, to }) =>
+    sectionIds.length
+      ? db
+          .select({
+            id: attendanceSessions.id,
+            sectionId: attendanceSessions.sectionId,
+            date: attendanceSessions.date,
+            kind: attendanceSessions.kind,
+            periodNumber: attendanceSessions.periodNumber,
+            subjectId: attendanceSessions.subjectId,
+            subjectName: subjects.subjectName,
+            takenBy: attendanceSessions.takenBy,
+            takenAt: attendanceSessions.takenAt,
+            lockOverrideReason: attendanceSessions.lockOverrideReason,
+            lockOverriddenBy: attendanceSessions.lockOverriddenBy,
+            lockOverriddenAt: attendanceSessions.lockOverriddenAt
+          })
+          .from(attendanceSessions)
+          .leftJoin(subjects, eq(subjects.id, attendanceSessions.subjectId))
+          .where(
+            scoped(
+              attendanceSessions,
+              tenantId,
+              inArray(attendanceSessions.sectionId, sectionIds),
+              between(attendanceSessions.date, from, to)
+            )
+          )
+          .orderBy(asc(attendanceSessions.date), asc(attendanceSessions.kind), asc(attendanceSessions.periodNumber))
+      : [],
+
+  /* The latest register on or after `from` (of some classes, or of the whole school):
+     -> { date, className, sectionName } or null */
+  latestFrom: async (tenantId, from, { classIds, dbc = db } = {}) => {
+    const [row] = await dbc
+      .select({ date: attendanceSessions.date, className: classes.className, sectionName: sections.sectionName })
+      .from(attendanceSessions)
+      .innerJoin(sections, eq(sections.id, attendanceSessions.sectionId))
+      .innerJoin(classes, eq(classes.id, sections.classId))
+      .where(
+        scoped(
+          attendanceSessions,
+          tenantId,
+          gte(attendanceSessions.date, from),
+          classIds ? inArray(sections.classId, classIds) : undefined
+        )
+      )
+      .orderBy(desc(attendanceSessions.date))
+      .limit(1);
+    return row ?? null;
   }
 };
 
@@ -50,23 +111,30 @@ export const attendanceRecordRepository = {
         }
       }),
 
-  /* Whole-day marks per student and status in a date range:
-     -> [{ studentId, status, days }] */
-  countByStudentAndStatus: (tenantId, { sectionId, studentId, from, to }) =>
+  /* Marks of a section and/or a student in [from, to] (every kind) */
+  findInRange: (tenantId, { sectionId, studentId, academicYearId, from, to }) =>
     db
-      .select({ studentId: attendanceRecords.studentId, status: attendanceRecords.status, days: count() })
+      .select({
+        studentId: attendanceRecords.studentId,
+        sectionId: attendanceRecords.sectionId,
+        date: attendanceRecords.date,
+        kind: attendanceRecords.kind,
+        periodNumber: attendanceRecords.periodNumber,
+        status: attendanceRecords.status,
+        remarks: attendanceRecords.remarks
+      })
       .from(attendanceRecords)
       .where(
-        and(
-          eq(attendanceRecords.tenantId, tenantId),
-          eq(attendanceRecords.isActive, true),
-          eq(attendanceRecords.periodNumber, 0),
+        scoped(
+          attendanceRecords,
+          tenantId,
           sectionId ? eq(attendanceRecords.sectionId, sectionId) : undefined,
           studentId ? eq(attendanceRecords.studentId, studentId) : undefined,
+          academicYearId ? eq(attendanceRecords.academicYearId, academicYearId) : undefined,
           between(attendanceRecords.date, from, to)
         )
       )
-      .groupBy(attendanceRecords.studentId, attendanceRecords.status)
+      .orderBy(asc(attendanceRecords.date), asc(attendanceRecords.periodNumber))
 };
 
 export const attendancePolicyRepository = {
@@ -80,5 +148,37 @@ export const attendancePolicyRepository = {
       .onConflictDoNothing({ target: attendancePolicies.tenantId });
     const [policy] = await db.select().from(attendancePolicies).where(eq(attendancePolicies.tenantId, tenantId));
     return policy;
+  },
+
+  /* Registers take it FOR SHARE and mode changes FOR UPDATE, so a register and a
+     back-dated mode change can never both pass their checks */
+  lock: async (tenantId, policyId, { dbc, strength = "update" }) => {
+    const [row] = await dbc
+      .select()
+      .from(attendancePolicies)
+      .where(scoped(attendancePolicies, tenantId, eq(attendancePolicies.id, policyId)))
+      .for(strength);
+    return row ?? null;
   }
+};
+
+export const attendanceModeRuleRepository = {
+  ...createRepository({
+    table: attendanceModeRules,
+    queryKey: "attendanceModeRules",
+    orderBy: asc(attendanceModeRules.effectiveFrom)
+  }),
+
+  /* Rules of the school (classId null) or of a class starting on or after `from`:
+     replaced or cancelled by a new rule from that date */
+  retireFrom: (tenantId, { classId, from }, { dbc }) =>
+    dbc
+      .update(attendanceModeRules)
+      .set({ isActive: false })
+      .where(
+        and(
+          scoped(attendanceModeRules, tenantId, gte(attendanceModeRules.effectiveFrom, from)),
+          classId ? eq(attendanceModeRules.classId, classId) : isNull(attendanceModeRules.classId)
+        )
+      )
 };

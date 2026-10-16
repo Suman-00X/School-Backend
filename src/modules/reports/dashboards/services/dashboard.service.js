@@ -1,6 +1,7 @@
 import { unprocessable } from "../../../../common/http/errors.js";
 import { getTenant, tenantToday } from "../../../../common/tenancy/tenant.service.js";
 import { minDate } from "../../../../common/utils/date.util.js";
+import { attendanceModeService } from "../../../academics/attendance/index.js";
 import { examService } from "../../../academics/exams/index.js";
 import { reportCardService } from "../../../academics/report-cards/index.js";
 import { sectionService } from "../../../academics/sections/index.js";
@@ -57,12 +58,21 @@ export const dashboardService = {
   attendance: async (ctx, query) => {
     const year = yearOf(ctx);
     const { from, to } = await rangeOf(ctx, query);
-    const [bySection, trend, low] = await Promise.all([
+    const [bySection, trend, low, modeOf] = await Promise.all([
       q.attendanceBySection(ctx.tenantId, year.id, from, to),
       q.attendanceTrend(ctx.tenantId, year.id, from, to),
-      q.lowAttendance(ctx.tenantId, year.id, from, to, { threshold: query.threshold, minDays: query.minDays })
+      q.lowAttendance(ctx.tenantId, year.id, from, to, { threshold: query.threshold, minDays: query.minDays }),
+      attendanceModeService.resolver(ctx)
     ]);
-    return { from, to, threshold: query.threshold, bySection, trend, lowAttendance: low };
+    return {
+      from,
+      to,
+      threshold: query.threshold,
+      /* Each section's mode on the last day of the range */
+      bySection: bySection.map(({ classId, ...section }) => ({ ...section, mode: modeOf(classId, to) })),
+      trend,
+      lowAttendance: low
+    };
   },
 
   fees: async (ctx, query) => {

@@ -29,6 +29,7 @@ export * from "./modules/academics/assessment-schemes/models/assessmentScheme.sc
 export * from "./modules/academics/calendar/models/calendarEvent.schema.js";
 export * from "./modules/academics/attendance/models/attendance.schema.js";
 export * from "./modules/academics/attendance/models/attendancePolicy.schema.js";
+export * from "./modules/academics/attendance/models/attendanceModeRule.schema.js";
 export * from "./modules/academics/timetable/models/period.schema.js";
 export * from "./modules/academics/timetable/models/timetableSlot.schema.js";
 export * from "./modules/academics/homework/models/homework.schema.js";

@@ -55,12 +55,15 @@ describe("results: setup for Class 10", () => {
     for (const section of [t.s10A, t.s10B]) {
       for (const s of subjects) await post(`${A}/section-subjects`, { sectionId: section.id, subjectId: s.id });
     }
-    /* teacher2 teaches Chemistry in 10-A only */
+    /* teacher2 teaches Chemistry in 10-A only; ct10 is 10-A's class teacher (D-11: report cards are theirs) */
     await post(`${A}/teacher-assignments`, {
       teacherId: world.teacher2.id,
       sectionId: t.s10A.id,
       subjectId: t.CH10.id
     });
+    t.ct10 = (await post("/api/v1/users/teachers", { user: person("ct10") })).data;
+    h.tokens.ct10 = tokenFor(t.ct10.userId, "TEACHER");
+    await patch(`${A}/sections/${t.s10A.id}`, { classTeacherId: t.ct10.id });
 
     const admit = async (key, section) => {
       const student = (
@@ -514,11 +517,23 @@ describe("results: report cards under the board policy", () => {
   });
 
   it("limits teachers to their sections and grades pass/fail exams without ranks", async () => {
-    await sheetOf(t.term1.id, t.s10A.id, h.tokens.teacher2);
+    await sheetOf(t.term1.id, t.s10A.id, h.tokens.ct10);
     const denied = await request("GET", `${A}/report-cards/sections/${t.s10B.id}?examId=${t.term1.id}`, {
-      as: h.tokens.teacher2
+      as: h.tokens.ct10
     });
     assert.equal(denied.status, 403);
+    assert.equal(denied.body.message, "You can only do this for sections you teach");
+    /* D-11: a subject teacher of the section does not see its report cards */
+    for (const url of [
+      `${A}/report-cards/sections/${t.s10A.id}?examId=${t.term1.id}`,
+      `${A}/report-cards/students/${t.ana.id}?examId=${t.term1.id}`,
+      `${A}/report-cards/students/${t.ana.id}/pdf?examId=${t.term1.id}`
+    ]) {
+      const subjectTeacher = await request("GET", url, { as: h.tokens.teacher2 });
+      assert.equal(subjectTeacher.status, 403, url);
+      assert.equal(subjectTeacher.body.message, "Only the class teacher of this section can see its report cards");
+    }
+    await get(`${A}/report-cards/students/${t.ana.id}?examId=${t.term1.id}`, { as: h.tokens.ct10 });
 
     const paper = (
       await post(`${A}/exams/${t.weekly.id}/papers`, {
@@ -662,8 +677,17 @@ describe("results: publication and report snapshots", () => {
       bo.changes.find(c => c.field === "CS10.marksObtained"),
       { field: "CS10.marksObtained", published: 30, live: 34 }
     );
-    const scoped = await get(`${A}/exams/${t.term1.id}/result-publication/comparison`, { as: h.tokens.teacher2 });
-    assert.equal(scoped.data.summary.students, 5, "teachers compare their own sections only");
+    const scoped = await get(`${A}/exams/${t.term1.id}/result-publication/comparison`, { as: h.tokens.ct10 });
+    assert.equal(scoped.data.summary.students, 5, "class teachers compare their own sections only");
+    const subjectTeacher = await get(`${A}/exams/${t.term1.id}/result-publication/comparison`, {
+      as: h.tokens.teacher2
+    });
+    assert.equal(subjectTeacher.data.summary.students, 0, "a subject teacher sees no report cards");
+    await get(
+      `${A}/exams/${t.term1.id}/result-publication/comparison?sectionId=${t.s10A.id}`,
+      { as: h.tokens.teacher2 },
+      403
+    );
   });
 
   it("re-publishes as version 2 and keeps version 1", async () => {
@@ -725,19 +749,26 @@ describe("results: publication and report snapshots", () => {
 
   it("lets staff open any version, within the teacher's sections, and never edits a snapshot", async () => {
     const list = await get(`${A}/report-cards/snapshots?examId=${t.term1.id}&version=3&limit=100`, {
-      as: h.tokens.teacher2
+      as: h.tokens.ct10
     });
-    assert.equal(list.meta.total, 5, "teacher2 teaches 10-A only");
+    assert.equal(list.meta.total, 5, "ct10 is class teacher of 10-A only");
     const mine = list.data[0];
-    const full = await get(`${A}/report-cards/snapshots/${mine.id}`, { as: h.tokens.teacher2 });
+    const full = await get(`${A}/report-cards/snapshots/${mine.id}`, { as: h.tokens.ct10 });
     assert.equal(full.data.policy.name, "Board Secondary");
     assert.equal(typeof full.data.report.rank, "number", "staff see the rank");
-    await pdfOk(`${A}/report-cards/snapshots/${mine.id}/pdf`, h.tokens.teacher2);
+    await pdfOk(`${A}/report-cards/snapshots/${mine.id}/pdf`, h.tokens.ct10);
+
+    /* The Chemistry teacher of 10-A: no snapshots (D-11) */
+    const subjectTeacher = await get(`${A}/report-cards/snapshots?examId=${t.term1.id}`, { as: h.tokens.teacher2 });
+    assert.equal(subjectTeacher.meta.total, 0);
+    await get(`${A}/report-cards/snapshots?sectionId=${t.s10A.id}`, { as: h.tokens.teacher2 }, 403);
+    await get(`${A}/report-cards/snapshots/${mine.id}`, { as: h.tokens.teacher2 }, 403);
+    await get(`${A}/report-cards/snapshots/${mine.id}/pdf`, { as: h.tokens.teacher2 }, 403);
 
     const edSnapshot = (await get(`${A}/report-cards/snapshots?examId=${t.term1.id}&studentId=${t.ed.id}&version=3`))
       .data[0];
     assert.equal(
-      (await request("GET", `${A}/report-cards/snapshots/${edSnapshot.id}`, { as: h.tokens.teacher2 })).status,
+      (await request("GET", `${A}/report-cards/snapshots/${edSnapshot.id}`, { as: h.tokens.ct10 })).status,
       403
     );
     await get(`${A}/report-cards/snapshots/0123456789abcdef01234567`, {}, 404);
@@ -943,6 +974,10 @@ describe("results: weighted assessment schemes", () => {
       as: h.tokens.teacher2
     });
     assert.equal(denied.status, 403);
+    /* Weighted report cards are the class teacher's too (D-11) */
+    await get(`${A}/assessment-schemes/${t.annual.id}/results?sectionId=${t.s10A.id}`, { as: h.tokens.ct10 });
+    await get(`${A}/assessment-schemes/${t.annual.id}/results?sectionId=${t.s10A.id}`, { as: h.tokens.teacher2 }, 403);
+    await get(`${A}/assessment-schemes/${t.annual.id}/students/${t.ana.id}/pdf`, { as: h.tokens.teacher2 }, 403);
     const card = await get(`${A}/assessment-schemes/${t.annual.id}/students/${t.ana.id}`);
     assert.deepEqual([card.data.report.kind, card.data.report.cgpa], ["SCHEME", 9.27]);
     await pdfOk(`${A}/assessment-schemes/${t.annual.id}/students/${t.ana.id}/pdf`);

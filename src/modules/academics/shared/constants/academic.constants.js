@@ -12,8 +12,20 @@ export const ATTENDANCE_STATUSES = ["PRESENT", "ABSENT", "LATE", "HALF_DAY", "EX
 /* How much of a day each status counts as attended */
 export const ATTENDANCE_WEIGHT = { PRESENT: 1, LATE: 1, HALF_DAY: 0.5, EXCUSED: 0, ABSENT: 0 };
 
+/* How often a class takes attendance: once a day, forenoon + afternoon, or every period */
+export const ATTENDANCE_MODES = ["DAILY", "TWO_SESSIONS", "PERIOD_WISE"];
+/* What one register covers: the whole day, a half day, or one period */
+export const ATTENDANCE_KINDS = ["DAY", "FORENOON", "AFTERNOON", "PERIOD"];
+/* The registers each mode takes */
+export const ATTENDANCE_MODE_KINDS = {
+  DAILY: ["DAY"],
+  TWO_SESSIONS: ["FORENOON", "AFTERNOON"],
+  PERIOD_WISE: ["PERIOD"]
+};
+
 /* ISO weekdays: 1 = Monday … 7 = Sunday */
 export const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7];
+export const WEEKDAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 /* Request header naming the academic year a year-scoped request acts on */
 export const ACADEMIC_YEAR_HEADER = "x-academic-year-id";

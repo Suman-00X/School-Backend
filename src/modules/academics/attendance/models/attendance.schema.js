@@ -1,17 +1,22 @@
-import { relations } from "drizzle-orm";
-import { date, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { check, date, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { baseColumns } from "../../../../common/database/columns.js";
 import { users } from "../../../users/accounts/models/user.schema.js";
 import { students } from "../../../users/students/models/student.schema.js";
 import { academicYears } from "../../academic-years/models/academicYear.schema.js";
 import { sections } from "../../sections/models/section.schema.js";
 import { subjects } from "../../subjects/models/subject.schema.js";
-import { ATTENDANCE_STATUSES } from "../../shared/constants/academic.constants.js";
+import { ATTENDANCE_KINDS, ATTENDANCE_STATUSES } from "../../shared/constants/academic.constants.js";
 
 export const attendanceStatus = pgEnum("attendance_status", ATTENDANCE_STATUSES);
+export const attendanceKind = pgEnum("attendance_kind", ATTENDANCE_KINDS);
 
-/* One register taken for a section on a date. periodNumber 0 = whole-day
-   attendance; 1..n = period-wise attendance for a subject. */
+/* Only period registers carry a period number (1..n); the others use 0 */
+const periodMatchesKind = t => sql`(${t.kind} = 'PERIOD') = (${t.periodNumber} > 0)`;
+
+/* One register taken for a section on a date: the whole day (DAY), a half day
+   (FORENOON, AFTERNOON) or one period of the timetable (PERIOD + periodNumber).
+   The kind is stored, so a register keeps its meaning when the school changes mode. */
 export const attendanceSessions = pgTable(
   "attendance_sessions",
   {
@@ -23,7 +28,9 @@ export const attendanceSessions = pgTable(
       .notNull()
       .references(() => sections.id),
     date: date("date").notNull(),
+    kind: attendanceKind("kind").notNull().default("DAY"),
     periodNumber: integer("period_number").notNull().default(0),
+    /* PERIOD: the subject the timetable has in that period */
     subjectId: uuid("subject_id").references(() => subjects.id),
     takenBy: uuid("taken_by")
       .notNull()
@@ -35,10 +42,13 @@ export const attendanceSessions = pgTable(
     lockOverriddenBy: uuid("lock_overridden_by").references(() => users.id),
     lockOverriddenAt: timestamp("lock_overridden_at", { withTimezone: true })
   },
-  t => [uniqueIndex("attendance_sessions_section_date_period_uq").on(t.sectionId, t.date, t.periodNumber)]
+  t => [
+    uniqueIndex("attendance_sessions_section_date_kind_period_uq").on(t.sectionId, t.date, t.kind, t.periodNumber),
+    check("attendance_sessions_period_kind_chk", periodMatchesKind(t))
+  ]
 );
 
-/* A student's mark in a register. Section/date/period are copied from the
+/* A student's mark in a register. Section/date/kind/period are copied from the
    session so per-student summaries are a single indexed query. */
 export const attendanceRecords = pgTable(
   "attendance_records",
@@ -57,6 +67,7 @@ export const attendanceRecords = pgTable(
       .notNull()
       .references(() => students.id),
     date: date("date").notNull(),
+    kind: attendanceKind("kind").notNull().default("DAY"),
     periodNumber: integer("period_number").notNull().default(0),
     status: attendanceStatus("status").notNull(),
     remarks: text("remarks")
@@ -64,7 +75,8 @@ export const attendanceRecords = pgTable(
   t => [
     uniqueIndex("attendance_records_session_student_uq").on(t.sessionId, t.studentId),
     index("attendance_records_student_date_idx").on(t.studentId, t.date),
-    index("attendance_records_section_date_idx").on(t.sectionId, t.date)
+    index("attendance_records_section_date_idx").on(t.sectionId, t.date),
+    check("attendance_records_period_kind_chk", periodMatchesKind(t))
   ]
 );
 

@@ -38,7 +38,12 @@ describe("attendance", () => {
     const policy = await get(`${A}/attendance/policy`, { as: h.tokens.teacher });
     assert.equal(policy.data.editWindowDays, 2);
     assert.deepEqual(policy.data.overrideRoles, ["ADMIN"]);
-    assert.equal(policy.message, "Registers can be changed until 2 day(s) after the date");
+    assert.equal(
+      policy.message,
+      "Registers can be changed until 2 day(s) after the date. Attendance is taken once a day."
+    );
+    assert.equal(policy.data.mode, "DAILY");
+    assert.equal(policy.data.periodPresenceThreshold, 50);
 
     await patch(`${A}/attendance/policy`, { editWindowDays: 30 }, { as: h.tokens.principal }, 403);
     await patch(`${A}/attendance/policy`, { overrideRoles: ["PRINCIPAL"] }, {}, 400);
@@ -66,14 +71,15 @@ describe("attendance", () => {
     assert.equal(retake.status, 200);
     assert.deepEqual(retake.body.data.summary.counts, { PRESENT: 1, ABSENT: 1, LATE: 0, HALF_DAY: 0, EXCUSED: 0 });
 
-    const tuesday = await register(
-      "2026-07-07",
-      [
-        { studentId: world.s1.id, status: "LATE" },
-        { studentId: world.s2.id, status: "HALF_DAY" }
-      ],
-      { as: h.tokens.teacher2 }
-    );
+    const marks = [
+      { studentId: world.s1.id, status: "LATE" },
+      { studentId: world.s2.id, status: "HALF_DAY" }
+    ];
+    /* D-11: the daily register is the class teacher's; teacher2 only teaches English in 1-A */
+    const subjectTeacher = await register("2026-07-07", marks, { as: h.tokens.teacher2 });
+    assert.equal(subjectTeacher.status, 403);
+    assert.equal(subjectTeacher.body.message, "Only the class teacher of Class 1-A can take its daily register");
+    const tuesday = await register("2026-07-07", marks, { as: h.tokens.teacher });
     assert.equal(tuesday.status, 201);
   });
 

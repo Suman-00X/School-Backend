@@ -25,13 +25,14 @@ export const exportQueries = {
       WHERE e.tenant_id = ${tenantId} AND e.academic_year_id = ${academicYearId} AND e.is_active
       ORDER BY c.class_order, s.section_name, e.roll_number`),
 
-  /* Whole-day marks of a section in a range */
+  /* Every mark of a section in a range (day, session and period registers) */
   attendanceMarks: (tenantId, sectionId, from, to) =>
     rows(sql`
-      SELECT student_id AS "studentId", date::text AS date, status
+      SELECT student_id AS "studentId", date::text AS date, kind, period_number AS "periodNumber", status
       FROM attendance_records
-      WHERE tenant_id = ${tenantId} AND section_id = ${sectionId} AND period_number = 0 AND is_active
-        AND date BETWEEN ${from}::date AND ${to}::date`),
+      WHERE tenant_id = ${tenantId} AND section_id = ${sectionId} AND is_active
+        AND date BETWEEN ${from}::date AND ${to}::date
+      ORDER BY date, period_number`),
 
   feeCollections: (tenantId, from, to, timezone) =>
     rows(sql`

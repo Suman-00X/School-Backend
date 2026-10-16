@@ -241,7 +241,7 @@ export const reportCardService = {
   forSection: async (ctx, { sectionId, examId }) => {
     const section = await sectionService.findById(ctx, sectionId);
     if (!section) throw notFound("Section");
-    await teachingScope.assertSection(ctx, sectionId);
+    await teachingScope.assertReportCards(ctx, sectionId);
     const exam = await loadExam(ctx, examId);
     if (exam.academicYearId !== section.academicYearId)
       throw unprocessable("The exam and the section are in different academic years");
@@ -267,7 +267,7 @@ export const reportCardService = {
 
     const enrollment = await enrollmentService.findForStudent(ctx, studentId, yearId);
     if (!enrollment) throw notFound("Enrollment for this student in the academic year");
-    await teachingScope.assertSection(ctx, enrollment.sectionId);
+    await teachingScope.assertReportCards(ctx, enrollment.sectionId);
     const section = await sectionService.findById(ctx, enrollment.sectionId);
 
     const exams = examId ? [await loadExam(ctx, examId)] : await examService.findInYear(ctx, yearId);

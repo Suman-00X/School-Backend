@@ -1,3 +1,6 @@
-/* academics/attendance: daily and period-wise student attendance */
+/* academics/attendance: student attendance taken once a day, forenoon and afternoon,
+   or period by period (per school, with class overrides) */
 export { default as attendanceRoutes } from "./routes/attendance.routes.js";
-export { attendanceService, ATTENDANCE_RECORDED } from "./services/attendance.service.js";
+export { attendanceService, attendancePolicyService, ATTENDANCE_RECORDED } from "./services/attendance.service.js";
+export { attendanceModeService } from "./services/attendanceMode.service.js";
+export { dayOf, registerKey } from "./services/attendanceCalculation.service.js";

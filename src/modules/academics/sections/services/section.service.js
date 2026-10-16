@@ -1,10 +1,11 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { createCrudService } from "../../../../common/crud/crudService.js";
-import { unprocessable } from "../../../../common/http/errors.js";
+import { forbidden, unprocessable } from "../../../../common/http/errors.js";
 import { toYearYY } from "../../../../common/utils/date.util.js";
 import { teacherService } from "../../../users/teachers/index.js";
 import { academicYearService } from "../../academic-years/index.js";
 import { classService } from "../../classes/index.js";
+import { OUTSIDE_SCOPE, teachingScope } from "../../teacher-assignments/index.js";
 import { sections } from "../models/section.schema.js";
 import { sectionRepository } from "../repositories/section.repository.js";
 
@@ -24,15 +25,30 @@ const assertReferences = async (ctx, { classId, classTeacherId }) => {
   }
 };
 
+/* Teachers: only the sections they teach (D-11) */
+const inScope = async ctx => {
+  const visible = await teachingScope.sectionIds(ctx);
+  if (!visible) return undefined;
+  return visible.length ? inArray(sections.id, visible) : sql`false`;
+};
+
 export const sectionService = {
-  getById: base.getById,
+  getById: async (ctx, sectionId) => {
+    const section = await base.getById(ctx, sectionId);
+    if (!(await teachingScope.canAccessSection(ctx, sectionId))) throw forbidden(OUTSIDE_SCOPE);
+    return section;
+  },
 
   /* Year-scoped: ctx.academicYearId comes from resolveAcademicYear */
-  list: (ctx, { page, limit, classId }) =>
+  list: async (ctx, { page, limit, classId }) =>
     base.list(
       ctx,
       { page, limit },
-      [eq(sections.academicYearId, ctx.academicYearId), classId && eq(sections.classId, classId)].filter(Boolean)
+      [
+        eq(sections.academicYearId, ctx.academicYearId),
+        classId && eq(sections.classId, classId),
+        await inScope(ctx)
+      ].filter(Boolean)
     ),
 
   create: async (ctx, data) => {
@@ -95,6 +111,11 @@ export const sectionService = {
       conditions: [eq(sections.academicYearId, academicYearId)],
       with: { class: { columns: { id: true, className: true, classOrder: true } } }
     }),
+
+  findManyByIds: (ctx, sectionIds) =>
+    sectionIds.length
+      ? sectionRepository.findMany(ctx.tenantId, { conditions: [inArray(sections.id, sectionIds)] })
+      : [],
 
   /* Sections where the teacher is class teacher */
   findByClassTeacher: (ctx, teacherId) =>

@@ -277,7 +277,7 @@ export const schemeResultService = {
     const scheme = await assessmentSchemeService.getById(ctx, schemeId);
     const section = await sectionService.findById(ctx, sectionId);
     if (!section) throw notFound("Section");
-    await teachingScope.assertSection(ctx, sectionId);
+    await teachingScope.assertReportCards(ctx, sectionId);
     if (section.academicYearId !== scheme.academicYearId) {
       throw unprocessable("The scheme and the section are in different academic years");
     }
@@ -292,7 +292,7 @@ export const schemeResultService = {
     const scheme = await assessmentSchemeService.getById(ctx, schemeId);
     const enrollment = await enrollmentService.findForStudent(ctx, studentId, scheme.academicYearId);
     if (!enrollment) throw notFound("Enrollment for this student in the academic year");
-    await teachingScope.assertSection(ctx, enrollment.sectionId);
+    await teachingScope.assertReportCards(ctx, enrollment.sectionId);
     const sheet = (await allSheets(ctx, scheme)).find(s => s.section.id === enrollment.sectionId);
     const row = sheet?.students.find(s => s.studentId === studentId);
     if (!row) throw notFound(`${scheme.name} results for this student`);
@@ -385,7 +385,7 @@ export const schemeResultService = {
 
   compare: async (ctx, schemeId, { sectionId, version }) => {
     const scheme = await assessmentSchemeService.getById(ctx, schemeId);
-    if (sectionId) await teachingScope.assertSection(ctx, sectionId);
+    if (sectionId) await teachingScope.assertReportCards(ctx, sectionId);
     return resultPublicationService.compareWith(ctx, {
       kind: "SCHEME",
       sourceId: schemeId,

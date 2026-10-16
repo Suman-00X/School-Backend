@@ -1,9 +1,10 @@
-import { eq, ne } from "drizzle-orm";
+import { eq, inArray, ne, sql } from "drizzle-orm";
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { marksService } from "../../marks/index.js";
 import { sectionService } from "../../sections/index.js";
 import { sectionSubjectService } from "../../section-subjects/index.js";
 import { subjectService } from "../../subjects/index.js";
+import { teachingScope } from "../../teacher-assignments/index.js";
 import { examPaperCode } from "../../shared/utils/codes.util.js";
 import { examPapers } from "../models/examPaper.schema.js";
 import { examPaperRepository } from "../repositories/examPaper.repository.js";
@@ -43,13 +44,19 @@ const loadPaper = async (ctx, examId, paperId) => {
 };
 
 export const examPaperService = {
-  /* Papers of an exam, optionally of one section */
+  /* Papers of an exam, optionally of one section. Teachers: their sections only (D-11). */
   list: async (ctx, examId, { page, limit, sectionId }) => {
     await examService.getById(ctx, examId);
+    if (sectionId) await teachingScope.assertSection(ctx, sectionId);
+    const visible = sectionId ? null : await teachingScope.sectionIds(ctx);
     return examPaperRepository.list(ctx.tenantId, {
       page,
       limit,
-      conditions: [eq(examPapers.examId, examId), sectionId && eq(examPapers.sectionId, sectionId)].filter(Boolean),
+      conditions: [
+        eq(examPapers.examId, examId),
+        sectionId && eq(examPapers.sectionId, sectionId),
+        visible && (visible.length ? inArray(examPapers.sectionId, visible) : sql`false`)
+      ].filter(Boolean),
       with: withDetails
     });
   },

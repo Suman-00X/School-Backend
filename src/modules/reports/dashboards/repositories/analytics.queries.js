@@ -9,10 +9,38 @@ const first = async query => (await rows(query))[0] ?? {};
 const num = value => (value === null || value === undefined ? 0 : Number(value));
 
 /* Attended weight per status (same rule as academics: LATE = 1, HALF_DAY = 0.5, EXCUSED not counted) */
-const ATTENDED = sql`CASE status WHEN 'PRESENT' THEN 1 WHEN 'LATE' THEN 1 WHEN 'HALF_DAY' THEN 0.5 ELSE 0 END`;
-const COUNTABLE = sql`CASE WHEN status = 'EXCUSED' THEN 0 ELSE 1 END`;
+const WEIGHT = sql.raw("CASE r.status WHEN 'PRESENT' THEN 1 WHEN 'LATE' THEN 1 WHEN 'HALF_DAY' THEN 0.5 ELSE 0 END");
 const percent = (attended, countable) =>
   num(countable) > 0 ? Math.round((num(attended) / num(countable)) * 1000) / 10 : null;
+
+/* One row per student and day over the registers taken, in day units for every mode
+   (academics/attendance): a DAY mark counts 1; a FORENOON or AFTERNOON mark 0.5; a
+   period-wise day 1, present when the school's threshold of its marked periods was
+   attended. EXCUSED is left out. periodsAttended/periodsCountable keep the period detail. */
+const studentDays = (tenantId, academicYearId, from, to) => sql`
+  WITH threshold AS (
+    SELECT coalesce((SELECT period_presence_threshold FROM attendance_policies
+                     WHERE tenant_id = ${tenantId} AND is_active), 50) AS pct
+  ), marks AS (
+    SELECT r.student_id, r.section_id, r.date,
+           coalesce(sum(${WEIGHT}) FILTER (WHERE r.kind = 'DAY'), 0)
+             + 0.5 * coalesce(sum(${WEIGHT}) FILTER (WHERE r.kind IN ('FORENOON', 'AFTERNOON')), 0) AS session_credit,
+           count(*) FILTER (WHERE r.kind = 'DAY' AND r.status <> 'EXCUSED')
+             + 0.5 * count(*) FILTER (WHERE r.kind IN ('FORENOON', 'AFTERNOON') AND r.status <> 'EXCUSED') AS session_countable,
+           coalesce(sum(${WEIGHT}) FILTER (WHERE r.kind = 'PERIOD'), 0) AS periods_attended,
+           count(*) FILTER (WHERE r.kind = 'PERIOD' AND r.status <> 'EXCUSED') AS periods_countable
+    FROM attendance_records r
+    WHERE r.tenant_id = ${tenantId} AND r.academic_year_id = ${academicYearId} AND r.is_active
+      AND r.date BETWEEN ${from}::date AND ${to}::date
+    GROUP BY r.student_id, r.section_id, r.date
+  ), student_days AS (
+    SELECT m.student_id, m.section_id, m.date, m.periods_attended, m.periods_countable,
+           m.session_credit + CASE WHEN m.periods_countable > 0
+                                    AND 100 * m.periods_attended >= (SELECT pct FROM threshold) * m.periods_countable
+                               THEN 1 ELSE 0 END AS credit,
+           m.session_countable + CASE WHEN m.periods_countable > 0 THEN 1 ELSE 0 END AS countable
+    FROM marks m
+  )`;
 
 export const analyticsQueries = {
   headcounts: async (tenantId, academicYearId) => {
@@ -27,20 +55,23 @@ export const analyticsQueries = {
     return Object.fromEntries(Object.entries(row).map(([k, v]) => [k, num(v)]));
   },
 
+  /* absent: students with no attendance that day; partlyAbsent: some of it (a session, too few periods…) */
   attendanceOn: async (tenantId, academicYearId, date) => {
     const row = await first(sql`
+      ${studentDays(tenantId, academicYearId, date, date)}
       SELECT
-        (SELECT count(*) FROM attendance_sessions WHERE tenant_id = ${tenantId} AND academic_year_id = ${academicYearId} AND date = ${date} AND period_number = 0 AND is_active) AS "sectionsTaken",
+        (SELECT count(DISTINCT section_id) FROM attendance_sessions WHERE tenant_id = ${tenantId} AND academic_year_id = ${academicYearId} AND date = ${date} AND is_active) AS "sectionsTaken",
         (SELECT count(*) FROM sections WHERE tenant_id = ${tenantId} AND academic_year_id = ${academicYearId} AND is_active) AS "sectionsTotal",
-        sum(${ATTENDED}) AS attended, sum(${COUNTABLE}) AS countable,
-        count(*) FILTER (WHERE status = 'ABSENT') AS absent
-      FROM attendance_records
-      WHERE tenant_id = ${tenantId} AND academic_year_id = ${academicYearId} AND date = ${date} AND period_number = 0 AND is_active`);
+        sum(credit) AS attended, sum(countable) AS countable,
+        count(*) FILTER (WHERE countable > 0 AND credit = 0) AS absent,
+        count(*) FILTER (WHERE credit > 0 AND credit < countable) AS "partlyAbsent"
+      FROM student_days`);
     return {
       date,
       sectionsTaken: num(row.sectionsTaken),
       sectionsTotal: num(row.sectionsTotal),
       absent: num(row.absent),
+      partlyAbsent: num(row.partlyAbsent),
       presentPercentage: percent(row.attended, row.countable)
     };
   },
@@ -77,54 +108,55 @@ export const analyticsQueries = {
       ).n
     ),
 
-  /* Attendance % per section over [from, to] (of registers taken) */
+  /* Attendance % per section over [from, to] (of registers taken, in days), plus the
+     period percentage of period-wise registers */
   attendanceBySection: async (tenantId, academicYearId, from, to) =>
     (
       await rows(sql`
-        SELECT s.id AS "sectionId", c.class_name || '-' || s.section_name AS section, c.class_order AS "classOrder",
-               sum(${sql.raw("CASE r.status WHEN 'PRESENT' THEN 1 WHEN 'LATE' THEN 1 WHEN 'HALF_DAY' THEN 0.5 ELSE 0 END")}) AS attended,
-               sum(${sql.raw("CASE WHEN r.status = 'EXCUSED' THEN 0 ELSE 1 END")}) AS countable,
-               count(DISTINCT r.date) AS days
+        ${studentDays(tenantId, academicYearId, from, to)}
+        SELECT s.id AS "sectionId", s.class_id AS "classId", c.class_name || '-' || s.section_name AS section,
+               sum(d.credit) AS attended, sum(d.countable) AS countable, count(DISTINCT d.date) AS days,
+               sum(d.periods_attended) AS "periodsAttended", sum(d.periods_countable) AS "periodsCountable"
         FROM sections s
         JOIN classes c ON c.id = s.class_id
-        LEFT JOIN attendance_records r ON r.section_id = s.id AND r.is_active AND r.period_number = 0 AND r.date BETWEEN ${from}::date AND ${to}::date
+        LEFT JOIN student_days d ON d.section_id = s.id
         WHERE s.tenant_id = ${tenantId} AND s.academic_year_id = ${academicYearId} AND s.is_active
-        GROUP BY s.id, c.class_name, c.class_order, s.section_name
+        GROUP BY s.id, s.class_id, c.class_name, c.class_order, s.section_name
         ORDER BY c.class_order, s.section_name`)
     ).map(r => ({
       sectionId: r.sectionId,
+      classId: r.classId,
       section: r.section,
       daysRecorded: num(r.days),
-      percentage: percent(r.attended, r.countable)
+      percentage: percent(r.attended, r.countable),
+      periodPercentage: percent(r.periodsAttended, r.periodsCountable)
     })),
 
   attendanceTrend: async (tenantId, academicYearId, from, to) =>
     (
       await rows(sql`
-        SELECT date::text AS date, sum(${ATTENDED}) AS attended, sum(${COUNTABLE}) AS countable, count(*) FILTER (WHERE status = 'ABSENT') AS absent
-        FROM attendance_records
-        WHERE tenant_id = ${tenantId} AND academic_year_id = ${academicYearId} AND period_number = 0 AND is_active
-          AND date BETWEEN ${from}::date AND ${to}::date
+        ${studentDays(tenantId, academicYearId, from, to)}
+        SELECT date::text AS date, sum(credit) AS attended, sum(countable) AS countable,
+               count(*) FILTER (WHERE countable > 0 AND credit = 0) AS absent
+        FROM student_days
         GROUP BY date ORDER BY date`)
     ).map(r => ({ date: r.date, absent: num(r.absent), percentage: percent(r.attended, r.countable) })),
 
-  /* Students under `threshold` % with at least `minDays` registers */
+  /* Students under `threshold` % with at least `minDays` countable days of registers */
   lowAttendance: async (tenantId, academicYearId, from, to, { threshold, minDays }) =>
     (
       await rows(sql`
-        SELECT r.student_id AS "studentId", u.first_name AS "firstName", u.last_name AS "lastName",
+        ${studentDays(tenantId, academicYearId, from, to)}
+        SELECT d.student_id AS "studentId", u.first_name AS "firstName", u.last_name AS "lastName",
                c.class_name || '-' || s.section_name AS section,
-               sum(${sql.raw("CASE r.status WHEN 'PRESENT' THEN 1 WHEN 'LATE' THEN 1 WHEN 'HALF_DAY' THEN 0.5 ELSE 0 END")}) AS attended,
-               sum(${sql.raw("CASE WHEN r.status = 'EXCUSED' THEN 0 ELSE 1 END")}) AS countable
-        FROM attendance_records r
-        JOIN students st ON st.id = r.student_id
+               sum(d.credit) AS attended, sum(d.countable) AS countable
+        FROM student_days d
+        JOIN students st ON st.id = d.student_id
         JOIN users u ON u.id = st.user_id
-        JOIN sections s ON s.id = r.section_id
+        JOIN sections s ON s.id = d.section_id
         JOIN classes c ON c.id = s.class_id
-        WHERE r.tenant_id = ${tenantId} AND r.academic_year_id = ${academicYearId} AND r.period_number = 0 AND r.is_active
-          AND r.date BETWEEN ${from}::date AND ${to}::date
-        GROUP BY r.student_id, u.first_name, u.last_name, c.class_name, s.section_name
-        HAVING sum(${sql.raw("CASE WHEN r.status = 'EXCUSED' THEN 0 ELSE 1 END")}) >= ${minDays}`)
+        GROUP BY d.student_id, u.first_name, u.last_name, c.class_name, s.section_name
+        HAVING sum(d.countable) >= ${minDays}`)
     )
       .map(r => ({
         studentId: r.studentId,

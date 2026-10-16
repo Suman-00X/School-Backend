@@ -1,7 +1,8 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { createCrudService } from "../../../../common/crud/crudService.js";
 import { conflict, unprocessable } from "../../../../common/http/errors.js";
 import { sectionService } from "../../sections/index.js";
+import { teachingScope } from "../../teacher-assignments/index.js";
 import { subjectService } from "../../subjects/index.js";
 import { sectionSubjectCode } from "../../shared/utils/codes.util.js";
 import { sectionSubjects } from "../models/sectionSubject.schema.js";
@@ -21,12 +22,14 @@ const taughtConditions = (academicYearId, sectionId, subjectId) => [
 export const sectionSubjectService = {
   remove: base.remove,
 
-  /* Year-scoped: subjects of one section */
-  list: (ctx, { page, limit, sectionId }) =>
-    base.list(ctx, { page, limit }, [
+  /* Year-scoped: subjects of one section (teachers: a section they teach) */
+  list: async (ctx, { page, limit, sectionId }) => {
+    await teachingScope.assertSection(ctx, sectionId);
+    return base.list(ctx, { page, limit }, [
       eq(sectionSubjects.academicYearId, ctx.academicYearId),
       eq(sectionSubjects.sectionId, sectionId)
-    ]),
+    ]);
+  },
 
   create: async (ctx, { sectionId, subjectId, weeklyNoOfClasses, description }) => {
     const placement = await sectionService.getPlacement(ctx, ctx.academicYearId, sectionId);
@@ -49,6 +52,13 @@ export const sectionSubjectService = {
   },
 
   /* For other submodules */
+  findForSections: (ctx, sectionIds) =>
+    sectionIds.length
+      ? sectionSubjectRepository.findMany(ctx.tenantId, {
+          conditions: [inArray(sectionSubjects.sectionId, sectionIds)]
+        })
+      : [],
+
   isTaught: (ctx, academicYearId, sectionId, subjectId) =>
     sectionSubjectRepository.exists(ctx.tenantId, taughtConditions(academicYearId, sectionId, subjectId))
 };

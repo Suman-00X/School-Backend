@@ -8,7 +8,8 @@ import { attendanceValidators as rules } from "../validators/attendance.validato
 /* /api/v1/academics/attendance. The section decides the academic year. */
 const router = createRouter();
 
-/* Recording is idempotent per (section, date, period) */
+/* Recording is idempotent per (section, date, kind, period). The policy also sets the
+   mode (DAILY, TWO_SESSIONS, PERIOD_WISE) per school and per class, from a date on. */
 router.get("/policy", authorize(can.read), controller.getPolicy);
 router.patch("/policy", authorize(can.managePolicy), validate(rules.updatePolicy), controller.updatePolicy);
 router.post("/", authorize(can.record), validate(rules.record), controller.record);

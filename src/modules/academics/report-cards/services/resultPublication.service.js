@@ -248,7 +248,7 @@ const versionOrCurrent = async (ctx, kind, sourceId, version, sourceName) => {
 /* Live results vs a published version, student by student. liveSheets are this source's sheets now. */
 const compareWith = async (ctx, { kind, sourceId, sourceName, version, sectionId, liveSheets, reportFor }) => {
   const publication = await versionOrCurrent(ctx, kind, sourceId, version, sourceName);
-  const visible = await teachingScope.sectionIds(ctx);
+  const visible = await teachingScope.classTeacherSectionIds(ctx);
   const inScope = id => (!sectionId || id === sectionId) && (!visible || visible.includes(id));
 
   const snapshots = (await reportSnapshotRepository.findMany(ctx.tenantId, { publicationId: publication.id })).filter(
@@ -387,7 +387,7 @@ export const resultPublicationService = {
 
   compareExam: async (ctx, examId, { sectionId, version }) => {
     const exam = await reportCardService.loadExam(ctx, examId);
-    if (sectionId) await teachingScope.assertSection(ctx, sectionId);
+    if (sectionId) await teachingScope.assertReportCards(ctx, sectionId);
     return compareWith(ctx, {
       kind: "EXAM",
       sourceId: examId,

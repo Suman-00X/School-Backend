@@ -23,8 +23,9 @@ const linkConditions = (studentId, parentId) => [
 ];
 
 export const studentParentService = {
+  /* Teachers: a student in their scope only (else 404); parents' contact details included */
   list: async (ctx, studentId, { page, limit }) => {
-    await assertStudent(ctx, studentId);
+    await studentService.getById(ctx, studentId);
     return studentParentRepository.list(ctx.tenantId, {
       page,
       limit,

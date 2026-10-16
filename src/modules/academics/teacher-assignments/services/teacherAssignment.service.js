@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { createCrudService } from "../../../../common/crud/crudService.js";
 import { conflict, unprocessable } from "../../../../common/http/errors.js";
 import { teacherService } from "../../../users/teachers/index.js";
@@ -6,6 +6,7 @@ import { sectionService } from "../../sections/index.js";
 import { sectionSubjectService } from "../../section-subjects/index.js";
 import { teacherAssignments } from "../models/teacherAssignment.schema.js";
 import { teacherAssignmentRepository } from "../repositories/teacherAssignment.repository.js";
+import { teachingScope } from "./teachingScope.service.js";
 
 const base = createCrudService(teacherAssignmentRepository, {
   entity: "Teacher assignment",
@@ -30,17 +31,21 @@ export const teacherAssignmentService = {
   findForSection: (ctx, sectionId) =>
     teacherAssignmentRepository.findMany(ctx.tenantId, { conditions: [eq(teacherAssignments.sectionId, sectionId)] }),
 
-  /* Year-scoped; filter by section and/or teacher */
-  list: (ctx, { page, limit, sectionId, teacherId }) =>
-    base.list(
+  /* Year-scoped; filter by section and/or teacher. Teachers: their sections only. */
+  list: async (ctx, { page, limit, sectionId, teacherId }) => {
+    if (sectionId) await teachingScope.assertSection(ctx, sectionId);
+    const visible = sectionId ? null : await teachingScope.sectionIds(ctx);
+    return base.list(
       ctx,
       { page, limit },
       [
         eq(teacherAssignments.academicYearId, ctx.academicYearId),
         sectionId && eq(teacherAssignments.sectionId, sectionId),
-        teacherId && eq(teacherAssignments.teacherId, teacherId)
+        teacherId && eq(teacherAssignments.teacherId, teacherId),
+        visible && (visible.length ? inArray(teacherAssignments.sectionId, visible) : sql`false`)
       ].filter(Boolean)
-    ),
+    );
+  },
 
   create: async (ctx, { teacherId, sectionId, subjectId, description }) => {
     const academicYearId = ctx.academicYearId;

@@ -162,6 +162,13 @@
       "when": 1792185824730,
       "tag": "0022_access_operator_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792185992900,
+      "tag": "0023_attendance_modes",
+      "breakpoints": true
     }
   ]
 }

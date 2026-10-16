@@ -1,4 +1,4 @@
-import { conflict, forbidden, notFound, unprocessable } from "../../../../common/http/errors.js";
+import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { logger } from "../../../../common/logging/logger.js";
 import { reportError } from "../../../../common/observability/errorReporter.js";
 import { academicYearService } from "../../academic-years/index.js";
@@ -76,11 +76,10 @@ const visibleSnapshots = async (ctx, studentId, { examId, schemeId, academicYear
 };
 
 export const reportSnapshotService = {
-  /* Staff: every version, filtered. Teachers see their sections only. */
+  /* Staff: every version, filtered. Teachers: the sections they are class teacher of. */
   list: async (ctx, { page, limit, examId, schemeId, studentId, sectionId, version }) => {
-    const visible = await teachingScope.sectionIds(ctx);
-    if (sectionId && visible && !visible.includes(sectionId))
-      throw forbidden("You can only do this for sections you teach");
+    if (sectionId) await teachingScope.assertReportCards(ctx, sectionId);
+    const visible = await teachingScope.classTeacherSectionIds(ctx);
     /* Only snapshots of committed publications (never leftovers of a failed attempt) */
     const committed = (await resultPublicationRepository.findMany(ctx.tenantId, {})).map(p => p.id);
     const filter = {
@@ -102,7 +101,7 @@ export const reportSnapshotService = {
   getById: async (ctx, snapshotId) => {
     const snapshot = await reportSnapshotRepository.findById(ctx.tenantId, snapshotId);
     if (!snapshot) throw notFound("Report snapshot");
-    await teachingScope.assertSection(ctx, snapshot.sectionId);
+    await teachingScope.assertReportCards(ctx, snapshot.sectionId);
     const [checked] = await withIntegrity(ctx, [snapshot]);
     return checked;
   },

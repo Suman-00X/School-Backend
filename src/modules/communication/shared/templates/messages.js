@@ -11,6 +11,20 @@ export const messages = {
     sms: `${schoolName}: ${studentName} was marked absent on ${date}.`
   }),
 
+  /* Two-session attendance: one alert per session missed */
+  attendanceAbsentSession: ({ studentName, date, session, schoolName }) => ({
+    title: `${studentName} was absent in the ${session} session`,
+    body: `${studentName} was marked absent in the ${session} session on ${date}. Please contact the school if this is unexpected.`,
+    sms: `${schoolName}: ${studentName} was marked absent in the ${session} session on ${date}.`
+  }),
+
+  /* Period-wise attendance: one alert per day, on the first absence */
+  attendanceAbsentPeriods: ({ studentName, date, periods, schoolName }) => ({
+    title: `${studentName} missed ${periods.length === 1 ? "a class" : `${periods.length} classes`} today`,
+    body: `${studentName} was marked absent in ${periods.join(", ")} on ${date}. Please contact the school if this is unexpected.`,
+    sms: `${schoolName}: ${studentName} was marked absent in ${periods.join(", ")} on ${date}.`
+  }),
+
   resultsPublished: ({ examName }) => ({
     title: `${examName} results are out`,
     body: `Results for ${examName} have been published. Open the report card to see the marks.`,
