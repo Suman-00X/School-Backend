@@ -1,8 +1,9 @@
-import { and, asc, between, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { asc, between, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { db } from "../../../../common/database/postgres.js";
 import { subjects } from "../../subjects/models/subject.schema.js";
 import { attendanceRecords, attendanceSessions } from "../models/attendance.schema.js";
+import { attendanceFreePeriods } from "../models/attendanceFreePeriod.schema.js";
 import { attendanceModeRules } from "../models/attendanceModeRule.schema.js";
 import { attendancePolicies } from "../models/attendancePolicy.schema.js";
 
@@ -39,6 +40,19 @@ export const attendanceSessionRepository = {
       .returning({ id: attendanceSessions.id, created: sql`(xmax = 0)`.mapWith(Boolean) });
     return row;
   },
+
+  /* Was the register of one period taken? */
+  periodTaken: (tenantId, { sectionId, date, periodNumber }, { dbc = db } = {}) =>
+    attendanceSessionRepository.exists(
+      tenantId,
+      [
+        eq(attendanceSessions.sectionId, sectionId),
+        eq(attendanceSessions.date, date),
+        eq(attendanceSessions.kind, "PERIOD"),
+        eq(attendanceSessions.periodNumber, periodNumber)
+      ],
+      { dbc }
+    ),
 
   /* Registers of some sections in [from, to], with the period's subject */
   findInRange: (tenantId, { sectionIds, from, to }) =>
@@ -149,16 +163,77 @@ export const attendanceModeRuleRepository = {
     orderBy: asc(attendanceModeRules.effectiveFrom)
   }),
 
-  /* Rules of the school (classId null) or of a class starting on or after `from`:
-     replaced or cancelled by a new rule from that date */
-  retireFrom: (tenantId, { classId, from }, { dbc }) =>
+  /* The school's rules starting on or after `from`: replaced or cancelled by a new rule from that date */
+  retireFrom: (tenantId, { from }, { dbc }) =>
     dbc
       .update(attendanceModeRules)
       .set({ isActive: false })
-      .where(
-        and(
-          scoped(attendanceModeRules, tenantId, gte(attendanceModeRules.effectiveFrom, from)),
-          classId ? eq(attendanceModeRules.classId, classId) : isNull(attendanceModeRules.classId)
-        )
-      )
+      .where(scoped(attendanceModeRules, tenantId, gte(attendanceModeRules.effectiveFrom, from)))
+};
+
+export const attendanceFreePeriodRepository = {
+  ...createRepository({
+    table: attendanceFreePeriods,
+    queryKey: "attendanceFreePeriods",
+    orderBy: [asc(attendanceFreePeriods.date), asc(attendanceFreePeriods.periodNumber)]
+  }),
+
+  /* Mark (section, date, period) free, or revive a removed row / change its reason.
+     -> { id, created } (created: no free period was in force) */
+  upsert: async (tenantId, values, { dbc = db } = {}) => {
+    const [row] = await dbc
+      .insert(attendanceFreePeriods)
+      .values({ ...values, tenantId, isActive: true })
+      .onConflictDoUpdate({
+        target: [attendanceFreePeriods.sectionId, attendanceFreePeriods.date, attendanceFreePeriods.periodNumber],
+        set: {
+          reason: excluded(attendanceFreePeriods.reason),
+          markedBy: excluded(attendanceFreePeriods.markedBy),
+          markedAt: new Date(),
+          lockOverrideReason: excluded(attendanceFreePeriods.lockOverrideReason),
+          lockOverriddenBy: excluded(attendanceFreePeriods.lockOverriddenBy),
+          lockOverriddenAt: excluded(attendanceFreePeriods.lockOverriddenAt),
+          isActive: true,
+          updatedAt: new Date()
+        }
+      })
+      .returning({ id: attendanceFreePeriods.id });
+    return row;
+  },
+
+  /* List conditions: some sections (null = all) and a date range (either end optional) */
+  filters: ({ sectionIds, from, to }) => [
+    sectionIds ? inArray(attendanceFreePeriods.sectionId, sectionIds) : undefined,
+    from ? gte(attendanceFreePeriods.date, from) : undefined,
+    to ? lte(attendanceFreePeriods.date, to) : undefined
+  ],
+
+  /* The free period in force at (section, date, period), or null */
+  findAt: (tenantId, { sectionId, date, periodNumber }, { dbc = db } = {}) =>
+    attendanceFreePeriodRepository.findOne(
+      tenantId,
+      [
+        eq(attendanceFreePeriods.sectionId, sectionId),
+        eq(attendanceFreePeriods.date, date),
+        eq(attendanceFreePeriods.periodNumber, periodNumber)
+      ],
+      { dbc }
+    ),
+
+  /* Free periods of some sections in [from, to] */
+  findInRange: (tenantId, { sectionIds, from, to }, { dbc = db } = {}) =>
+    sectionIds.length
+      ? dbc
+          .select()
+          .from(attendanceFreePeriods)
+          .where(
+            scoped(
+              attendanceFreePeriods,
+              tenantId,
+              inArray(attendanceFreePeriods.sectionId, sectionIds),
+              between(attendanceFreePeriods.date, from, to)
+            )
+          )
+          .orderBy(asc(attendanceFreePeriods.date), asc(attendanceFreePeriods.periodNumber))
+      : []
 };

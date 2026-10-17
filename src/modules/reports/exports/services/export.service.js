@@ -50,7 +50,7 @@ export const exportService = {
     };
   },
 
-  /* Register grid: one row per student, P/A/L/H/E per register, in the class's mode
+  /* Register grid: one row per student, P/A/L/H/E per register, in the school's mode
      each day: one column (DAILY), FN and AN (TWO_SESSIONS), or one per period plus the
      day's status (PERIOD_WISE: the timetable's periods and any period recorded) */
   attendance: async (ctx, { sectionId, from, to }) => {
@@ -64,7 +64,7 @@ export const exportService = {
       enrollmentService.findRoster(ctx, sectionId, { includeLeft: true }),
       exportQueries.attendanceMarks(ctx.tenantId, sectionId, from, end),
       timetableService.lessonsOf(ctx, sectionId),
-      attendanceModeService.resolver(ctx),
+      attendanceModeService.timeline(ctx),
       attendancePolicyService.get(ctx)
     ]);
     const markOf = new Map(marks.map(m => [`${m.studentId}:${m.date}:${registerKey(m)}`, m]));
@@ -77,7 +77,7 @@ export const exportService = {
 
     const columns = days.flatMap(day => {
       const label = day.slice(5);
-      const mode = modeOf(section.classId, day);
+      const mode = modeOf(day);
       if (mode === "DAILY") return [{ key: day, header: label, day, register: "DAY" }];
       if (mode === "TWO_SESSIONS") {
         return ["FN", "AN"].map(register => ({

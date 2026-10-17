@@ -9,8 +9,8 @@ import { sectionService } from "../../sections/index.js";
 import { ATTENDANCE_MODE_KINDS, WEEKDAY_NAMES } from "../../shared/constants/academic.constants.js";
 import { teacherAssignmentService, teachingScope } from "../../teacher-assignments/index.js";
 import { timetableService } from "../../timetable/index.js";
-import { attendanceSessionRepository } from "../repositories/attendance.repository.js";
-import { groupBy, registerLabel, sectionLabel } from "./attendance.service.js";
+import { attendanceFreePeriodRepository, attendanceSessionRepository } from "../repositories/attendance.repository.js";
+import { freeView, groupBy, registerLabel, sectionLabel } from "./attendance.service.js";
 import { registerKey } from "./attendanceCalculation.service.js";
 import { attendanceModeService } from "./attendanceMode.service.js";
 
@@ -19,9 +19,9 @@ import { attendanceModeService } from "./attendanceMode.service.js";
    - DAY, FORENOON, AFTERNOON: the class teacher;
    - PERIOD: the teacher timetabled in the slot, else (their account is no longer
      active) the teacher assigned that subject in the section.
-   Only expected registers count: working days, the class's mode on that date, and in
-   period-wise classes only the periods the timetable fills on that weekday. Sections
-   with no students expect none. */
+   Only expected registers count: working days, the school's mode on that date, and on
+   period-wise days only the periods the timetable fills on that weekday. Sections with
+   no students expect none. A period marked free expects no register: it is listed apart. */
 
 const nameOf = teacher => `${teacher.user?.firstName ?? ""} ${teacher.user?.lastName ?? ""}`.trim();
 const personOf = teacher => ({ teacherId: teacher.id, userId: teacher.userId, name: nameOf(teacher) });
@@ -67,29 +67,33 @@ const answerableFor = (register, section, { teachers, subjectTeacherOf }) => {
 };
 
 /* Every expected register of the year's working days in [from, to] (up to today) that
-   nobody took, by date, class, section and bell order -> { from, to, rows } */
+   nobody took, by date, class, section and bell order, and the expected periods marked
+   free instead -> { from, to, rows, free } */
 const collect = async (ctx, academicYear, { from, to, sectionId }) => {
   const today = await tenantToday(ctx.tenantId);
   const range = await calendarService.workingDays(ctx, academicYear, from, minDate(to, today));
-  if (!range.workingDays.length) return { from: range.from, to: range.to, rows: [] };
+  if (!range.workingDays.length) return { from: range.from, to: range.to, rows: [], free: [] };
 
-  const [allSections, withStudents, resolve, lessons, assignments] = await Promise.all([
+  const [allSections, withStudents, modeOn, lessons, assignments] = await Promise.all([
     sectionService.findAllInYear(ctx, academicYear.id),
     enrollmentService.sectionIdsWithStudents(ctx, academicYear.id),
-    attendanceModeService.resolver(ctx),
+    attendanceModeService.timeline(ctx),
     timetableService.lessonsInYear(ctx, academicYear.id),
     teacherAssignmentService.findInYear(ctx, academicYear.id)
   ]);
   const sections = allSections
     .filter(section => withStudents.has(section.id) && (!sectionId || section.id === sectionId))
     .sort((a, b) => a.class.classOrder - b.class.classOrder || a.sectionName.localeCompare(b.sectionName));
-  const sessions = await attendanceSessionRepository.findInRange(ctx.tenantId, {
-    sectionIds: sections.map(section => section.id),
-    from: range.from,
-    to: range.to
-  });
+  const inRange = { sectionIds: sections.map(section => section.id), from: range.from, to: range.to };
+  const [sessions, freePeriods] = await Promise.all([
+    attendanceSessionRepository.findInRange(ctx.tenantId, inRange),
+    attendanceFreePeriodRepository.findInRange(ctx.tenantId, inRange)
+  ]);
 
   const taken = new Set(sessions.map(session => `${session.sectionId}|${session.date}|${registerKey(session)}`));
+  const freeAt = new Map(
+    freePeriods.map(free => [`${free.sectionId}|${free.date}|${registerKey({ kind: "PERIOD", ...free })}`, free])
+  );
   const lessonsOn = groupBy(lessons, lesson => `${lesson.sectionId}|${lesson.weekday}`);
   const subjectTeacherOf = new Map(assignments.map(a => [`${a.sectionId}|${a.subjectId}`, a.teacherId]));
   const teacherIds = [
@@ -102,9 +106,10 @@ const collect = async (ctx, academicYear, { from, to, sectionId }) => {
   const teachers = new Map((await teacherService.findActiveByIds(ctx, teacherIds)).map(t => [t.id, t]));
 
   const rows = [];
+  const free = [];
   for (const date of range.workingDays) {
+    const mode = modeOn(date);
     for (const section of sections) {
-      const mode = resolve(section.classId, date);
       const expected =
         mode === "PERIOD_WISE"
           ? (lessonsOn.get(`${section.id}|${isoWeekday(date)}`) ?? []).map(slot => ({
@@ -114,9 +119,11 @@ const collect = async (ctx, academicYear, { from, to, sectionId }) => {
             }))
           : ATTENDANCE_MODE_KINDS[mode].map(kind => ({ kind, periodNumber: 0 }));
       for (const register of expected) {
-        if (taken.has(`${section.id}|${date}|${registerKey(register)}`)) continue;
+        const key = `${section.id}|${date}|${registerKey(register)}`;
+        if (taken.has(key)) continue;
         const subject = register.slot?.subject ?? null;
-        rows.push({
+        const freePeriod = freeAt.get(key);
+        (freePeriod ? free : rows).push({
           date,
           section: { id: section.id, name: sectionLabel(section) },
           mode,
@@ -128,12 +135,13 @@ const collect = async (ctx, academicYear, { from, to, sectionId }) => {
             subjectName: subject?.subjectName
           }),
           subject: subject && { id: subject.id, subjectName: subject.subjectName },
-          ...answerableFor(register, section, { teachers, subjectTeacherOf })
+          ...answerableFor(register, section, { teachers, subjectTeacherOf }),
+          ...(freePeriod && { free: freeView(freePeriod) })
         });
       }
     }
   }
-  return { from: range.from, to: range.to, rows };
+  return { from: range.from, to: range.to, rows, free };
 };
 
 /* [{ teacherId, name, missing }], most missed first */
@@ -164,7 +172,8 @@ export const missingRegisterService = {
 
     const result = await collect(ctx, academicYear, { from, to, sectionId });
     const whose = scope ? scope.teacherId : teacherId;
-    const rows = whose ? result.rows.filter(row => row.responsible?.teacherId === whose) : result.rows;
+    const theirs = list => (whose ? list.filter(row => row.responsible?.teacherId === whose) : list);
+    const rows = theirs(result.rows);
     return {
       academicYearId: academicYear.id,
       from: result.from,
@@ -172,7 +181,9 @@ export const missingRegisterService = {
       total: rows.length,
       byTeacher: countByTeacher(rows),
       unassigned: rows.filter(row => !row.responsible).length,
-      registers: rows
+      registers: rows,
+      /* Expected periods marked free: no register was due */
+      freePeriods: theirs(result.free)
     };
   },
 

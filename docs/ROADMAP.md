@@ -51,7 +51,7 @@ Status as of 2026-10-16: **156 end-to-end tests** pass on embedded PostgreSQL 18
 
 ## Phase 3: Core academics ✅
 - ✅ Calendar: holidays and events, which decide working days
-- ✅ Student attendance, in three modes per school or class (once a day, forenoon/afternoon, every period), with summaries and absence alerts. Staff attendance is in HR
+- ✅ Student attendance, in three modes for the whole school, changing over time (once a day, forenoon/afternoon, every period), with free periods, summaries and absence alerts. Staff attendance is in HR
 - ✅ Refunds: administrators refund at once, accountants above a school-set limit need an administrator, credit paid back as a refund, gapless numbers; Razorpay settlements imported into the ledger daily (D-63)
 - ✅ Teachers reach only their own sections: students, attendance, marks, report cards (class teacher), timetable (D-11)
 - ✅ Module owners and customisable operator roles for library, transport, hostel, HR and inventory (D-67)

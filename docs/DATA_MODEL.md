@@ -84,8 +84,9 @@ In every school's database.
 | teacher-assignments | `teacher_assignments` | Who teaches a subject in a section. With the class and deputy class teachers of `sections`, drives teacher record-level scope (current academic year only) | Partial unique (section, subject) |
 | enrollments | `student_enrollments` | A student's section and roll number for one year. Promotion adds next year's row | Unique (year, student) and (section, roll number) |
 | calendar | `calendar_events` | Holidays, events and exam days that affect working days | CHECK end ≥ start |
-| attendance | `attendance_sessions` | One register: section × date × kind (DAY, FORENOON, AFTERNOON, PERIOD) × period (0 unless PERIOD). Periods keep the subject taught (the timetable's, or the one the teacher gave). `taken_by` is who took it last; `is_substitute` marks a period taken by a teacher neither timetabled for it nor assigned its subject | Unique (section, date, kind, period); CHECK period > 0 exactly when kind is PERIOD; CHECK only periods are substitute registers |
-| attendance | `attendance_mode_rules` | How attendance is taken (DAILY, TWO_SESSIONS, PERIOD_WISE) from a date, for the school (`class_id` null) or one class (mode null = follow the school) | Partial unique (school, date) and (class, date); a school rule must have a mode. **A trigger refuses a rule starting before tomorrow** in the school's time zone (ZA422) |
+| attendance | `attendance_sessions` | One register: section × date × kind (DAY, FORENOON, AFTERNOON, PERIOD) × period (0 unless PERIOD). Periods keep the subject taught (the timetable's, or the one the teacher gave). `taken_by` is who took it last; `is_substitute` marks a period taken by a teacher other than the slot's timetabled teacher | Unique (section, date, kind, period); CHECK period > 0 exactly when kind is PERIOD; CHECK only periods are substitute registers. **A trigger refuses a period register for a free period** (ZA409) |
+| attendance | `attendance_mode_rules` | How the school takes attendance (DAILY, TWO_SESSIONS, PERIOD_WISE) from a date on: one mode for every class, the latest rule starting on or before a day (none: DAILY) | Partial unique (school, date) on active rules. **A trigger refuses a rule starting before tomorrow** in the school's time zone (ZA422) |
+| attendance | `attendance_free_periods` | A free (leisure) period: section × date × period with nobody of the section to take it, with `reason`, `marked_by`/`marked_at` and any lock override. No register is due: never a missing register, in nobody's attendance. Removing one sets `is_active` false; marking it again revives the row | Unique (section, date, period); CHECK period 1–20. **Triggers:** a period is free or has a register, never both (ZA409, serialised by an advisory lock on the period); archived years read-only |
 | attendance | `attendance_records` | One student's mark in a register: PRESENT, ABSENT, LATE, HALF_DAY, EXCUSED | Unique (session, student). Indexed by student/date and section/date |
 | timetable | `periods` | The bell schedule for a year | Partial unique (year, period number). CHECK end > start |
 | timetable | `timetable_slots` | Section × weekday × period → subject, teacher, room | Partial uniques stop clashes: one slot per section, one per teacher, one per room, per weekday and period |
@@ -223,6 +224,7 @@ erDiagram
   sections ||--o{ attendance_sessions : ""
   attendance_sessions ||--o{ attendance_records : ""
   students ||--o{ attendance_records : ""
+  sections ||--o{ attendance_free_periods : ""
   periods ||--o{ timetable_slots : ""
   sections ||--o{ timetable_slots : ""
 

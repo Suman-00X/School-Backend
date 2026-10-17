@@ -118,18 +118,17 @@ export const analyticsQueries = {
     (
       await rows(sql`
         ${studentDays(tenantId, academicYearId, from, to)}
-        SELECT s.id AS "sectionId", s.class_id AS "classId", c.class_name || '-' || s.section_name AS section,
+        SELECT s.id AS "sectionId", c.class_name || '-' || s.section_name AS section,
                sum(d.credit) AS attended, sum(d.countable) AS countable, count(DISTINCT d.date) AS days,
                sum(d.periods_attended) AS "periodsAttended", sum(d.periods_countable) AS "periodsCountable"
         FROM sections s
         JOIN classes c ON c.id = s.class_id
         LEFT JOIN student_days d ON d.section_id = s.id
         WHERE s.tenant_id = ${tenantId} AND s.academic_year_id = ${academicYearId} AND s.is_active
-        GROUP BY s.id, s.class_id, c.class_name, c.class_order, s.section_name
+        GROUP BY s.id, c.class_name, c.class_order, s.section_name
         ORDER BY c.class_order, s.section_name`)
     ).map(r => ({
       sectionId: r.sectionId,
-      classId: r.classId,
       section: r.section,
       daysRecorded: num(r.days),
       percentage: percent(r.attended, r.countable),

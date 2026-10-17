@@ -7,16 +7,8 @@ import { missingRegisterService } from "../services/missingRegisters.service.js"
 const windowText = policy =>
   policy.editWindowDays === 0 ? "the same day" : `${policy.editWindowDays} day(s) after the date`;
 
-/* "from 2026-10-18 the school takes attendance period by period; Class 5 twice a day (forenoon and afternoon)" */
-const changeText = change => {
-  const parts = [
-    change.mode && `the school takes attendance ${MODE_TEXT[change.mode]}`,
-    ...change.classModes.map(c =>
-      c.mode ? `${c.className} ${MODE_TEXT[c.mode]}` : `${c.className} follows the school`
-    )
-  ].filter(Boolean);
-  return `from ${change.effectiveFrom} ${parts.join("; ")}`;
-};
+/* "from 2026-10-18 the school takes attendance period by period" */
+const changeText = change => `from ${change.effectiveFrom} the school takes attendance ${MODE_TEXT[change.mode]}`;
 
 export const attendanceController = {
   getPolicy: async (req, res) => {
@@ -64,16 +56,23 @@ export const attendanceController = {
 
   coverSections: async (req, res) => {
     const result = await coverService.sections(req.context);
-    return ok(res, result, `${result.sections.length} section(s) take attendance by period today`);
+    const message =
+      result.mode === "PERIOD_WISE"
+        ? `${result.sections.length} section(s) take attendance by period today`
+        : `The school takes attendance ${MODE_TEXT[result.mode]} today: there are no period registers to cover`;
+    return ok(res, result, message);
   },
 
   coverSection: async (req, res) => {
     const result = await coverService.section(req.context, req.params.sectionId);
-    const open = result.periods.filter(period => !period.taken).length;
+    const open = result.periods.filter(period => !period.taken && !period.free).length;
+    const free = result.periods.filter(period => period.free).length;
     return ok(
       res,
       result,
-      `${result.section.label} today: ${open} of ${result.periods.length} period register(s) not taken yet`
+      `${result.section.label} today: ${open} of ${result.periods.length} period register(s) not taken yet${
+        free ? `, ${free} free period(s)` : ""
+      }`
     );
   },
 

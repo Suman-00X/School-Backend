@@ -1,6 +1,6 @@
 import { transaction } from "../../../../common/database/postgres.js";
 import { publish } from "../../../../common/events/events.js";
-import { forbidden, notFound, unprocessable } from "../../../../common/http/errors.js";
+import { conflict, forbidden, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { tenantToday } from "../../../../common/tenancy/tenant.service.js";
 import { addDays, isoWeekday, minDate } from "../../../../common/utils/date.util.js";
 import { academicYearService } from "../../academic-years/index.js";
@@ -13,6 +13,7 @@ import { subjectService } from "../../subjects/index.js";
 import { OUTSIDE_SCOPE, teachingScope } from "../../teacher-assignments/index.js";
 import { periodService, timetableService } from "../../timetable/index.js";
 import {
+  attendanceFreePeriodRepository,
   attendancePolicyRepository,
   attendanceRecordRepository,
   attendanceSessionRepository
@@ -44,21 +45,28 @@ const sectionView = section => ({
   className: section.class?.className
 });
 
-const loadSection = async (ctx, sectionId) => {
+export const loadSection = async (ctx, sectionId) => {
   const section = await sectionService.findById(ctx, sectionId);
   if (!section) throw notFound("Section");
   const academicYear = await academicYearService.findById(ctx, section.academicYearId);
   return { section, academicYear };
 };
 
+/* Why the school is closed on a date ("a holiday" …), or null on a working day */
+export const closureOf = async (ctx, academicYear, date) => {
+  const closure = await calendarService.closureOn(ctx, academicYear, date);
+  return closure ? (CLOSURE_LABELS[closure] ?? closure) : null;
+};
+
 /* Locked once the edit window after the date has passed */
-const lockState = (policy, date, today) => {
+export const lockState = (policy, date, today) => {
   const lastEditable = addDays(date, policy.editWindowDays);
   return { locked: lastEditable < today, editableUntil: lastEditable };
 };
 
-/* A locked register: override roles only, with a reason -> the override to record (or null) */
-const checkLock = (ctx, policy, date, today, overrideReason) => {
+/* A locked register (or free period): override roles only, with a reason -> the override
+   to record (or null) */
+export const checkLock = (ctx, policy, date, today, overrideReason) => {
   const { locked, editableUntil } = lockState(policy, date, today);
   if (!locked) return null;
   if (!policy.overrideRoles.includes(ctx.role)) {
@@ -70,32 +78,47 @@ const checkLock = (ctx, policy, date, today, overrideReason) => {
   return { lockOverrideReason: overrideReason, lockOverriddenBy: ctx.userId, lockOverriddenAt: new Date() };
 };
 
-/* The register must be one the class's mode takes on that date */
-const assertKindFits = (mode, kind, label, date) => {
+/* The policy row in a write transaction. Mode changes start tomorrow at the earliest, so
+   only a write for today can meet one (made just before midnight): it waits FOR SHARE
+   behind it, and vice versa */
+export const policyForWrite = (ctx, policyId, date, today, tx) =>
+  date === today
+    ? attendancePolicyRepository.lock(ctx.tenantId, policyId, { dbc: tx, strength: "share" })
+    : attendancePolicyRepository.findById(ctx.tenantId, policyId, { dbc: tx });
+
+/* The register must be one the school's mode takes on that date */
+const assertKindFits = (mode, kind, date) => {
   if (!ATTENDANCE_MODE_KINDS[mode].includes(kind)) {
-    throw unprocessable(`On ${date} ${label} takes attendance ${MODE_TEXT[mode]}: record ${EXPECTED[mode]}`);
+    throw unprocessable(`On ${date} the school takes attendance ${MODE_TEXT[mode]}: record ${EXPECTED[mode]}`);
   }
 };
 
-/* A period register: a period of the bell schedule that is not a break (D-66: no hard
-   timetable rule, so substitutes can take it). The subject is the timetable's for that
-   weekday unless `subjectId` says otherwise (a substitute who taught their own subject);
-   with no class timetabled it is required. A subject sent must be taught in the section
-   or its class. -> { period, slot (or null), subject } */
-const lessonFor = async (ctx, section, date, periodNumber, subjectId) => {
-  const weekday = isoWeekday(date);
+/* A period of the bell schedule that is not a break -> period */
+export const periodOf = async (ctx, section, periodNumber) => {
   const period = (await periodService.findAllInYear(ctx, section.academicYearId)).find(
     p => p.periodNumber === periodNumber
   );
   if (!period) throw unprocessable(`Period ${periodNumber} is not in the bell schedule of the academic year`);
   if (period.isBreak) throw unprocessable(`${period.name} is a break: no register is taken in it`);
-  const slot = await timetableService.lessonAt(ctx, section.id, weekday, period.id);
+  return period;
+};
+
+/* A period register on a date -> { period, slot (the class timetabled then, or null) } */
+const lessonAt = async (ctx, section, date, periodNumber) => {
+  const period = await periodOf(ctx, section, periodNumber);
+  return { period, slot: await timetableService.lessonAt(ctx, section.id, isoWeekday(date), period.id) };
+};
+
+/* The subject taught: the timetable's for that weekday unless `subjectId` says otherwise
+   (a substitute who taught their own subject); with no class timetabled it is required.
+   A subject sent must be taught in the section or its class. */
+const subjectOf = async (ctx, section, date, { period, slot }, subjectId) => {
   if (!subjectId && !slot) {
     throw unprocessable(
-      `${sectionLabel(section)} has no class in ${period.name} on ${WEEKDAY_NAMES[weekday]}s: send the subjectId of the subject taught`
+      `${sectionLabel(section)} has no class in ${period.name} on ${WEEKDAY_NAMES[isoWeekday(date)]}s: send the subjectId of the subject taught`
     );
   }
-  if (!subjectId || subjectId === slot?.subjectId) return { period, slot, subject: slot.subject };
+  if (!subjectId || subjectId === slot?.subjectId) return slot.subject;
 
   const subject = await subjectService.findById(ctx, subjectId);
   if (!subject || !(await sectionSubjectService.isTaughtInClass(ctx, section, subjectId))) {
@@ -103,11 +126,17 @@ const lessonFor = async (ctx, section, date, periodNumber, subjectId) => {
       `${subject?.subjectName ?? "The subject sent"} is not taught in ${sectionLabel(section)} or its class`
     );
   }
-  return { period, slot, subject };
+  return subject;
 };
 
+/* Is the teacher (scope) the one timetabled in the slot? Only in a year of their scope. */
+const timetabledIn = (scope, section, slot) =>
+  Boolean(slot?.teacherId) &&
+  slot.teacherId === scope.teacherId &&
+  Boolean(scope.academicYearIds?.includes(section.academicYearId));
+
 /* Daily and half-day registers: the class teacher or the deputy class teacher.
-   ADMIN/PRINCIPAL: any. (Period registers: any teacher, see lessonFor.) */
+   ADMIN/PRINCIPAL: any. */
 const assertSessionRecorder = async (ctx, section, kind) => {
   await teachingScope.assertSection(ctx, section.id);
   if (await teachingScope.leadsSection(ctx, section.id)) return;
@@ -116,14 +145,56 @@ const assertSessionRecorder = async (ctx, section, kind) => {
   );
 };
 
-/* A teacher taking a period they are neither timetabled for nor assigned its subject in
-   the section. ADMIN and PRINCIPAL record for others and are never substitutes. */
-const isSubstitute = async (ctx, section, { slot, subject }) => {
+/* Period registers: the slot's timetabled teacher, any subject teacher of the section, its
+   class teacher or deputy; ADMIN and PRINCIPAL. When none of them can, the period is free. */
+const assertPeriodRecorder = async (ctx, section, { period, slot }) => {
   const scope = await teachingScope.of(ctx);
-  if (!scope) return false;
-  if (slot?.teacherId === scope.teacherId) return false;
-  return !scope.subjectsBySection.get(section.id)?.has(subject.id);
+  if (!scope || timetabledIn(scope, section, slot) || (await teachingScope.canAccessSection(ctx, section.id))) return;
+  throw forbidden(
+    `Only a teacher of ${sectionLabel(section)} can take its ${period.name} register; otherwise mark the period free`
+  );
 };
+
+/* Anyone but the slot's timetabled teacher stands in for them. With nobody timetabled,
+   nobody is replaced. ADMIN and PRINCIPAL record for others and are never substitutes. */
+const isSubstitute = async (ctx, { slot }) => {
+  const scope = await teachingScope.of(ctx);
+  return Boolean(scope && slot?.teacherId && slot.teacherId !== scope.teacherId);
+};
+
+/* A free period has no register: it must be removed first */
+const assertNotFree = async (ctx, section, date, period, { dbc }) => {
+  const free = await attendanceFreePeriodRepository.findAt(
+    ctx.tenantId,
+    { sectionId: section.id, date, periodNumber: period.periodNumber },
+    { dbc }
+  );
+  if (free) {
+    throw conflict(
+      `${period.name} of ${sectionLabel(section)} on ${date} is a free period (${free.reason}): remove the free period first to take its register`
+    );
+  }
+};
+
+/* Outside their sections a teacher reads nothing, except the slot's timetabled teacher:
+   that period's register, which they take */
+const assertTimetabledReader = async (ctx, section, { date, kind, periodNumber }) => {
+  const scope = await teachingScope.of(ctx);
+  if (kind === "PERIOD") {
+    const lessons = await timetableService.lessonsOf(ctx, section.id);
+    const slot = lessons.find(l => l.weekday === isoWeekday(date) && l.period.periodNumber === periodNumber);
+    if (timetabledIn(scope, section, slot)) return;
+  }
+  throw forbidden(OUTSIDE_SCOPE);
+};
+
+/* A free period, as shown with the day's registers */
+export const freeView = free => ({
+  id: free.id,
+  reason: free.reason,
+  markedBy: free.markedBy,
+  markedAt: free.markedAt
+});
 
 /* "Period 2 (English)", "Forenoon" … */
 export const registerLabel = ({ kind, periodNumber, periodName, subjectName }) => {
@@ -167,7 +238,7 @@ export const attendancePolicyService = {
     return { ...policy, ...(await attendanceModeService.view(ctx, await tenantToday(ctx.tenantId))) };
   },
 
-  update: async (ctx, { mode, classModes, modeEffectiveFrom, ...settings }) => {
+  update: async (ctx, { mode, modeEffectiveFrom, ...settings }) => {
     const policy = await attendancePolicyRepository.ensure(ctx.tenantId);
     const change = await transaction(async tx => {
       await attendancePolicyRepository.lock(ctx.tenantId, policy.id, { dbc: tx });
@@ -176,12 +247,8 @@ export const attendancePolicyService = {
       if (Object.keys(settings).length) {
         await attendancePolicyRepository.update(ctx.tenantId, policy.id, settings, { dbc: tx });
       }
-      return mode || classModes?.length
-        ? attendanceModeService.schedule(
-            ctx,
-            { mode, classModes, effectiveFrom: modeEffectiveFrom },
-            { dbc: tx, today }
-          )
+      return mode
+        ? attendanceModeService.schedule(ctx, { mode, effectiveFrom: modeEffectiveFrom }, { dbc: tx, today })
         : null;
     });
     return { ...(await attendancePolicyService.get(ctx)), change };
@@ -196,16 +263,16 @@ export const attendanceService = {
   ) => {
     const kind = requestedKind ?? (periodNumber ? "PERIOD" : "DAY");
     const { section, academicYear } = await loadSection(ctx, sectionId);
-    const label = sectionLabel(section);
 
-    /* Period registers: whoever actually takes the class, any teacher (D-66) */
-    if (kind !== "PERIOD") await assertSessionRecorder(ctx, section, kind);
+    /* Period registers: a teacher of the section (substitutes included) or the timetabled one */
+    const lesson = kind === "PERIOD" ? await lessonAt(ctx, section, date, periodNumber) : null;
+    if (lesson) await assertPeriodRecorder(ctx, section, lesson);
+    else await assertSessionRecorder(ctx, section, kind);
 
     const today = await tenantToday(ctx.tenantId);
     if (date > today) throw unprocessable("Attendance cannot be recorded for a future date");
-    const closure = await calendarService.closureOn(ctx, academicYear, date);
-    if (closure)
-      throw unprocessable(`Attendance cannot be recorded on ${date}: it is ${CLOSURE_LABELS[closure] ?? closure}`);
+    const closure = await closureOf(ctx, academicYear, date);
+    if (closure) throw unprocessable(`Attendance cannot be recorded on ${date}: it is ${closure}`);
     if (SESSION_KINDS.includes(kind) && records.some(record => record.status === "HALF_DAY")) {
       throw unprocessable(
         "HALF_DAY is not used in forenoon and afternoon registers: mark the session PRESENT, LATE, ABSENT or EXCUSED (present in one session and absent in the other makes a half day)"
@@ -221,16 +288,13 @@ export const attendanceService = {
 
     const { id: policyId } = await attendancePolicyRepository.ensure(ctx.tenantId);
     const result = await transaction(async tx => {
-      /* Mode changes start tomorrow at the earliest, so only today's register can meet
-         one (made just before midnight): it waits FOR SHARE behind it, and vice versa */
-      const policy =
-        date === today
-          ? await attendancePolicyRepository.lock(ctx.tenantId, policyId, { dbc: tx, strength: "share" })
-          : await attendancePolicyRepository.findById(ctx.tenantId, policyId, { dbc: tx });
-      const mode = await attendanceModeService.modeOn(ctx, section.classId, date, { dbc: tx });
-      assertKindFits(mode, kind, label, date);
-      const lesson = kind === "PERIOD" ? await lessonFor(ctx, section, date, periodNumber, subjectId) : null;
-      const substitute = lesson ? await isSubstitute(ctx, section, lesson) : false;
+      const policy = await policyForWrite(ctx, policyId, date, today, tx);
+      const mode = await attendanceModeService.modeOn(ctx, date, { dbc: tx });
+      assertKindFits(mode, kind, date);
+      const subject = lesson ? await subjectOf(ctx, section, date, lesson, subjectId) : null;
+      /* A trigger holds the same line against a free period marked meanwhile */
+      if (lesson) await assertNotFree(ctx, section, date, lesson.period, { dbc: tx });
+      const substitute = lesson ? await isSubstitute(ctx, lesson) : false;
       const override = checkLock(ctx, policy, date, today, overrideReason);
 
       const session = await attendanceSessionRepository.upsert(
@@ -241,7 +305,7 @@ export const attendanceService = {
           date,
           kind,
           periodNumber,
-          subjectId: lesson?.subject.id ?? null,
+          subjectId: subject?.id ?? null,
           takenBy: ctx.userId,
           isSubstitute: substitute,
           remarks: remarks ?? null,
@@ -266,12 +330,12 @@ export const attendanceService = {
         })),
         { dbc: tx }
       );
-      return { session, mode, lesson, substitute, override };
+      return { session, mode, subject, substitute, override };
     });
 
     const counts = emptyCounts();
     for (const record of records) counts[record.status]++;
-    const subject = result.lesson?.subject ?? null;
+    const { subject } = result;
 
     await publish(ATTENDANCE_RECORDED, {
       tenantId: ctx.tenantId,
@@ -297,7 +361,7 @@ export const attendanceService = {
         label: registerLabel({
           kind,
           periodNumber,
-          periodName: result.lesson?.period.name,
+          periodName: lesson?.period.name,
           subjectName: subject?.subjectName
         }),
         subject: subject && { id: subject.id, subjectName: subject.subjectName },
@@ -308,37 +372,28 @@ export const attendanceService = {
     };
   },
 
-  /* A section's day: the registers the mode expects (and any taken), and every enrolled
-     student's marks. With `kind` (and periodNumber for a period), or in DAILY mode, one
-     register; otherwise the whole day, with each student's day status.
-     Outside their sections, a teacher sees one period register only: today's, to cover the
-     class as a substitute (the roster with names and roll numbers), or one they took. */
+  /* A section's day: the registers the school's mode expects (and any taken), the free
+     periods with their reason, and every enrolled student's marks. With `kind` (and
+     periodNumber for a period), or in DAILY mode, one register; otherwise the whole day,
+     with each student's day status. A teacher outside the section reads nothing, except
+     the slot's timetabled teacher: that one period's register. */
   register: async (ctx, { sectionId, date, kind, periodNumber }) => {
     const { section } = await loadSection(ctx, sectionId);
-    const sessions = await attendanceSessionRepository.findInRange(ctx.tenantId, {
-      sectionIds: [sectionId],
-      from: date,
-      to: date
-    });
-    const readBack = !(await teachingScope.canAccessSection(ctx, sectionId));
-    if (readBack) {
-      const period =
-        kind === "PERIOD" ? sessions.find(s => s.kind === "PERIOD" && s.periodNumber === periodNumber) : null;
-      const tookIt = period?.takenBy === ctx.userId;
-      /* Covering today's class: open while nobody else has taken it */
-      const covering = kind === "PERIOD" && !period && date === (await tenantToday(ctx.tenantId));
-      if (!tookIt && !covering) throw forbidden(OUTSIDE_SCOPE);
-    }
+    const outsider = !(await teachingScope.canAccessSection(ctx, sectionId));
+    if (outsider) await assertTimetabledReader(ctx, section, { date, kind, periodNumber });
 
-    const [mode, marks, roster, policy, today] = await Promise.all([
-      attendanceModeService.modeOn(ctx, section.classId, date),
+    const day = { sectionIds: [sectionId], from: date, to: date };
+    const [mode, sessions, free, marks, roster, policy, today] = await Promise.all([
+      attendanceModeService.modeOn(ctx, date),
+      attendanceSessionRepository.findInRange(ctx.tenantId, day),
+      attendanceFreePeriodRepository.findInRange(ctx.tenantId, day),
       attendanceRecordRepository.findInRange(ctx.tenantId, { sectionId, from: date, to: date }),
       enrollmentService.findRoster(ctx, sectionId),
       attendancePolicyRepository.ensure(ctx.tenantId),
       tenantToday(ctx.tenantId)
     ]);
 
-    /* Expected registers of the mode, then any other register taken that day */
+    /* Expected registers of the mode, then any other register taken or period freed that day */
     let expected = ATTENDANCE_MODE_KINDS[mode].filter(k => k !== "PERIOD").map(k => ({ kind: k, periodNumber: 0 }));
     if (mode === "PERIOD_WISE") {
       expected = (await timetableService.lessonsOf(ctx, sectionId))
@@ -352,9 +407,15 @@ export const attendanceService = {
         }));
     }
     const taken = new Map(sessions.map(session => [registerKey(session), session]));
-    const all = [...expected, ...sessions.filter(s => !expected.some(e => registerKey(e) === registerKey(s)))];
+    const freed = new Map(free.map(row => [registerKey({ kind: "PERIOD", periodNumber: row.periodNumber }), row]));
+    const all = [...expected];
+    for (const other of [...sessions, ...free.map(row => ({ kind: "PERIOD", periodNumber: row.periodNumber }))]) {
+      if (!all.some(register => registerKey(register) === registerKey(other))) all.push(other);
+    }
+    all.sort((a, b) => a.periodNumber - b.periodNumber);
     const registers = all.map(register => {
       const session = taken.get(registerKey(register));
+      const freePeriod = freed.get(registerKey(register));
       /* The subject taught (a substitute may have taught their own), else the timetable's */
       const subject = session?.subjectId
         ? { id: session.subjectId, subjectName: session.subjectName }
@@ -375,6 +436,8 @@ export const attendanceService = {
         takenAt: session?.takenAt ?? null,
         takenBy: session?.takenBy ?? null,
         substitute: session?.isSubstitute ?? false,
+        /* A free period: no register, counted in nobody's attendance */
+        free: freePeriod ? freeView(freePeriod) : null,
         lockOverride: session?.lockOverriddenAt
           ? { reason: session.lockOverrideReason, by: session.lockOverriddenBy, at: session.lockOverriddenAt }
           : null
@@ -394,8 +457,11 @@ export const attendanceService = {
         takenAt: null,
         takenBy: null,
         substitute: false,
+        free: null,
         lockOverride: null
       });
+    /* Free periods need no register */
+    const due = registers.filter(r => !r.free);
     const byStudent = marksByStudentDay(marks);
 
     return {
@@ -404,14 +470,15 @@ export const attendanceService = {
       mode,
       kind: single?.kind ?? null,
       periodNumber: single?.periodNumber ?? null,
-      taken: one ? one.taken : registers.length > 0 && registers.every(r => r.taken),
+      taken: one ? one.taken : due.length > 0 && due.every(r => r.taken),
       takenAt: one?.takenAt ?? null,
       takenBy: one?.takenBy ?? null,
       substitute: one?.substitute ?? false,
+      free: one?.free ?? null,
       ...lockState(policy, date, today),
       lockOverride: one?.lockOverride ?? null,
-      /* Reading back a register taken as a substitute: that register only */
-      registers: readBack ? registers.filter(r => r.key === singleKey) : registers,
+      /* The timetabled teacher from outside the section: their period only */
+      registers: outsider ? registers.filter(r => r.key === singleKey) : registers,
       students: roster.map(enrollment => {
         const own = byStudent.get(`${enrollment.studentId}|${date}`) ?? NO_MARKS;
         const base = {
@@ -437,17 +504,18 @@ export const attendanceService = {
     await teachingScope.assertSection(ctx, sectionId);
 
     const { workingDays, from: rangeFrom, to: rangeTo } = await rangeOf(ctx, academicYear, { from, to });
-    const [roster, sessions, marks, resolve, policy] = await Promise.all([
+    const [roster, sessions, marks, modeOn, policy] = await Promise.all([
       enrollmentService.findRoster(ctx, sectionId),
       attendanceSessionRepository.findInRange(ctx.tenantId, { sectionIds: [sectionId], from: rangeFrom, to: rangeTo }),
       attendanceRecordRepository.findInRange(ctx.tenantId, { sectionId, from: rangeFrom, to: rangeTo }),
-      attendanceModeService.resolver(ctx),
+      attendanceModeService.timeline(ctx),
       attendancePolicyRepository.ensure(ctx.tenantId)
     ]);
 
     const registersOn = groupBy(sessions, session => session.date);
     const byStudent = marksByStudentDay(marks);
-    const modes = workingDays.map(day => resolve(section.classId, day));
+    /* The school may have switched modes within the range: each day has its own */
+    const modes = workingDays.map(modeOn);
     const periodWise = workingDays.length > 0 && modes.every(mode => mode === "PERIOD_WISE");
 
     const students = roster.map(enrollment => ({
@@ -505,15 +573,14 @@ export const attendanceService = {
     /* A student who changed section mid-year: each day uses the registers of the section marked in */
     const sectionOn = new Map(marks.map(mark => [mark.date, mark.sectionId]));
     const sectionIds = [...new Set([enrollment.sectionId, ...sectionOn.values()])];
-    const [sessions, section, resolve, policy] = await Promise.all([
+    const [sessions, modeOn, policy] = await Promise.all([
       attendanceSessionRepository.findInRange(ctx.tenantId, { sectionIds, from: rangeFrom, to: rangeTo }),
-      sectionService.findById(ctx, enrollment.sectionId),
-      attendanceModeService.resolver(ctx),
+      attendanceModeService.timeline(ctx),
       attendancePolicyRepository.ensure(ctx.tenantId)
     ]);
     const registersOn = groupBy(sessions, session => `${session.sectionId}|${session.date}`);
     const byStudent = marksByStudentDay(marks);
-    const modes = workingDays.map(day => resolve(section.classId, day));
+    const modes = workingDays.map(modeOn);
 
     const results = workingDays.map(day => {
       const registers = registersOn.get(`${sectionOn.get(day) ?? enrollment.sectionId}|${day}`) ?? [];

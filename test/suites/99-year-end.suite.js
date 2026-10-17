@@ -183,6 +183,15 @@ describe("year archiving", () => {
     assert.equal(viaId.status, 409);
     assert.equal(viaId.body.message, "Academic year 2025-26 is archived and read-only");
     assert.equal(viaId.body.error.code, "CONFLICT");
+    /* Free periods too, like the year's registers */
+    await assert.rejects(
+      h.pool.query(
+        `INSERT INTO attendance_free_periods (tenant_id, academic_year_id, section_id, date, period_number, reason, marked_by)
+         VALUES ($1, $2, $3, '2025-09-04', 1, 'Teacher on leave', $4)`,
+        [h.tenant.id, world.y0.id, world.s1APrev.id, h.admin.id]
+      ),
+      error => error.code === "ZA409" && error.message === "Academic year 2025-26 is archived and read-only"
+    );
 
     const year = await request("PATCH", `${A}/academic-years/${world.y0.id}`, { body: { description: "x" } });
     assert.equal(year.status, 409);

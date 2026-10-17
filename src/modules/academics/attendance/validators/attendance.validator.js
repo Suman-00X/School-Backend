@@ -1,6 +1,6 @@
 import { z } from "../../../../common/validation/zod.js";
 import { daysBetween } from "../../../../common/utils/date.util.js";
-import { date, id, idParams, optionalText, patchBody } from "../../../../common/validation/schemas.js";
+import { date, id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
 import { ATTENDANCE_KINDS, ATTENDANCE_MODES, ATTENDANCE_STATUSES } from "../../shared/constants/academic.constants.js";
 
 const range = z
@@ -31,20 +31,22 @@ export const attendanceValidators = {
           .transform(roles => [...new Set(roles)]),
         /* Period-wise days: % of periods to attend for the day to count as present */
         periodPresenceThreshold: z.number().int().min(1).max(100),
-        /* The school's mode, and per-class overrides (mode null = follow the school) */
+        /* The school's mode: the same for every class */
         mode: z.enum(ATTENDANCE_MODES),
-        classModes: z
-          .array(z.object({ classId: id(), mode: z.enum(ATTENDANCE_MODES).nullable() }))
-          .min(1)
-          .max(100)
-          .refine(list => new Set(list.map(c => c.classId)).size === list.length, "must not list the same class twice"),
         /* Default: tomorrow, also the earliest (D-66) */
-        modeEffectiveFrom: date()
+        modeEffectiveFrom: date(),
+        /* Gone: refused rather than silently ignored */
+        classModes: z.unknown()
       })
-    ).refine(body => !body.modeEffectiveFrom || body.mode || body.classModes, {
-      path: ["modeEffectiveFrom"],
-      message: "is only used with mode or classModes"
-    })
+    )
+      .refine(body => body.classModes === undefined, {
+        path: ["classModes"],
+        message: "is not supported: the attendance mode is the same for the whole school"
+      })
+      .refine(body => !body.modeEffectiveFrom || body.mode, {
+        path: ["modeEffectiveFrom"],
+        message: "is only used with mode"
+      })
   },
   record: {
     body: z
@@ -90,6 +92,19 @@ export const attendanceValidators = {
   },
   summary: { query: range.and(z.object({ sectionId: id() })) },
   cover: { params: idParams("sectionId") },
+  markFree: {
+    body: z.object({
+      sectionId: id(),
+      date: date(),
+      periodNumber: periodNumber().min(1),
+      /* Why the period is free: "Science teacher on leave" */
+      reason: text(300),
+      /* Required (and only allowed for override roles) once the date is locked */
+      overrideReason: optionalText(500)
+    })
+  },
+  listFree: { query: listQuery({ sectionId: id().optional() }).and(range) },
+  removeFree: { params: idParams("freePeriodId"), query: z.object({ overrideReason: optionalText(500) }) },
   missingRegisters: {
     query: z
       .object({ from: date(), to: date(), sectionId: id().optional(), teacherId: id().optional() })

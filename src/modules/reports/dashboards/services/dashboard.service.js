@@ -58,18 +58,19 @@ export const dashboardService = {
   attendance: async (ctx, query) => {
     const year = yearOf(ctx);
     const { from, to } = await rangeOf(ctx, query);
-    const [bySection, trend, low, modeOf] = await Promise.all([
+    const [bySection, trend, low, modes] = await Promise.all([
       q.attendanceBySection(ctx.tenantId, year.id, from, to),
       q.attendanceTrend(ctx.tenantId, year.id, from, to),
       q.lowAttendance(ctx.tenantId, year.id, from, to, { threshold: query.threshold, minDays: query.minDays }),
-      attendanceModeService.resolver(ctx)
+      attendanceModeService.segments(ctx, from, to)
     ]);
     return {
       from,
       to,
       threshold: query.threshold,
-      /* Each section's mode on the last day of the range */
-      bySection: bySection.map(({ classId, ...section }) => ({ ...section, mode: modeOf(classId, to) })),
+      /* The school's modes over the range (one mode for every section): [{ mode, from, to }] */
+      modes,
+      bySection,
       trend,
       lowAttendance: low
     };

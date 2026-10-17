@@ -1,6 +1,5 @@
 import { unprocessable } from "../../../../common/http/errors.js";
 import { addDays } from "../../../../common/utils/date.util.js";
-import { classService } from "../../classes/index.js";
 import { attendanceModeRuleRepository } from "../repositories/attendance.repository.js";
 
 export const DEFAULT_MODE = "DAILY";
@@ -11,66 +10,56 @@ export const MODE_TEXT = {
   PERIOD_WISE: "period by period"
 };
 
-/* The rule in force on `date` among rules sorted by effectiveFrom */
-const inForce = (rules = [], date) => {
-  let found = null;
+/* rules in effectiveFrom order -> date => the school's mode that day: the latest rule
+   starting on or before it, else DAILY */
+const timelineOf = rules => date => {
+  let mode = DEFAULT_MODE;
   for (const rule of rules) {
     if (rule.effectiveFrom > date) break;
-    found = rule;
+    mode = rule.mode;
   }
-  return found;
+  return mode;
 };
 
-/* rules -> (classId, date) => mode. A class's own rule wins; mode null follows the school. */
-const resolverOf = rules => {
-  const sorted = [...rules].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
-  const school = sorted.filter(rule => !rule.classId);
-  const byClass = new Map();
-  for (const rule of sorted.filter(r => r.classId)) {
-    if (!byClass.has(rule.classId)) byClass.set(rule.classId, []);
-    byClass.get(rule.classId).push(rule);
-  }
-  return (classId, date) =>
-    (classId && inForce(byClass.get(classId), date)?.mode) || inForce(school, date)?.mode || DEFAULT_MODE;
-};
-
+/* The mode is the same for the whole school; it changes over time, from a date on */
 export const attendanceModeService = {
-  /* -> (classId, date) => mode, from one read of the school's rules */
-  resolver: async (ctx, { dbc } = {}) => resolverOf(await attendanceModeRuleRepository.findMany(ctx.tenantId, { dbc })),
+  /* -> date => mode, from one read of the school's rules */
+  timeline: async (ctx, { dbc } = {}) => timelineOf(await attendanceModeRuleRepository.findMany(ctx.tenantId, { dbc })),
 
-  modeOn: async (ctx, classId, date, options) => (await attendanceModeService.resolver(ctx, options))(classId, date),
+  modeOn: async (ctx, date, options) => (await attendanceModeService.timeline(ctx, options))(date),
 
-  /* For the policy: the school's mode today, classes that differ today, and changes still to come */
+  /* The modes over [from, to], calendar days: [{ mode, from, to }] */
+  segments: async (ctx, from, to) => {
+    if (from > to) return [];
+    const rules = await attendanceModeRuleRepository.findMany(ctx.tenantId);
+    const modeOn = timelineOf(rules);
+    const starts = [from, ...rules.map(rule => rule.effectiveFrom).filter(day => day > from && day <= to)];
+    return starts.reduce((segments, start, index) => {
+      const end = index + 1 < starts.length ? addDays(starts[index + 1], -1) : to;
+      const mode = modeOn(start);
+      if (segments.at(-1)?.mode === mode) segments.at(-1).to = end;
+      else segments.push({ mode, from: start, to: end });
+      return segments;
+    }, []);
+  },
+
+  /* For the policy: the school's mode today, and changes still to come */
   view: async (ctx, today) => {
-    const rules = await attendanceModeRuleRepository.findMany(ctx.tenantId, {
-      with: { class: { columns: { id: true, className: true, classOrder: true } } }
-    });
-    const resolve = resolverOf(rules);
-    const schoolMode = resolve(null, today);
-    const classes = new Map(rules.filter(rule => rule.class).map(rule => [rule.classId, rule.class]));
+    const rules = await attendanceModeRuleRepository.findMany(ctx.tenantId);
     return {
-      mode: schoolMode,
-      classModes: [...classes.values()]
-        .sort((a, b) => a.classOrder - b.classOrder)
-        .map(c => ({ classId: c.id, className: c.className, mode: resolve(c.id, today) }))
-        .filter(c => c.mode !== schoolMode),
+      mode: timelineOf(rules)(today),
       scheduled: rules
         .filter(rule => rule.effectiveFrom > today)
-        .map(rule => ({
-          classId: rule.classId,
-          className: rule.class?.className ?? null,
-          mode: rule.mode,
-          effectiveFrom: rule.effectiveFrom
-        }))
+        .map(rule => ({ mode: rule.mode, effectiveFrom: rule.effectiveFrom }))
     };
   },
 
-  /* Schedule a school mode and/or class overrides from one date (default: tomorrow).
-     Runs in the caller's transaction, which holds the policy row FOR UPDATE; `today` is
-     read after taking it. A rule replaces or cancels the same scope's rules from that
-     date on. It starts tomorrow at the earliest (D-66), so registers already taken never
-     change meaning; a database trigger holds the same line. */
-  schedule: async (ctx, { mode, classModes = [], effectiveFrom }, { dbc, today }) => {
+  /* Schedule the school's mode from one date (default: tomorrow). Runs in the caller's
+     transaction, which holds the policy row FOR UPDATE; `today` is read after taking it.
+     The change replaces or cancels the rules from that date on; choosing the mode
+     already in force then only cancels them. It starts tomorrow at the earliest (D-66),
+     so registers already taken never change meaning; a database trigger holds the same line. */
+  schedule: async (ctx, { mode, effectiveFrom }, { dbc, today }) => {
     const tomorrow = addDays(today, 1);
     const from = effectiveFrom ?? tomorrow;
     if (from < tomorrow) {
@@ -78,25 +67,14 @@ export const attendanceModeService = {
         `A new attendance mode can start tomorrow (${tomorrow}) at the earliest. Choose ${tomorrow} or a later date.`
       );
     }
-    const classIds = classModes.map(c => c.classId);
-    if (classIds.length && !(await classService.allExist(ctx, classIds))) {
-      throw unprocessable("classModes: one or more classes do not exist");
-    }
-
-    const scopes = [...(mode ? [{ classId: null, mode }] : []), ...classModes];
-    for (const scope of scopes) {
-      await attendanceModeRuleRepository.retireFrom(ctx.tenantId, { classId: scope.classId, from }, { dbc });
+    await attendanceModeRuleRepository.retireFrom(ctx.tenantId, { from }, { dbc });
+    if ((await attendanceModeService.modeOn(ctx, addDays(from, -1), { dbc })) !== mode) {
       await attendanceModeRuleRepository.create(
         ctx.tenantId,
-        { classId: scope.classId, mode: scope.mode, effectiveFrom: from, setBy: ctx.userId },
+        { mode, effectiveFrom: from, setBy: ctx.userId },
         { dbc }
       );
     }
-    const named = await Promise.all(classModes.map(c => classService.findById(ctx, c.classId)));
-    return {
-      effectiveFrom: from,
-      mode: mode ?? null,
-      classModes: classModes.map((c, index) => ({ ...c, className: named[index].className }))
-    };
+    return { effectiveFrom: from, mode };
   }
 };

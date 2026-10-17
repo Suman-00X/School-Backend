@@ -3,9 +3,12 @@ import { describe, it } from "node:test";
 import { addDays, todayIn } from "../../src/common/utils/date.util.js";
 import { h, world, request, call, get, post, patch, person, settleJobs, tokenFor, uuid } from "../helpers/harness.js";
 
-/* D-11 record-level scope for teachers, and the three attendance systems (D-66):
-   Class 5 (5-A) takes two sessions a day, Class 6 (6-A) takes attendance period by period,
-   both since 1 August.
+/* D-11 record-level scope for teachers, and the three attendance systems (D-66). The mode
+   is the school's, for every class, and changes over time:
+     until 31 July        DAILY (the default: the July registers of earlier suites)
+     1 to 5 August        TWO_SESSIONS (5-A's forenoons and afternoons)
+     from Thu 6 August    PERIOD_WISE (6-A's periods; 5-A has nothing timetabled)
+   People:
      ct5, ct6  class teachers of 5-A and 6-A
      dep5      deputy class teacher of 5-A (set later)
      sci6      Science in 5-A and 6-A (timetable: 6-A Thursday Period 1)
@@ -28,17 +31,17 @@ const lockWaiters = async () =>
     ).rows[0].count
   );
 
-/* Mode changes start tomorrow at the earliest (a trigger enforces it): rules in the
-   past are seeded as if they had been scheduled back then */
+/* Mode changes start tomorrow at the earliest (a trigger enforces it): the school's past
+   modes are seeded as if they had been scheduled back then */
 const seedModeRules = async rules => {
   const client = await h.pool.connect();
   try {
     await client.query("BEGIN");
     await client.query("ALTER TABLE attendance_mode_rules DISABLE TRIGGER attendance_mode_rules_future_only");
-    for (const { classId, mode, effectiveFrom } of rules) {
+    for (const { mode, effectiveFrom } of rules) {
       await client.query(
-        "INSERT INTO attendance_mode_rules (tenant_id, class_id, mode, effective_from, set_by) VALUES ($1, $2, $3, $4, $5)",
-        [h.tenant.id, classId, mode, effectiveFrom, h.admin.id]
+        "INSERT INTO attendance_mode_rules (tenant_id, mode, effective_from, set_by) VALUES ($1, $2, $3, $4)",
+        [h.tenant.id, mode, effectiveFrom, h.admin.id]
       );
     }
     await client.query("ALTER TABLE attendance_mode_rules ENABLE TRIGGER attendance_mode_rules_future_only");
@@ -71,8 +74,8 @@ describe("attendance modes and teacher scope: setup", () => {
     t.s6A = (await post(`${A}/sections`, { classId: t.class6.id, sectionName: "A", classTeacherId: t.ct6.id })).data;
     t.science = (await post(`${A}/subjects`, { subjectName: "Science", subjectCode: "SC56" })).data;
     await seedModeRules([
-      { classId: t.class5.id, mode: "TWO_SESSIONS", effectiveFrom: "2026-08-01" },
-      { classId: t.class6.id, mode: "PERIOD_WISE", effectiveFrom: "2026-08-01" }
+      { mode: "TWO_SESSIONS", effectiveFrom: "2026-08-01" },
+      { mode: "PERIOD_WISE", effectiveFrom: "2026-08-06" }
     ]);
 
     await post(`${A}/section-subjects`, { sectionId: t.s5A.id, subjectId: t.science.id });
@@ -231,23 +234,21 @@ describe("D-11: teachers read only their sections", () => {
 });
 
 describe("attendance modes: policy", () => {
-  it("refuses mode changes starting today or earlier, in the service and in the database", async () => {
+  it("shows the school's mode, and refuses changes starting today or earlier, in the service and in the database", async () => {
     const policy = await get(`${A}/attendance/policy`, { as: h.tokens.ct5 });
-    assert.equal(policy.data.mode, "DAILY");
-    assert.deepEqual(
-      policy.data.classModes.map(c => [c.className, c.mode]),
-      [
-        ["Class 5", "TWO_SESSIONS"],
-        ["Class 6", "PERIOD_WISE"]
-      ]
+    assert.deepEqual([policy.data.mode, policy.data.scheduled], ["PERIOD_WISE", []]);
+    assert.equal(
+      policy.message,
+      "Registers can be changed until 365 day(s) after the date. Attendance is taken period by period."
     );
+    assert.equal("classModes" in policy.data, false, "one mode for every class");
 
     const today = todayIn("Asia/Kolkata");
     const tomorrow = addDays(today, 1);
     const refusal = `A new attendance mode can start tomorrow (${tomorrow}) at the earliest. Choose ${tomorrow} or a later date.`;
     for (const day of [today, "2026-07-01"]) {
       const res = await request("PATCH", `${A}/attendance/policy`, {
-        body: { editWindowDays: 30, mode: "PERIOD_WISE", modeEffectiveFrom: day }
+        body: { editWindowDays: 30, mode: "TWO_SESSIONS", modeEffectiveFrom: day }
       });
       assert.equal(res.status, 422, JSON.stringify(res.body));
       assert.equal(res.body.message, refusal);
@@ -255,14 +256,14 @@ describe("attendance modes: policy", () => {
     const unchanged = (await get(`${A}/attendance/policy`)).data;
     assert.deepEqual(
       [unchanged.mode, unchanged.editWindowDays, unchanged.scheduled],
-      ["DAILY", 365, []],
+      ["PERIOD_WISE", 365, []],
       "nothing saved"
     );
 
     /* The trigger holds the same line for any other write path */
     await assert.rejects(
       h.pool.query(
-        "INSERT INTO attendance_mode_rules (tenant_id, mode, effective_from, set_by) VALUES ($1, 'PERIOD_WISE', $2, $3)",
+        "INSERT INTO attendance_mode_rules (tenant_id, mode, effective_from, set_by) VALUES ($1, 'DAILY', $2, $3)",
         [h.tenant.id, today, h.admin.id]
       ),
       error => error.code === "ZA422" && error.message === refusal
@@ -272,59 +273,49 @@ describe("attendance modes: policy", () => {
   it("starts changes tomorrow by default and lists what is scheduled", async () => {
     const today = todayIn("Asia/Kolkata");
     const later = addDays(today, 30);
-    const scheduled = await patch(`${A}/attendance/policy`, {
-      classModes: [{ classId: world.c1.id, mode: "PERIOD_WISE" }],
-      modeEffectiveFrom: later
-    });
+    const scheduled = await patch(`${A}/attendance/policy`, { mode: "DAILY", modeEffectiveFrom: later });
     assert.equal(
       scheduled.message,
-      `Attendance policy updated: registers lock after 365 day(s) after the date; from ${later} Class 1 period by period`
+      `Attendance policy updated: registers lock after 365 day(s) after the date; from ${later} the school takes attendance once a day`
     );
-    assert.deepEqual(scheduled.data.scheduled, [
-      { classId: world.c1.id, className: "Class 1", mode: "PERIOD_WISE", effectiveFrom: later }
-    ]);
+    assert.deepEqual(scheduled.data.change, { effectiveFrom: later, mode: "DAILY" });
+    assert.deepEqual(scheduled.data.scheduled, [{ mode: "DAILY", effectiveFrom: later }]);
+    assert.equal(scheduled.data.mode, "PERIOD_WISE", "today is unchanged");
+
     /* Registers already taken keep their meaning */
     const july = await get(`${A}/attendance/summary?sectionId=${world.s1A.id}&from=2026-07-06&to=2026-07-11`);
     assert.equal(july.data.students[0].percentage, 40);
     assert.deepEqual(july.data.modes, [{ mode: "DAILY", from: "2026-07-06", to: "2026-07-11" }]);
+    /* Every class follows the school's modes, date by date (working days: Thu 30 July to Fri 7 August) */
+    const across = await get(`${A}/attendance/summary?sectionId=${world.s1A.id}&from=2026-07-30&to=2026-08-07`);
+    assert.deepEqual(across.data.modes, [
+      { mode: "DAILY", from: "2026-07-30", to: "2026-07-31" },
+      { mode: "TWO_SESSIONS", from: "2026-08-01", to: "2026-08-05" },
+      { mode: "PERIOD_WISE", from: "2026-08-06", to: "2026-08-07" }
+    ]);
 
-    /* Following the school again from tomorrow cancels the later change */
-    const reset = await patch(`${A}/attendance/policy`, { classModes: [{ classId: world.c1.id, mode: null }] });
-    assert.equal(reset.data.change.effectiveFrom, addDays(today, 1));
-    assert.match(reset.message, /Class 1 follows the school$/);
-    assert.deepEqual(
-      reset.data.scheduled.map(s => [s.className, s.mode]),
-      [["Class 1", null]]
-    );
+    /* Keeping today's mode from tomorrow cancels the later change, and adds nothing */
+    const reset = await patch(`${A}/attendance/policy`, { mode: "PERIOD_WISE" });
+    assert.deepEqual(reset.data.change, { effectiveFrom: addDays(today, 1), mode: "PERIOD_WISE" });
+    assert.match(reset.message, /; from \S+ the school takes attendance period by period$/);
+    assert.deepEqual(reset.data.scheduled, []);
   });
 
-  it("validates mode changes and keeps them to admins", async () => {
+  it("validates mode changes, refuses class modes and keeps changes to admins", async () => {
     const bad = async (body, status, message) => {
       const res = await request("PATCH", `${A}/attendance/policy`, { body });
       assert.equal(res.status, status, JSON.stringify(res.body));
       if (message) assert.equal(res.body.message, message);
     };
-    await bad(
-      { modeEffectiveFrom: "2026-09-01" },
-      400,
-      "Invalid request: modeEffectiveFrom is only used with mode or classModes"
-    );
+    await bad({ modeEffectiveFrom: "2026-09-01" }, 400, "Invalid request: modeEffectiveFrom is only used with mode");
     await bad({ mode: "WEEKLY" }, 400);
     await bad({ periodPresenceThreshold: 0 }, 400);
     await bad(
-      {
-        classModes: [
-          { classId: t.class5.id, mode: "DAILY" },
-          { classId: t.class5.id, mode: null }
-        ]
-      },
-      400
+      { editWindowDays: 30, classModes: [{ classId: t.class5.id, mode: "DAILY" }] },
+      400,
+      "Invalid request: classModes is not supported: the attendance mode is the same for the whole school"
     );
-    await bad(
-      { classModes: [{ classId: world.y1.id, mode: "DAILY" }] },
-      422,
-      "classModes: one or more classes do not exist"
-    );
+    assert.equal((await get(`${A}/attendance/policy`)).data.editWindowDays, 365, "nothing saved");
     await patch(`${A}/attendance/policy`, { mode: "TWO_SESSIONS" }, { as: h.tokens.principal }, 403);
     await patch(`${A}/attendance/policy`, { mode: "TWO_SESSIONS" }, { as: h.tokens.ct5 }, 403);
   });
@@ -339,7 +330,7 @@ describe("attendance modes: two sessions a day (Class 5)", () => {
     assert.equal(daily.status, 422);
     assert.equal(
       daily.body.message,
-      "On 2026-08-03 Class 5-A takes attendance twice a day (forenoon and afternoon): record a FORENOON or an AFTERNOON register"
+      "On 2026-08-03 the school takes attendance twice a day (forenoon and afternoon): record a FORENOON or an AFTERNOON register"
     );
     const period = await record({
       sectionId: t.s5A.id,
@@ -471,7 +462,7 @@ describe("attendance modes: period by period (Class 6)", () => {
     await expect(
       await record({ sectionId: t.s6A.id, date: "2026-08-06", records: marks(["a6"], ["PRESENT"]) }),
       422,
-      "On 2026-08-06 Class 6-A takes attendance period by period: record one register per period (kind PERIOD with its periodNumber)"
+      "On 2026-08-06 the school takes attendance period by period: record one register per period (kind PERIOD with its periodNumber)"
     );
     await expect(
       await lesson("2026-08-06", 3, ["PRESENT", "PRESENT", "PRESENT"]),
@@ -484,9 +475,9 @@ describe("attendance modes: period by period (Class 6)", () => {
       "Period 9 is not in the bell schedule of the academic year"
     );
     await expect(
-      await lesson("2026-08-05", 1, ["PRESENT", "PRESENT", "PRESENT"]),
+      await lesson("2026-08-07", 1, ["PRESENT", "PRESENT", "PRESENT"]),
       422,
-      "Class 6-A has no class in Period 1 on Wednesdays: send the subjectId of the subject taught"
+      "Class 6-A has no class in Period 1 on Fridays: send the subjectId of the subject taught"
     );
     await expect(
       await lesson("2026-08-06", 1, ["PRESENT", "PRESENT", "PRESENT"], h.tokens.admin, { subjectId: world.math.id }),
@@ -519,6 +510,13 @@ describe("attendance modes: period by period (Class 6)", () => {
   });
 
   it("records who took each period, and marks substitutes", async () => {
+    /* ct5 has no link to 6-A: neither its teacher nor timetabled there */
+    const stranger = await lesson("2026-08-06", 1, ["PRESENT", "ABSENT", "LATE"], h.tokens.ct5);
+    assert.deepEqual(
+      [stranger.status, stranger.body.message],
+      [403, "Only a teacher of Class 6-A can take its Period 1 register; otherwise mark the period free"]
+    );
+
     const science = await lesson("2026-08-06", 1, ["PRESENT", "ABSENT", "LATE"], h.tokens.sci6);
     assert.equal(science.status, 201);
     assert.equal(science.body.message, "Period 1 (Science) attendance recorded for 3 student(s)");
@@ -530,11 +528,11 @@ describe("attendance modes: period by period (Class 6)", () => {
     const timetabled = await lesson("2026-08-06", 2, ["PRESENT", "ABSENT", "ABSENT"], h.tokens.sub6);
     assert.deepEqual([timetabled.status, timetabled.body.data.session.substitute], [201, false]);
     await settleJobs();
-    /* eng6 is assigned English in 6-A: may retake it */
+    /* eng6 teaches English in 6-A but is not the slot's teacher: a substitute, who may retake it */
     const retake = await lesson("2026-08-06", 2, ["PRESENT", "ABSENT", "HALF_DAY"], h.tokens.eng6);
     assert.equal(retake.status, 200);
     assert.equal(retake.body.message, "Period 2 (English) attendance updated for 3 student(s)");
-    assert.equal(retake.body.data.session.substitute, false);
+    assert.deepEqual([retake.body.data.session.takenBy, retake.body.data.session.substitute], [t.eng6.userId, true]);
     await settleJobs();
 
     /* The class teacher taking someone else's period stands in for them */
@@ -621,6 +619,30 @@ describe("attendance modes: period by period (Class 6)", () => {
     await get(`${A}/attendance/students/${t.a6.id}`, { as: h.tokens.ct5 }, 403);
   });
 
+  it("splits a range at the school's switch, counting in days when it is not all period-wise", async () => {
+    /* Mon 3 to Fri 7 August, 5 working days: 3 to 5 two sessions (6-A took no register),
+       6 and 7 period by period (Thursday's two periods; nothing on Friday).
+       a6 present on the 6th (2 of 2 periods): 1 of 5 days = 20%; b6 absent in both: 0%;
+       c6 1.5 of 2 periods (75%, above the 50% threshold) is present: 20%. */
+    const summary = await get(`${A}/attendance/summary?sectionId=${t.s6A.id}&from=2026-08-03&to=2026-08-07`);
+    assert.deepEqual(summary.data.modes, [
+      { mode: "TWO_SESSIONS", from: "2026-08-03", to: "2026-08-05" },
+      { mode: "PERIOD_WISE", from: "2026-08-06", to: "2026-08-07" }
+    ]);
+    assert.deepEqual([summary.data.basis, summary.data.workingDays], ["DAYS", 5]);
+    const [a6, b6, c6] = summary.data.students;
+    assert.deepEqual(
+      [a6.attendedDays, a6.countableDays, a6.percentage, a6.unmarked],
+      [1, 5, 20, 4],
+      "untaken sessions count against the student"
+    );
+    assert.deepEqual(a6.periods, { held: 2, attended: 2, excused: 0, percentage: 100 });
+    assert.deepEqual([b6.percentage, c6.percentage, c6.periods.percentage], [0, 20, 75]);
+
+    const portal = await get(`${ME}/students/${t.a6.id}/attendance?from=2026-08-03&to=2026-08-07`, { as: h.tokens.p6 });
+    assert.deepEqual([portal.data.mode, portal.data.basis, portal.data.percentage], ["PERIOD_WISE", "DAYS", 20]);
+  });
+
   it("alerts parents once a day, on the first period missed", async () => {
     const alerts = await inbox(h.tokens.p6);
     const of = (key, date) => alerts.filter(a => a.data.studentId === t[key].id && a.data.date === date);
@@ -673,7 +695,7 @@ describe("attendance modes: lock, reports and races", () => {
     await patch(`${A}/attendance/policy`, { editWindowDays: 365 });
   });
 
-  it("exports the register grid at each mode's granularity", async () => {
+  it("exports the register grid at each day's granularity, across the school's switch", async () => {
     const [header5, ...rows5] = await csvOf(
       `${R}/exports/attendance?format=csv&sectionId=${t.s5A.id}&from=2026-08-03&to=2026-08-05`
     );
@@ -686,37 +708,44 @@ describe("attendance modes: lock, reports and races", () => {
     assert.match(header6, /Student,08-06 P1,08-06 P2,08-06 Day,08-07 Day$/);
     assert.ok(rows6.some(r => r.endsWith("Fc6 Lc6,L,H,P,")));
     assert.ok(rows6.some(r => r.endsWith("Fb6 Lb6,A,A,A,")));
+
+    /* Wednesday 5 is a two-session day, Thursday 6 a period-wise one */
+    const [switched, ...rowsSwitched] = await csvOf(
+      `${R}/exports/attendance?format=csv&sectionId=${t.s6A.id}&from=2026-08-05&to=2026-08-06`
+    );
+    assert.match(switched, /Student,08-05 FN,08-05 AN,08-06 P1,08-06 P2,08-06 Day$/);
+    assert.ok(rowsSwitched.some(r => r.endsWith("Fc6 Lc6,,,L,H,P")));
   });
 
-  it("puts every mode on the attendance dashboard in day units", async () => {
+  it("puts every mode on the attendance dashboard in day units, with the school's modes over the range", async () => {
     const { data } = await get(`${R}/dashboards/attendance?from=2026-08-03&to=2026-08-13&minDays=1`);
+    assert.deepEqual(data.modes, [
+      { mode: "TWO_SESSIONS", from: "2026-08-03", to: "2026-08-05" },
+      { mode: "PERIOD_WISE", from: "2026-08-06", to: "2026-08-13" }
+    ]);
     const of = section => data.bySection.find(s => s.sectionId === section.id);
     /* 5-A: half days 0.5 + 1 + 0 (excused) and 0 + 0.5 + 0.5 over 4 countable days */
-    assert.deepEqual([of(t.s5A).mode, of(t.s5A).percentage, of(t.s5A).periodPercentage], ["TWO_SESSIONS", 62.5, null]);
+    assert.deepEqual([of(t.s5A).percentage, of(t.s5A).periodPercentage], [62.5, null]);
     /* 6-A: present student-days 4 of 5 (b6 excused on the 13th); periods 5.5 of 10 */
-    assert.deepEqual([of(t.s6A).mode, of(t.s6A).percentage, of(t.s6A).periodPercentage], ["PERIOD_WISE", 80, 55]);
-    assert.equal(of(world.s1A).mode, "DAILY");
+    assert.deepEqual([of(t.s6A).percentage, of(t.s6A).periodPercentage], [80, 55]);
+    assert.equal("mode" in of(world.s1A), false, "one mode for every section");
     const monday = data.trend.find(d => d.date === "2026-08-03");
     assert.deepEqual([monday.percentage, monday.absent], [25, 1]);
   });
 
   it("takes a past day's register without waiting on a mode change in progress", async () => {
     /* A change starts tomorrow at the earliest, so it cannot meet a register for a past day:
-       only today's registers wait on the policy row */
+       only today's registers wait on the policy row. Friday 31 July was a daily day. */
     const holder = await h.pool.connect();
     try {
       await holder.query("BEGIN");
       await holder.query("SELECT id FROM attendance_policies WHERE tenant_id = $1 FOR UPDATE", [h.tenant.id]);
       const friday = await record(
-        {
-          sectionId: t.s5A.id,
-          date: "2026-08-07",
-          kind: "FORENOON",
-          records: marks(["a5", "b5"], ["PRESENT", "PRESENT"])
-        },
+        { sectionId: t.s5A.id, date: "2026-07-31", records: marks(["a5", "b5"], ["PRESENT", "PRESENT"]) },
         h.tokens.ct5
       );
       assert.equal(friday.status, 201);
+      assert.equal(friday.body.data.session.mode, "DAILY");
       assert.equal(await lockWaiters(), 0);
       await holder.query("ROLLBACK");
     } finally {
@@ -726,18 +755,26 @@ describe("attendance modes: lock, reports and races", () => {
   });
 });
 
-describe("attendance modes: substitutes take period registers (Class 6)", () => {
+describe("attendance modes: only teachers of the section stand in (Class 6)", () => {
   const lesson = (date, periodNumber, statuses, as, extra = {}) =>
     record({ sectionId: t.s6A.id, date, periodNumber, records: marks(["a6", "b6", "c6"], statuses), ...extra }, as);
 
-  it("lets whoever takes the class record it, with the slot's subject or their own", async () => {
-    /* Thu 20: eng6 covers sci6's Science; ct5 (no link to 6-A) teaches Science in sub6's English slot */
+  it("lets a subject teacher of the section cover a period, with the slot's subject or their own", async () => {
+    /* Thu 20: eng6 covers sci6's Science; sci6 teaches Science in sub6's English slot.
+       ct5, with no link to 6-A, cannot */
     const cover = await lesson("2026-08-20", 1, ["PRESENT", "ABSENT", "PRESENT"], h.tokens.eng6);
     assert.equal(cover.status, 201);
     assert.equal(cover.body.message, "Period 1 (Science) attendance recorded for 3 student(s)");
     assert.deepEqual([cover.body.data.session.takenBy, cover.body.data.session.substitute], [t.eng6.userId, true]);
 
-    const ownSubject = await lesson("2026-08-20", 2, ["LATE", "PRESENT", "ABSENT"], h.tokens.ct5, {
+    const outsider = await lesson("2026-08-20", 2, ["LATE", "PRESENT", "ABSENT"], h.tokens.ct5, {
+      subjectId: t.science.id
+    });
+    assert.deepEqual(
+      [outsider.status, outsider.body.message],
+      [403, "Only a teacher of Class 6-A can take its Period 2 register; otherwise mark the period free"]
+    );
+    const ownSubject = await lesson("2026-08-20", 2, ["LATE", "PRESENT", "ABSENT"], h.tokens.sci6, {
       subjectId: t.science.id
     });
     assert.equal(ownSubject.status, 201);
@@ -764,45 +801,35 @@ describe("attendance modes: substitutes take period registers (Class 6)", () => 
       subjectId: t.science.id
     });
     assert.deepEqual([recess.status, recess.body.message], [422, "Recess is a break: no register is taken in it"]);
-    /* sci6 teaches Science in 6-A: not a substitute */
+    /* Nobody is timetabled, so nobody is replaced: not a substitute */
     const extra = await friday(h.tokens.sci6, { subjectId: t.science.id });
     assert.deepEqual([extra.status, extra.body.data.session.substitute], [201, false]);
     await settleJobs();
   });
 
-  it("lets a substitute read back the register they took, and nothing else of the section", async () => {
-    const mine = await get(`${A}/attendance/register?sectionId=${t.s6A.id}&date=2026-08-20&periodNumber=2`, {
-      as: h.tokens.ct5
-    });
-    assert.deepEqual(
-      [mine.data.takenBy, mine.data.substitute, mine.data.registers.map(r => r.key)],
-      [t.ct5.userId, true, ["P2"]]
-    );
-    assert.deepEqual(
-      mine.data.students.map(s => s.status),
-      ["LATE", "PRESENT", "ABSENT"]
-    );
-
-    const forbidden = [
-      `${A}/attendance/register?sectionId=${t.s6A.id}&date=2026-08-20&periodNumber=1`,
+  it("keeps teachers outside the section out of it entirely", async () => {
+    const today = todayIn("Asia/Kolkata");
+    const outside = [
+      `${A}/attendance/register?sectionId=${t.s6A.id}&date=2026-08-20&periodNumber=2`,
       `${A}/attendance/register?sectionId=${t.s6A.id}&date=2026-08-20`,
+      `${A}/attendance/register?sectionId=${t.s6A.id}&date=${today}&periodNumber=4`,
       `${A}/attendance/summary?sectionId=${t.s6A.id}`,
+      `${A}/attendance/cover/${t.s6A.id}`,
       `${A}/enrollments?sectionId=${t.s6A.id}`
     ];
-    for (const url of forbidden) {
+    for (const url of outside) {
       const res = await request("GET", url, { as: h.tokens.ct5 });
       assert.deepEqual([res.status, res.body.message], [403, "You can only do this for sections you teach"], url);
     }
     await get(`${U}/students/${t.a6.id}`, { as: h.tokens.ct5 }, 404);
     assert.equal((await get(`${U}/students?limit=100`, { as: h.tokens.ct5 })).meta.total, 2, "still 5-A only");
 
-    /* Covering a class today: the roster of that one period opens, to take its register */
-    const today = todayIn("Asia/Kolkata");
-    const cover = await get(`${A}/attendance/register?sectionId=${t.s6A.id}&date=${today}&periodNumber=4`, {
-      as: h.tokens.ct5
+    /* A teacher of the section opens today's period roster to take its register */
+    const roster = await get(`${A}/attendance/register?sectionId=${t.s6A.id}&date=${today}&periodNumber=4`, {
+      as: h.tokens.sci6
     });
     assert.deepEqual(
-      [cover.data.taken, cover.data.students.map(s => [s.firstName, s.status])],
+      [roster.data.taken, roster.data.students.map(s => [s.firstName, s.status])],
       [
         false,
         [
@@ -812,27 +839,21 @@ describe("attendance modes: substitutes take period registers (Class 6)", () => 
         ]
       ]
     );
-    /* The cover screen: sections taking attendance by period today, then one section */
-    const options = await get(`${A}/attendance/cover`, { as: h.tokens.ct5 });
-    assert.equal(options.data.date, today);
-    const listed = options.data.sections.find(x => x.id === t.s6A.id);
-    assert.equal(listed?.label, "Class 6-A");
-    assert.ok(
-      options.data.sections.every(x => x.id !== world.s1A.id),
-      "daily classes have no substitutes"
-    );
-    const six = await get(`${A}/attendance/cover/${t.s6A.id}`, { as: h.tokens.ct5 });
-    assert.ok(six.data.periods.length > 0 && six.data.periods.every(p => typeof p.taken === "boolean"));
-    assert.ok(six.data.subjects.some(x => x.subjectName === "Science"));
-    const daily = await request("GET", `${A}/attendance/cover/${world.s1A.id}`, { as: h.tokens.ct5 });
-    assert.equal(daily.status, 422);
-    assert.match(daily.body.message, /does not take attendance by period today/);
 
+    /* sub6 is timetabled in 6-A without teaching a subject there: their own period's register only */
+    const own = await get(`${A}/attendance/register?sectionId=${t.s6A.id}&date=2026-08-13&periodNumber=2`, {
+      as: h.tokens.sub6
+    });
+    assert.deepEqual(
+      [own.data.registers.map(r => r.key), own.data.students.map(s => s.status)],
+      [["P2"], ["PRESENT", "EXCUSED", "ABSENT"]]
+    );
     for (const url of [
-      `${A}/attendance/register?sectionId=${t.s6A.id}&date=${today}`,
-      `${A}/attendance/register?sectionId=${t.s6A.id}&date=${addDays(today, -1)}&periodNumber=4`
+      `${A}/attendance/register?sectionId=${t.s6A.id}&date=2026-08-13&periodNumber=1`,
+      `${A}/attendance/register?sectionId=${t.s6A.id}&date=2026-08-13`,
+      `${A}/attendance/register?sectionId=${t.s6A.id}&date=2026-08-14&periodNumber=2`
     ])
-      await get(url, { as: h.tokens.ct5 }, 403);
+      await get(url, { as: h.tokens.sub6 }, 403);
 
     /* Staff see who stood in */
     const day = await get(`${A}/attendance/register?sectionId=${t.s6A.id}&date=2026-08-20`);
@@ -840,9 +861,58 @@ describe("attendance modes: substitutes take period registers (Class 6)", () => 
       day.data.registers.map(r => [r.label, r.teacher.name, r.takenBy, r.substitute]),
       [
         ["Period 1 (Science)", "Fsci6 Lsci6", t.eng6.userId, true],
-        ["Period 2 (Science)", "Fsub6 Lsub6", t.ct5.userId, true]
+        ["Period 2 (Science)", "Fsub6 Lsub6", t.sci6.userId, true]
       ]
     );
+  });
+
+  it("shows a teacher their own sections on the cover screen, and every section to ADMIN and PRINCIPAL", async () => {
+    const today = todayIn("Asia/Kolkata");
+    const sections = async as => (await get(`${A}/attendance/cover`, { as })).data.sections.map(s => s.label);
+    const mine = await get(`${A}/attendance/cover`, { as: h.tokens.ct5 });
+    assert.deepEqual([mine.data.date, mine.data.mode], [today, "PERIOD_WISE"]);
+    assert.equal(mine.message, "1 section(s) take attendance by period today");
+    assert.deepEqual(await sections(h.tokens.ct5), ["Class 5-A"]);
+    assert.deepEqual(await sections(h.tokens.eng6), ["Class 6-A"]);
+    assert.deepEqual(await sections(h.tokens.sci6), ["Class 5-A", "Class 6-A"]);
+    const all = await sections(h.tokens.principal);
+    assert.ok(all.includes("Class 1-A") && all.includes("Class 5-A") && all.includes("Class 6-A"));
+
+    const six = await get(`${A}/attendance/cover/${t.s6A.id}`, { as: h.tokens.eng6 });
+    assert.deepEqual(
+      six.data.periods.map(p => p.name),
+      ["Period 1", "Period 2"],
+      "breaks are left out"
+    );
+    assert.ok(six.data.periods.every(p => typeof p.taken === "boolean" && p.free === null));
+    assert.deepEqual(
+      six.data.subjects.map(x => x.subjectName),
+      ["English", "Science"]
+    );
+
+    /* A day the school does not take attendance by period: nothing to cover */
+    await seedModeRules([{ mode: "TWO_SESSIONS", effectiveFrom: today }]);
+    try {
+      const none = await get(`${A}/attendance/cover`, { as: h.tokens.eng6 });
+      assert.deepEqual([none.data.mode, none.data.sections], ["TWO_SESSIONS", []]);
+      assert.equal(
+        none.message,
+        "The school takes attendance twice a day (forenoon and afternoon) today: there are no period registers to cover"
+      );
+      const daily = await request("GET", `${A}/attendance/cover/${t.s6A.id}`, { as: h.tokens.eng6 });
+      assert.deepEqual(
+        [daily.status, daily.body.message],
+        [
+          422,
+          "The school takes attendance twice a day (forenoon and afternoon) today, not by period: Class 6-A's register is taken by the class teacher, the deputy or an administrator"
+        ]
+      );
+    } finally {
+      await h.pool.query("DELETE FROM attendance_mode_rules WHERE tenant_id = $1 AND effective_from = $2", [
+        h.tenant.id,
+        today
+      ]);
+    }
   });
 });
 
@@ -965,9 +1035,10 @@ describe("attendance modes: deputy class teacher (Class 5)", () => {
       [["Class 5-A", false, true]]
     );
 
+    /* Saturday 1 August, the first two-session day */
     for (const kind of ["FORENOON", "AFTERNOON"]) {
       const res = await record(
-        { sectionId: t.s5A.id, date: "2026-08-06", kind, records: marks(["a5", "b5"], ["PRESENT", "PRESENT"]) },
+        { sectionId: t.s5A.id, date: "2026-08-01", kind, records: marks(["a5", "b5"], ["PRESENT", "PRESENT"]) },
         h.tokens.dep5
       );
       assert.equal(res.status, 201, JSON.stringify(res.body));
@@ -1001,30 +1072,40 @@ describe("attendance modes: registers nobody took", () => {
   const rows = res =>
     res.data.registers.map(r => [r.date, r.section.name, r.label, r.responsible?.name ?? null, r.responsibleAs]);
 
-  it("lists the registers the mode expected on working days, with the class teacher answering", async () => {
-    /* 5-A, Mon 3 to Fri 7 August: both sessions taken on 3, 4 and 6; 5 and 7 lack the afternoon */
+  it("lists the registers the school's mode expected each working day, with the class teacher answering", async () => {
+    /* 5-A, Mon 3 to Fri 7 August: both sessions taken on 3 and 4; the 5th lacks the afternoon;
+       the 6th and 7th are period-wise days, and 5-A has nothing timetabled */
     const res = await missing(`from=2026-08-03&to=2026-08-07&sectionId=${t.s5A.id}`);
-    assert.equal(res.message, "2 register(s) not taken from 2026-08-03 to 2026-08-07");
-    assert.deepEqual(rows(res), [
-      ["2026-08-05", "Class 5-A", "Afternoon", "Fct5 Lct5", "CLASS_TEACHER"],
-      ["2026-08-07", "Class 5-A", "Afternoon", "Fct5 Lct5", "CLASS_TEACHER"]
-    ]);
+    assert.equal(res.message, "1 register(s) not taken from 2026-08-03 to 2026-08-07");
+    assert.deepEqual(rows(res), [["2026-08-05", "Class 5-A", "Afternoon", "Fct5 Lct5", "CLASS_TEACHER"]]);
     assert.deepEqual(
       [res.data.registers[0].reason, res.data.registers[0].mode, res.data.registers[0].kind],
       ["Class teacher of Class 5-A", "TWO_SESSIONS", "AFTERNOON"]
     );
-    assert.deepEqual(res.data.byTeacher, [{ teacherId: t.ct5.id, name: "Fct5 Lct5", missing: 2 }]);
+    assert.deepEqual(res.data.byTeacher, [{ teacherId: t.ct5.id, name: "Fct5 Lct5", missing: 1 }]);
+
+    /* 6-A over the same days: no session was taken on the two-session days */
+    const six = await missing(`from=2026-08-03&to=2026-08-07&sectionId=${t.s6A.id}`);
+    assert.deepEqual(
+      six.data.registers.map(r => [r.date, r.label, r.mode, r.responsibleAs]),
+      ["2026-08-03", "2026-08-04", "2026-08-05"].flatMap(date => [
+        [date, "Forenoon", "TWO_SESSIONS", "CLASS_TEACHER"],
+        [date, "Afternoon", "TWO_SESSIONS", "CLASS_TEACHER"]
+      ])
+    );
+    assert.deepEqual(six.data.byTeacher, [{ teacherId: t.ct6.id, name: "Fct6 Lct6", missing: 6 }]);
   });
 
   it("expects only timetabled periods, answered for by the timetabled teacher", async () => {
     /* 6-A has classes on Thursdays only: the 6th, 13th and 20th were taken, the 27th was not */
-    const res = await missing(`from=2026-08-03&to=2026-08-29&sectionId=${t.s6A.id}`);
+    const res = await missing(`from=2026-08-06&to=2026-08-29&sectionId=${t.s6A.id}`);
     assert.deepEqual(rows(res), [
       ["2026-08-27", "Class 6-A", "Period 1 (Science)", "Fsci6 Lsci6", "TIMETABLED_TEACHER"],
       ["2026-08-27", "Class 6-A", "Period 2 (English)", "Fsub6 Lsub6", "TIMETABLED_TEACHER"]
     ]);
     assert.equal(res.data.registers[0].reason, "Timetabled for Science in Period 1 on Thursdays");
     assert.deepEqual(res.data.registers[1].subject, { id: world.english.id, subjectName: "English" });
+    assert.deepEqual(res.data.freePeriods, []);
 
     const bySub6 = await missing(`from=2026-08-03&to=2026-08-29&teacherId=${t.sub6.id}`, h.tokens.principal);
     assert.deepEqual(rows(bySub6), [
@@ -1038,21 +1119,23 @@ describe("attendance modes: registers nobody took", () => {
       all.data.registers.some(r => r.section.id === world.s1A.id),
       "every section with students"
     );
-    assert.equal(all.data.byTeacher.find(b => b.teacherId === t.ct5.id).missing, 2);
+    assert.equal(all.data.byTeacher.find(b => b.teacherId === t.ct5.id).missing, 1);
     assert.equal(all.data.total, all.data.registers.length);
 
-    /* ct5 answers for 5-A only: the two afternoons, then every session from Saturday the 8th
-       (Sundays off): 2 + 2 × 19 days */
-    const ct5 = await missing("from=2026-08-03&to=2026-08-29", h.tokens.ct5);
-    assert.deepEqual(ct5.data.byTeacher, [{ teacherId: t.ct5.id, name: "Fct5 Lct5", missing: 40 }]);
+    /* ct5 answers for 5-A only, in each of the school's modes: the daily registers of Mon 27
+       to Thu 30 July (the 31st was taken), the afternoon of 5 August, and nothing from the
+       6th (period by period, with nothing timetabled in 5-A) */
+    const ct5 = await missing("from=2026-07-27&to=2026-08-29", h.tokens.ct5);
+    assert.deepEqual(ct5.data.byTeacher, [{ teacherId: t.ct5.id, name: "Fct5 Lct5", missing: 5 }]);
     assert.ok(ct5.data.registers.every(r => r.section.id === t.s5A.id));
     assert.deepEqual(
-      ct5.data.registers.slice(0, 4).map(r => [r.date, r.label]),
+      ct5.data.registers.map(r => [r.date, r.label, r.mode]),
       [
-        ["2026-08-05", "Afternoon"],
-        ["2026-08-07", "Afternoon"],
-        ["2026-08-08", "Forenoon"],
-        ["2026-08-08", "Afternoon"]
+        ["2026-07-27", "Day", "DAILY"],
+        ["2026-07-28", "Day", "DAILY"],
+        ["2026-07-29", "Day", "DAILY"],
+        ["2026-07-30", "Day", "DAILY"],
+        ["2026-08-05", "Afternoon", "TWO_SESSIONS"]
       ]
     );
     /* The deputy is not held to account; neither is a teacher for registers not theirs */
@@ -1115,8 +1198,15 @@ describe("attendance modes: registers nobody took", () => {
       registers: [{ sectionId: t.s6A.id, kind: "PERIOD", periodNumber: 1 }]
     });
     assert.equal((await reminders(h.tokens.eng6))[0].data.registers[0].periodNumber, 2, "sub6 is inactive");
+    assert.deepEqual(await reminders(h.tokens.ct6), [], "period registers are not the class teacher's");
+
+    /* A two-session day: the class teachers answer */
+    await run("2026-08-05");
+    const [ct6] = await reminders(h.tokens.ct6);
+    assert.equal(ct6.title, "2 attendance registers were not taken on 2026-08-05");
     const [ct5] = await reminders(h.tokens.ct5);
-    assert.equal(ct5.title, "2 attendance registers were not taken on 2026-08-27");
+    assert.equal(ct5.title, "1 attendance register was not taken on 2026-08-05");
+    assert.equal((await reminders(h.tokens.sci6)).length, 1);
 
     /* Closed days send nothing */
     const { remindMissedRegisters } =
@@ -1124,5 +1214,232 @@ describe("attendance modes: registers nobody took", () => {
     const sunday = await h.inSchool(() => remindMissedRegisters({ tenantId: h.tenant.id, date: "2026-08-30" }));
     assert.deepEqual(sunday, { date: "2026-08-30", closed: true, sent: 0 });
     assert.equal((await reminders(h.tokens.ct5)).length, 1);
+  });
+});
+
+describe("attendance modes: free periods (Class 6)", () => {
+  /* Thu 3 September: sci6 is away and no teacher of 6-A covers Science in Period 1 */
+  const FREE = "/api/v1/academics/attendance/free-periods";
+  const free = (body, as = h.tokens.ct6) =>
+    request("POST", FREE, { as, body: { sectionId: t.s6A.id, date: "2026-09-03", periodNumber: 1, ...body } });
+  const expect = async (res, status, message) => {
+    assert.equal(res.status, status, JSON.stringify(res.body));
+    if (message) assert.equal(res.body.message, message);
+    return res.body;
+  };
+
+  it("lets the class teacher, the deputy, ADMIN or PRINCIPAL mark a period free", async () => {
+    const marked = await expect(
+      await free({ reason: "Science teacher on leave" }),
+      201,
+      "Period 1 of Class 6-A on 2026-09-03 marked free"
+    );
+    assert.deepEqual(
+      [marked.data.section, marked.data.date, marked.data.periodNumber, marked.data.reason, marked.data.markedBy],
+      [{ id: t.s6A.id, label: "Class 6-A" }, "2026-09-03", 1, "Science teacher on leave", t.ct6.userId]
+    );
+    t.freeP1 = marked.data;
+    /* Again: idempotent, the reason changes */
+    const again = await expect(
+      await free({ reason: "Science teacher at a workshop" }, h.tokens.principal),
+      200,
+      "Period 1 of Class 6-A on 2026-09-03 is free: reason updated"
+    );
+    assert.deepEqual([again.data.id, again.data.reason], [t.freeP1.id, "Science teacher at a workshop"]);
+
+    await expect(
+      await free({ reason: "x" }, h.tokens.sci6),
+      403,
+      "Only the class teacher of Class 6-A, its deputy, ADMIN or PRINCIPAL can mark its periods free"
+    );
+    await expect(await free({ reason: "x" }, h.tokens.ct5), 403, "You can only do this for sections you teach");
+    await expect(await free({ reason: "x" }, h.tokens.office), 403);
+    await expect(await free({}), 400);
+  });
+
+  it("frees only real periods of period-wise school days, and never a period with a register", async () => {
+    await expect(await free({ periodNumber: 3, reason: "x" }), 422, "Recess is a break: no register is taken in it");
+    await expect(
+      await free({ periodNumber: 9, reason: "x" }),
+      422,
+      "Period 9 is not in the bell schedule of the academic year"
+    );
+    await expect(
+      await free({ date: "2026-08-05", reason: "x" }),
+      422,
+      "On 2026-08-05 the school takes attendance twice a day (forenoon and afternoon): only periods of period-wise days can be marked free"
+    );
+    await expect(
+      await free({ date: "2026-09-06", reason: "x" }),
+      422,
+      "Period 1 cannot be marked free on 2026-09-06: it is a weekly off day"
+    );
+    await expect(
+      await free({ date: addDays(todayIn("Asia/Kolkata"), 1), reason: "x" }),
+      422,
+      "A period cannot be marked free for a future date"
+    );
+    await expect(
+      await free({ date: "2026-08-20", reason: "x" }),
+      409,
+      "The Period 1 register of Class 6-A on 2026-08-20 was already taken: a period with a register cannot be marked free"
+    );
+
+    /* …and no register is taken for a free period */
+    await expect(
+      await record(
+        { sectionId: t.s6A.id, date: "2026-09-03", periodNumber: 1, records: marks(["a6"], ["PRESENT"]) },
+        h.tokens.sci6
+      ),
+      409,
+      "Period 1 of Class 6-A on 2026-09-03 is a free period (Science teacher at a workshop): remove the free period first to take its register"
+    );
+
+    /* The database holds both lines for any other write path */
+    const yearId = (await h.pool.query("SELECT academic_year_id FROM sections WHERE id = $1", [t.s6A.id])).rows[0]
+      .academic_year_id;
+    await assert.rejects(
+      h.pool.query(
+        `INSERT INTO attendance_sessions (tenant_id, academic_year_id, section_id, date, kind, period_number, taken_by)
+         VALUES ($1, $2, $3, '2026-09-03', 'PERIOD', 1, $4)`,
+        [h.tenant.id, yearId, t.s6A.id, h.admin.id]
+      ),
+      error =>
+        error.code === "ZA409" &&
+        error.message === "Period 1 on 2026-09-03 is a free period: remove the free period first to take its register"
+    );
+    await assert.rejects(
+      h.pool.query(
+        `INSERT INTO attendance_free_periods (tenant_id, academic_year_id, section_id, date, period_number, reason, marked_by)
+         VALUES ($1, $2, $3, '2026-08-20', 1, 'x', $4)`,
+        [h.tenant.id, yearId, t.s6A.id, h.admin.id]
+      ),
+      error => error.code === "ZA409" && /^The register of period 1 on 2026-08-20 was already taken/.test(error.message)
+    );
+  });
+
+  it("shows the free period in the day's register, and never as a missing register", async () => {
+    const day = await get(`${A}/attendance/register?sectionId=${t.s6A.id}&date=2026-09-03`, { as: h.tokens.eng6 });
+    assert.deepEqual(
+      day.data.registers.map(r => [r.key, r.label, r.taken, r.free?.reason ?? null]),
+      [
+        ["P1", "Period 1 (Science)", false, "Science teacher at a workshop"],
+        ["P2", "Period 2 (English)", false, null]
+      ]
+    );
+    assert.equal(day.data.taken, false, "Period 2 is still due");
+    const one = await get(`${A}/attendance/register?sectionId=${t.s6A.id}&date=2026-09-03&periodNumber=1`);
+    assert.deepEqual([one.data.taken, one.data.free.id], [false, t.freeP1.id]);
+
+    /* Period 2 is missing (sub6's account is inactive: eng6 answers); Period 1 is free */
+    const missing = await get(`${A}/attendance/missing-registers?from=2026-09-03&to=2026-09-03&sectionId=${t.s6A.id}`);
+    assert.deepEqual(
+      missing.data.registers.map(r => [r.label, r.responsibleAs]),
+      [["Period 2 (English)", "SUBJECT_TEACHER"]]
+    );
+    assert.deepEqual(
+      missing.data.freePeriods.map(r => [r.label, r.responsible.name, r.free.reason]),
+      [["Period 1 (Science)", "Fsci6 Lsci6", "Science teacher at a workshop"]]
+    );
+    const sci6 = await get(`${A}/attendance/missing-registers?from=2026-09-03&to=2026-09-03`, { as: h.tokens.sci6 });
+    assert.deepEqual([sci6.data.total, sci6.data.freePeriods.length], [0, 1], "nothing to answer for");
+
+    /* Periods held are registers taken: the free period counts in nobody's attendance */
+    await record({
+      sectionId: t.s6A.id,
+      date: "2026-09-03",
+      periodNumber: 2,
+      records: marks(["a6", "b6", "c6"], ["PRESENT", "ABSENT", "PRESENT"])
+    });
+    await settleJobs();
+    const taken = await get(`${A}/attendance/register?sectionId=${t.s6A.id}&date=2026-09-03`);
+    assert.equal(taken.data.taken, true, "every register due was taken");
+    const summary = await get(`${A}/attendance/summary?sectionId=${t.s6A.id}&from=2026-09-03&to=2026-09-03`);
+    assert.deepEqual(
+      summary.data.students.map(s => [s.periods.held, s.periods.percentage, s.subjects.map(x => x.name)]),
+      [
+        [1, 100, ["English"]],
+        [1, 0, ["English"]],
+        [1, 100, ["English"]]
+      ]
+    );
+  });
+
+  it("shows today's free periods on the cover screen", async () => {
+    const cover = await get(`${A}/attendance/cover/${t.s6A.id}`, { as: h.tokens.eng6 });
+    const marked = await request("POST", FREE, {
+      as: h.tokens.dep5,
+      body: { sectionId: t.s6A.id, date: cover.data.date, periodNumber: 2, reason: "Nobody to cover" }
+    });
+    assert.equal(marked.status, 403, "dep5 is 5-A's deputy, not 6-A's");
+    const today = await request("POST", FREE, {
+      body: { sectionId: t.s6A.id, date: cover.data.date, periodNumber: 2, reason: "Nobody to cover" }
+    });
+    if (today.status === 422) return assert.match(today.body.message, /: it is /, "today is a closed day");
+    assert.equal(today.status, 201, JSON.stringify(today.body));
+    const after = await get(`${A}/attendance/cover/${t.s6A.id}`, { as: h.tokens.eng6 });
+    assert.deepEqual(
+      after.data.periods.map(p => [p.name, p.taken, p.free?.reason ?? null]),
+      [
+        ["Period 1", false, null],
+        ["Period 2", false, "Nobody to cover"]
+      ]
+    );
+    assert.equal(after.message, "Class 6-A today: 1 of 2 period register(s) not taken yet, 1 free period(s)");
+    await call("DELETE", `${FREE}/${today.body.data.id}`);
+  });
+
+  it("lists free periods to staff of the section, and removes them under the edit-window lock", async () => {
+    const list = await get(`${FREE}?sectionId=${t.s6A.id}&from=2026-09-01&to=2026-09-30`, { as: h.tokens.eng6 });
+    assert.deepEqual(
+      list.data.map(f => [f.date, f.label, f.reason]),
+      [["2026-09-03", "Period 1", "Science teacher at a workshop"]]
+    );
+    assert.equal(list.message, "Free periods retrieved successfully");
+    assert.equal((await get(FREE, { as: h.tokens.ct5 })).meta.total, 0, "5-A has none");
+    await get(`${FREE}?sectionId=${t.s6A.id}`, { as: h.tokens.ct5 }, 403);
+
+    await patch(`${A}/attendance/policy`, { editWindowDays: 0 });
+    try {
+      await expect(
+        await request("DELETE", `${FREE}/${t.freeP1.id}`, { as: h.tokens.ct6 }),
+        403,
+        "The register for 2026-09-03 was locked after 2026-09-03. Only ADMIN can change it now."
+      );
+      await expect(
+        await request("DELETE", `${FREE}/${t.freeP1.id}`),
+        422,
+        "The register for 2026-09-03 is locked: give an overrideReason to change it"
+      );
+      const removed = await expect(
+        await request("DELETE", `${FREE}/${t.freeP1.id}?overrideReason=${encodeURIComponent("Marked by mistake")}`),
+        200,
+        "Period 1 of Class 6-A on 2026-09-03 is no longer free: its register can be taken"
+      );
+      assert.equal(removed.data.lockOverride.reason, "Marked by mistake");
+      await expect(await request("DELETE", `${FREE}/${t.freeP1.id}`), 404, "Free period not found");
+
+      /* Marking it free again after the lock is an override too */
+      await expect(await free({ reason: "Science teacher on leave" }), 403);
+      const again = await expect(
+        await free({ reason: "Science teacher on leave", overrideReason: "Leave confirmed" }, h.tokens.admin),
+        201,
+        "Period 1 of Class 6-A on 2026-09-03 marked free (locked date changed by override)"
+      );
+      assert.equal(again.data.id, t.freeP1.id, "the same row, marked again");
+      await call("DELETE", `${FREE}/${again.data.id}?overrideReason=${encodeURIComponent("Teacher came back")}`);
+    } finally {
+      await patch(`${A}/attendance/policy`, { editWindowDays: 365 });
+    }
+
+    /* Without the free period the register is due again, and can be taken */
+    const due = await get(`${A}/attendance/missing-registers?from=2026-09-03&to=2026-09-03&sectionId=${t.s6A.id}`);
+    assert.deepEqual([due.data.registers.map(r => r.label), due.data.freePeriods], [["Period 1 (Science)"], []]);
+    const taken = await record(
+      { sectionId: t.s6A.id, date: "2026-09-03", periodNumber: 1, records: marks(["a6"], ["PRESENT"]) },
+      h.tokens.sci6
+    );
+    assert.equal(taken.status, 201, JSON.stringify(taken.body));
+    await settleJobs();
   });
 });
