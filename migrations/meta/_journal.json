@@ -225,6 +225,13 @@
       "when": 1792258054805,
       "tag": "0031_library_closures",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792260134912,
+      "tag": "0032_attendance_school_mode_free_periods",
+      "breakpoints": true
     }
   ]
 }
