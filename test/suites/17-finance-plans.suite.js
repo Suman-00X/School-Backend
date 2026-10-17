@@ -966,23 +966,32 @@ describe("finance: partial online payments and overpayment (D-21)", () => {
     );
     assert.deepEqual([winner.data.invoice.amountPaid, winner.data.invoice.creditApplications.length], [7000, 1]);
 
+    /* Paying credit back is a refund like any other: requested, approved, numbered (D-63) */
     await post(
       `/api/v1/finance/students/${t.st31.id}/credit-refunds`,
-      { amount: 10, method: "CHEQUE" },
+      { amount: 10, method: "CHEQUE", reason: "Family asked" },
       asAccountant(),
       400
     );
     const refund = await post(
       `${F}/students/${t.st31.id}/credit-refunds`,
-      { amount: 200, method: "BANK_TRANSFER", reference: "NEFT-778" },
+      { amount: 200, method: "BANK_TRANSFER", reference: "NEFT-778", reason: "Family asked for the advance back" },
       asAccountant()
     );
-    assert.equal(refund.message, `Refund of 200.00 recorded. Remaining credit ${(left - 200).toFixed(2)}`);
+    assert.equal(
+      refund.message,
+      "Refund of 200.00 requested from the student's credit. An administrator must approve it before any money is paid back"
+    );
     const tooMuch = await request("POST", `${F}/students/${t.st31.id}/credit-refunds`, {
       as: h.tokens.accountant,
-      body: { amount: 100000, method: "CASH" }
+      body: { amount: 100000, method: "CASH", reason: "Everything" }
     });
-    assert.equal(tooMuch.body.message, `The amount exceeds the available credit of ${(left - 200).toFixed(2)}`);
+    assert.equal(
+      tooMuch.body.message,
+      `At most ${(left - 200).toFixed(2)} of the student's credit can be paid back (200.00 more is waiting for approval)`
+    );
+    const approved = await post(`${F}/refunds/${refund.data.id}/approval`, {}, {}, 200);
+    assert.match(approved.message, /^Refund RFND26-\d{6} of 200\.00 approved and processed from the student's credit$/);
 
     const loser = extras.find(i => i.id !== winner.data.invoice.id);
     const rest = await post(`${F}/invoices/${loser.id}/credit-application`, {}, asAccountant(), 200);

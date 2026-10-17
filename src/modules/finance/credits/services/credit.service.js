@@ -2,7 +2,6 @@ import { and, eq } from "drizzle-orm";
 import { transaction } from "../../../../common/database/postgres.js";
 import { notFound, unprocessable } from "../../../../common/http/errors.js";
 import { fromMinor, toMinor } from "../../../../common/money/money.js";
-import { studentService } from "../../../users/students/index.js";
 import { invoiceService } from "../../invoices/index.js";
 import { financePostings } from "../../ledger/index.js";
 import { OPEN_INVOICE_STATUSES } from "../../shared/constants/finance.constants.js";
@@ -70,26 +69,10 @@ export const creditService = {
     return { ...result, invoice: await invoiceService.getById(ctx, invoiceId) };
   },
 
-  /* Record credit paid back to the family (outside the system: cash, bank transfer…) */
-  refund: async (ctx, studentId, { amount, method, reference, notes }) => {
-    if (!(await studentService.exists(ctx, studentId))) throw notFound("Student");
-    return transaction(async tx => {
-      const remaining = await balances.take(ctx.tenantId, studentId, amount, { dbc: tx });
-      if (remaining === null) throw shortfall(await balanceOf(ctx, studentId, { dbc: tx }));
-      const entry = await entries.create(
-        ctx.tenantId,
-        { studentId, entryType: "REFUNDED", amount, method, reference, notes, createdBy: ctx.userId },
-        { dbc: tx }
-      );
-      await financePostings.creditRefunded(ctx, { entry }, { dbc: tx });
-      return { ...entry, remainingCredit: remaining };
-    });
-  },
-
   /* For refunds (inside the refund's transaction) */
   balance: (ctx, studentId, { dbc } = {}) => balanceOf(ctx, studentId, { dbc }),
 
-  /* Pay credit back as part of a payment refund -> remaining balance, or null if not enough */
+  /* Pay credit back in a refund (of a payment, or of the credit alone) -> remaining balance, or null if not enough */
   takeForRefund: async (ctx, { studentId, paymentId, amount, notes }, { dbc }) => {
     const remaining = await balances.take(ctx.tenantId, studentId, amount, { dbc });
     if (remaining === null) return null;

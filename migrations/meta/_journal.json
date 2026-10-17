@@ -169,6 +169,13 @@
       "when": 1792185992900,
       "tag": "0023_attendance_modes",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792253680977,
+      "tag": "0024_refund_approvals",
+      "breakpoints": true
     }
   ]
 }

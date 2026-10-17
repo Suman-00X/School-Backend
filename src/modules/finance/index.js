@@ -5,10 +5,11 @@ import { lateFeeRuleRoutes } from "./late-fee-rules/index.js";
 import { feeStructureRoutes } from "./fee-structures/index.js";
 import { concessionGrantRoutes, concessionRoutes } from "./concessions/index.js";
 import { invoiceRoutes, statementRoutes } from "./invoices/index.js";
-import { invoicePaymentRoutes, paymentRoutes, refundRoutes } from "./payments/index.js";
+import { invoicePaymentRoutes, paymentRoutes, refundRoutes, studentRefundRoutes } from "./payments/index.js";
 import { invoiceCreditRoutes, studentCreditRoutes } from "./credits/index.js";
 import { paymentSettingsRoutes } from "./payment-settings/index.js";
 import { ledgerRoutes } from "./ledger/index.js";
+import { financeSettingsRoutes } from "./settings/index.js";
 
 /* Finance module, mounted at /api/v1/finance */
 const router = createRouter();
@@ -27,7 +28,9 @@ router.use("/payments", paymentRoutes);
 router.use("/refunds", refundRoutes);
 router.use("/students", statementRoutes);
 router.use("/students", studentCreditRoutes);
+router.use("/students", studentRefundRoutes);
 router.use("/payment-settings", paymentSettingsRoutes);
 router.use("/ledger", ledgerRoutes);
+router.use("/settings", financeSettingsRoutes);
 
 export default router;

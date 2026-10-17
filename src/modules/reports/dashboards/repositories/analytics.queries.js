@@ -84,8 +84,12 @@ export const analyticsQueries = {
             AND (paid_at AT TIME ZONE ${timezone})::date >= ${monthStart}::date) AS "collectedThisMonth",
         (SELECT coalesce(sum(p.amount), 0) FROM payments p JOIN invoices i ON i.id = p.invoice_id
           WHERE p.tenant_id = ${tenantId} AND p.status = 'SUCCEEDED' AND p.is_active AND i.academic_year_id = ${academicYearId}) AS "collectedThisYear",
-        (SELECT coalesce(sum(r.amount), 0) FROM payment_refunds r JOIN invoices i ON i.id = r.invoice_id
-          WHERE r.tenant_id = ${tenantId} AND r.status IN ('PROCESSED', 'PENDING') AND r.is_active AND i.academic_year_id = ${academicYearId}) AS "refundedThisYear",
+        (SELECT coalesce(sum(r.amount), 0) FROM payment_refunds r LEFT JOIN invoices i ON i.id = r.invoice_id
+          WHERE r.tenant_id = ${tenantId} AND r.status IN ('PROCESSED', 'PENDING') AND r.is_active
+            AND (i.academic_year_id = ${academicYearId}
+              /* Credit paid back (no invoice): by when it was paid */
+              OR (r.invoice_id IS NULL AND EXISTS (SELECT 1 FROM academic_years y WHERE y.id = ${academicYearId}
+                AND (r.processed_at AT TIME ZONE ${timezone})::date BETWEEN y.start_date AND y.end_date)))) AS "refundedThisYear",
         coalesce(sum(balance) FILTER (WHERE status IN ('ISSUED', 'PARTIALLY_PAID')), 0) AS outstanding,
         coalesce(sum(balance) FILTER (WHERE status IN ('ISSUED', 'PARTIALLY_PAID') AND due_date < ${today}::date), 0) AS overdue,
         count(*) FILTER (WHERE status IN ('ISSUED', 'PARTIALLY_PAID') AND due_date < ${today}::date) AS "overdueInvoices",

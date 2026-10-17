@@ -29,6 +29,15 @@ paymentRoutes.get("/:paymentId", authorize(can.read), validate(rules.getById), c
 paymentRoutes.get("/:paymentId/receipt", authorize(can.read), validate(rules.getById), controller.receipt);
 paymentRoutes.post("/:paymentId/refunds", authorize(can.refund), validate(rules.refund), controller.refund);
 
+/* /api/v1/finance/students/:studentId/credit-refunds: pay a student's credit back (a refund like any other) */
+export const studentRefundRoutes = createRouter();
+studentRefundRoutes.post(
+  "/:studentId/credit-refunds",
+  authorize(can.refund),
+  validate(rules.creditRefund),
+  controller.creditRefund
+);
+
 /* /api/v1/finance/refunds */
 export const refundRoutes = createRouter();
 refundRoutes.get("/", authorize(can.read), validate(rules.listRefunds), controller.listRefunds);

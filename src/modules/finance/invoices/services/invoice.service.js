@@ -132,10 +132,11 @@ export const invoiceService = {
       concessionService.grantsInYear(ctx, year.id, [studentId]),
       installmentPlanService.assignedInYear(ctx, year.id, [studentId]),
       creditService.forStudent(ctx, studentId),
-      refundService.forInvoices(
-        ctx,
-        rows.map(invoice => invoice.id)
-      )
+      refundService.forStatement(ctx, studentId, {
+        invoiceIds: rows.map(invoice => invoice.id),
+        from: year.startDate,
+        to: year.endDate
+      })
     ]);
     /* Refunds whose money has left (requests, rejections and failures moved nothing) */
     const liveRefunds = refunds.filter(refund => EXECUTED_REFUND_STATUSES.includes(refund.status));

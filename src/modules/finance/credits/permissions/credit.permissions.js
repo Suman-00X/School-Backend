@@ -3,6 +3,5 @@ import { FINANCE_MANAGERS, FINANCE_READERS } from "../../shared/constants/financ
 
 export const CREDIT_PERMISSIONS = definePermissions("finance.credits", {
   read: FINANCE_READERS,
-  apply: FINANCE_MANAGERS,
-  refund: FINANCE_MANAGERS
+  apply: FINANCE_MANAGERS
 });

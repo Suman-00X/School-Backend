@@ -68,17 +68,16 @@ subscribe(REFUND_PROCESSED, "communication.refundProcessed", async ({ tenantId, 
   });
 });
 
-/* Refund requested -> every administrator (in-app), once per request */
+/* Refund requested -> every administrator but the requester (in-app), once per request */
 subscribe(REFUND_REQUESTED, "communication.refundRequested", async ({ tenantId, refundId }) => {
   const ctx = { tenantId, role: "SYSTEM" };
   const refund = await refundService.findById(ctx, refundId);
   if (!refund || refund.status !== "REQUESTED" || !(await claimOnce(`refund-requested:${refundId}`))) return;
   const tenant = await getTenant(tenantId);
   await notificationService.notify(ctx, {
-    userIds: await recipients.forAudience(ctx, { roles: ["ADMIN"] }),
+    userIds: (await recipients.forAudience(ctx, { roles: ["ADMIN"] })).filter(id => id !== refund.requestedBy),
     type: "REFUND_REQUESTED",
     ...messages.refundRequested({
-      refundNumber: refund.refundNumber,
       amount: refund.amount,
       receiptNumber: refund.payment?.receiptNumber,
       studentName: nameOf(refund.student),

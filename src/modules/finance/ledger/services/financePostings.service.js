@@ -14,8 +14,8 @@ import { ledgerService } from "./ledger.service.js";
      concessions changed   a reversal and a re-issue
      payment received      Dr cash / bank / gateway clearing / Cr receivables (+ Cr student credit for any excess)
      credit applied        Dr student credit / Cr receivables
-     credit paid back      Dr student credit / Cr cash or bank
      refund                Dr receivables / student credit (its split) / Cr gateway clearing, cash or bank
+                           (credit paid back to the family is a refund with no payment: Dr student credit)
      refund failed         its reversal
 
    Concessions are posted gross: fee income shows what was charged, the concessions account
@@ -176,29 +176,14 @@ export const financePostings = {
       { dbc }
     ),
 
-  creditRefunded: (ctx, { entry }, { dbc }) =>
-    ledgerService.post(
-      ctx,
-      {
-        narration: `Student credit of ${Number(entry.amount).toFixed(2)} paid back (${entry.method}${entry.reference ? ` ${entry.reference}` : ""})`,
-        sourceType: STUDENT_CREDIT,
-        sourceId: entry.id,
-        event: "refunded",
-        lines: [
-          { account: { key: "STUDENT_CREDIT" }, debit: entry.amount, studentId: entry.studentId },
-          { account: methodAccount(entry.method), credit: entry.amount, memo: entry.reference ?? null }
-        ]
-      },
-      { dbc }
-    ),
-
-  /* Money paid back from a payment (processed, or pending at the gateway) */
+  /* Money paid back from a payment (processed, or pending at the gateway), or from a
+     student's credit (receiptNumber null) */
   refundExecuted: (ctx, { refund, receiptNumber }, { dbc }) =>
     ledgerService.post(
       ctx,
       {
         narration:
-          `Refund ${refund.refundNumber} of payment ${receiptNumber}` +
+          `Refund ${refund.refundNumber} ${receiptNumber ? `of payment ${receiptNumber}` : "of student credit"}` +
           (refund.status === "PENDING" ? " (pending at the payment gateway)" : ""),
         sourceType: REFUND,
         sourceId: refund.id,

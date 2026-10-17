@@ -3,7 +3,7 @@ import { created, ok, paginated } from "../../../../common/http/responses.js";
 import { paymentService } from "../services/payment.service.js";
 import { receiptService } from "../services/receipt.service.js";
 import { refundReceiptService } from "../services/refundReceipt.service.js";
-import { refundService } from "../services/refund.service.js";
+import { refundLabel, refundService } from "../services/refund.service.js";
 
 const outcome = refund =>
   ({
@@ -12,10 +12,14 @@ const outcome = refund =>
     PENDING: "submitted to the payment gateway"
   })[refund.status] ?? refund.status.toLowerCase();
 
-/* "Refund RFND26-000003 of 400.00 (approved and) processed for receipt RCPT26-000007" */
+const source = refund => (refund.payment ? `for receipt ${refund.payment.receiptNumber}` : "from the student's credit");
+
+/* "Refund RFND26-000003 of 400.00 (approved and) processed for receipt RCPT26-000007";
+   a request has no number yet: "Refund of 300.00 requested for receipt RCPT26-000004…" */
 const refundMessage = (refund, { approved = false } = {}) =>
-  `Refund ${refund.refundNumber} of ${Number(refund.amount).toFixed(2)} ${approved ? "approved and " : ""}${outcome(refund)} for receipt ${refund.payment.receiptNumber}` +
-  (refund.status === "REQUESTED" ? ". An administrator must approve it before any money is paid back" : "");
+  refund.status === "REQUESTED"
+    ? `Refund of ${Number(refund.amount).toFixed(2)} requested ${source(refund)}. ${refund.requester?.role === "ADMIN" ? "Another administrator" : "An administrator"} must approve it before any money is paid back`
+    : `Refund ${refund.refundNumber} of ${Number(refund.amount).toFixed(2)} ${approved ? "approved and " : refund.autoApproved ? "(within the approval limit) " : ""}${outcome(refund)} ${source(refund)}`;
 
 /* "Payment confirmed. Receipt RCPT26-000004. 200.00 more than the balance is kept as credit" */
 const confirmedMessage = payment =>
@@ -56,6 +60,11 @@ export const paymentController = {
     return created(res, refund, refundMessage(refund));
   },
 
+  creditRefund: async (req, res) => {
+    const refund = await refundService.requestCreditRefund(req.context, req.params.studentId, req.body);
+    return created(res, refund, refundMessage(refund));
+  },
+
   listRefunds: async (req, res) =>
     paginated(res, await refundService.list(req.context, req.query), "Refunds retrieved successfully"),
 
@@ -69,7 +78,7 @@ export const paymentController = {
 
   rejectRefund: async (req, res) => {
     const refund = await refundService.reject(req.context, req.params.refundId, req.body);
-    return ok(res, refund, `Refund ${refund.refundNumber} rejected: ${refund.rejectionReason}. No money was paid back`);
+    return ok(res, refund, `${refundLabel(refund)} rejected: ${refund.rejectionReason}. No money was paid back`);
   },
 
   refundReceipt: async (req, res) => {

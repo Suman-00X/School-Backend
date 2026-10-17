@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { EXECUTED_REFUND_STATUSES } from "../../shared/constants/finance.constants.js";
 import { payments } from "../models/payment.schema.js";
@@ -59,6 +59,48 @@ export const paymentRefundRepository = {
       .where(scoped(paymentRefunds, tenantId, eq(paymentRefunds.id, refundId)))
       .for("update");
     return row ?? null;
+  },
+
+  /* Serialises refunds of one student's credit (there is no payment row to lock) */
+  lockStudentCredit: (tenantId, studentId, { dbc }) =>
+    dbc.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`credit-refund:${tenantId}:${studentId}`}))`),
+
+  /* Refunds of a student's credit (no payment) waiting for approval, in paise */
+  awaitingCreditApproval: async (tenantId, studentId, { dbc }) => {
+    const [row] = await dbc
+      .select({ amount: sql`coalesce(sum(${paymentRefunds.amount}), 0)`.mapWith(Number) })
+      .from(paymentRefunds)
+      .where(
+        scoped(
+          paymentRefunds,
+          tenantId,
+          isNull(paymentRefunds.paymentId),
+          eq(paymentRefunds.studentId, studentId),
+          eq(paymentRefunds.status, "REQUESTED")
+        )
+      );
+    return Math.round(row.amount * 100);
+  },
+
+  /* What the approval limit has already let through without a second person, in paise:
+     on one payment, or (paymentId null) on one student's credit. So a large refund cannot
+     be split into small ones to avoid approval. */
+  autoApprovedSoFar: async (tenantId, { paymentId, studentId }, { dbc }) => {
+    const [row] = await dbc
+      .select({ amount: sql`coalesce(sum(${paymentRefunds.amount}), 0)`.mapWith(Number) })
+      .from(paymentRefunds)
+      .where(
+        scoped(
+          paymentRefunds,
+          tenantId,
+          eq(paymentRefunds.autoApproved, true),
+          inArray(paymentRefunds.status, EXECUTED_REFUND_STATUSES),
+          paymentId
+            ? eq(paymentRefunds.paymentId, paymentId)
+            : and(isNull(paymentRefunds.paymentId), eq(paymentRefunds.studentId, studentId))
+        )
+      );
+    return Math.round(row.amount * 100);
   },
 
   /* Requests of a payment still waiting for approval, in paise */

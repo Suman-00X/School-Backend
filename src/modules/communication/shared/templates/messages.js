@@ -41,27 +41,29 @@ export const messages = {
   refundProcessed: ({ studentName, amount, refundNumber, receiptNumber, toOriginal, currency }) => ({
     title: `Refund processed (${refundNumber})`,
     body:
-      `${money(amount, currency)} from payment ${receiptNumber} for ${studentName}'s fees has been refunded (${refundNumber}).` +
+      (receiptNumber
+        ? `${money(amount, currency)} from payment ${receiptNumber} for ${studentName}'s fees has been refunded (${refundNumber}).`
+        : `${money(amount, currency)} of ${studentName}'s fee credit has been paid back (${refundNumber}).`) +
       (toOriginal
         ? " It goes back to the card, UPI or bank account that paid; banks usually take 5–7 working days."
         : "")
   }),
 
   /* To administrators: someone asked to pay money back */
-  refundRequested: ({ refundNumber, amount, receiptNumber, studentName, requesterName, reason, currency }) => ({
-    title: `Refund ${refundNumber} needs your approval`,
+  refundRequested: ({ amount, receiptNumber, studentName, requesterName, reason, currency }) => ({
+    title: `A refund of ${money(amount, currency)} needs your approval`,
     body:
-      `${requesterName} asked to refund ${money(amount, currency)} of payment ${receiptNumber} for ${studentName}` +
+      `${requesterName} asked to refund ${money(amount, currency)} ${receiptNumber ? `of payment ${receiptNumber}` : "of the credit"} for ${studentName}` +
       `${reason ? `: "${reason}"` : ""}. Approve or reject it under Finance > Refunds. No money moves until you approve.`
   }),
 
   /* To the person who asked */
   refundDecided: ({ refundNumber, amount, approved, pending, deciderName, reason, currency }) => ({
-    title: approved ? `Refund ${refundNumber} approved` : `Refund ${refundNumber} rejected`,
+    title: approved ? `Refund ${refundNumber} approved` : `Refund request of ${money(amount, currency)} rejected`,
     body: approved
       ? `${deciderName} approved refund ${refundNumber} of ${money(amount, currency)}. ` +
         (pending ? "The payment gateway is completing it." : "It has been paid back.")
-      : `${deciderName} rejected refund ${refundNumber} of ${money(amount, currency)}: ${reason}. No money was paid back.`
+      : `${deciderName} rejected your refund request of ${money(amount, currency)}: ${reason}. No money was paid back.`
   }),
 
   paymentReceived: ({ studentName, amount, receiptNumber, credit = 0, currency }) => ({

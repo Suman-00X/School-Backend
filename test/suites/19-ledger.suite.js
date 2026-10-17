@@ -210,7 +210,9 @@ describe("finance: general ledger, automatic postings", () => {
       ["1100", 0, 7000],
       ["2100", 7000, 0]
     ]);
-    const paidBack = entries.find(e => e.event === "refunded" && e.total === 200);
+    /* Credit paid back is a refund (suite 17): Dr student credit / Cr bank */
+    const refunds = (await get(`${L}/journal-entries?sourceType=REFUND&limit=100`)).data;
+    const paidBack = refunds.find(e => e.total === 200 && /of student credit$/.test(e.narration));
     assert.deepEqual(linesOf(paidBack), [
       ["1010", 0, 200],
       ["2100", 200, 0]

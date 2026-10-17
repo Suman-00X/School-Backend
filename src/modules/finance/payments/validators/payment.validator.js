@@ -55,10 +55,30 @@ export const paymentValidators = {
         message: "is required when paying back by cheque, UPI or bank transfer"
       })
   },
+  /* Default amount: all of the credit not already waiting for approval */
+  creditRefund: {
+    params: idParams("studentId"),
+    body: z
+      .object({
+        amount: amount().optional(),
+        method: z.enum(REFUND_METHODS.filter(m => m !== "ORIGINAL")),
+        reason: text(500),
+        reference: optionalText(100)
+      })
+      .refine(r => r.method === "CASH" || r.reference, {
+        path: ["reference"],
+        message: "is required when paying back by cheque, UPI or bank transfer"
+      })
+  },
   listRefunds: {
     query: listQuery({
       studentId: id().optional(),
       paymentId: id().optional(),
+      /* Refunds of a student's credit (no payment) */
+      creditOnly: z
+        .enum(["true", "false"])
+        .transform(v => v === "true")
+        .optional(),
       status: z.enum(REFUND_STATUSES).optional(),
       /* Gateway refunds the books could not fully cover */
       needsReview: z

@@ -6,7 +6,7 @@ import { getTenant } from "../../../../common/tenancy/tenant.service.js";
 import { EXECUTED_REFUND_STATUSES } from "../../shared/constants/finance.constants.js";
 import { dateIn } from "../../shared/utils/date.util.js";
 import { formatAmount } from "../../shared/utils/money.util.js";
-import { refundService } from "./refund.service.js";
+import { refundLabel, refundService } from "./refund.service.js";
 
 const nameOf = person => `${person?.firstName ?? ""} ${person?.lastName ?? ""}`.trim() || null;
 
@@ -28,8 +28,8 @@ export const refundReceiptService = {
     if (!EXECUTED_REFUND_STATUSES.includes(refund.status)) {
       throw unprocessable(
         refund.status === "REQUESTED"
-          ? `Refund ${refund.refundNumber} is waiting for approval; its receipt is available once it is processed`
-          : `Refund ${refund.refundNumber} was ${refund.status === "REJECTED" ? "rejected" : "reversed after the gateway failed to pay it"}; it has no receipt`
+          ? `${refundLabel(refund)} is waiting for approval; its receipt is available once it is processed`
+          : `${refundLabel(refund)} was ${refund.status === "REJECTED" ? "rejected" : "reversed after the gateway failed to pay it"}; it has no receipt`
       );
     }
     const tenant = await getTenant(ctx.tenantId);
@@ -64,11 +64,15 @@ export const refundReceiptService = {
       field("Status", pending ? "PENDING - the payment gateway is completing it" : "PROCESSED");
       field("Student", nameOf(refund.student?.user));
       field("Admission number", refund.student?.admissionNumber);
-      field(
-        "Original payment",
-        `Receipt ${refund.payment?.receiptNumber} of ${format(refund.payment?.amount)}, paid ${dateIn(timezone, refund.payment?.paidAt)}`
-      );
-      field("Invoice", refund.invoice?.invoiceNumber);
+      if (refund.payment) {
+        field(
+          "Original payment",
+          `Receipt ${refund.payment.receiptNumber} of ${format(refund.payment.amount)}, paid ${dateIn(timezone, refund.payment.paidAt)}`
+        );
+        field("Invoice", refund.invoice?.invoiceNumber);
+      } else {
+        field("Paid from", "The student's credit (advance held by the school)");
+      }
       if (refund.reason) field("Reason", refund.reason);
 
       doc.moveDown();
@@ -77,7 +81,7 @@ export const refundReceiptService = {
         .fillColor("#000")
         .text(`Amount refunded: ${format(refund.amount)}`);
       doc.fontSize(10);
-      field("Taken off the invoice", format(refund.fromInvoice));
+      if (refund.payment) field("Taken off the invoice", format(refund.fromInvoice));
       field("From the student's credit", format(refund.fromCredit));
       if (toMinor(refund.unallocated)) field("Not attributed (under review)", format(refund.unallocated));
 
@@ -86,7 +90,14 @@ export const refundReceiptService = {
       if (refund.reference) field("Reference", refund.reference);
       if (refund.gatewayRefundId) field("Gateway refund id", refund.gatewayRefundId);
       field("Requested by", fromGateway ? "The payment gateway's dashboard" : nameOf(refund.requester));
-      field("Approved by", fromGateway ? "Not needed (made in the gateway's dashboard)" : nameOf(refund.approver));
+      field(
+        "Approved by",
+        fromGateway
+          ? "Not needed (made in the gateway's dashboard)"
+          : refund.autoApproved
+            ? "Within the school's refund approval limit"
+            : nameOf(refund.approver)
+      );
       if (pending) {
         doc
           .moveDown()

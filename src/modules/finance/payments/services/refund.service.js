@@ -1,16 +1,19 @@
-import { and, between, eq, inArray, sql } from "drizzle-orm";
+import { and, between, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { ROLES } from "../../../../common/auth/roles.js";
 import { transaction } from "../../../../common/database/postgres.js";
 import { publish } from "../../../../common/events/events.js";
-import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
+import { conflict, forbidden, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { logger } from "../../../../common/logging/logger.js";
 import { fromMinor, toMinor } from "../../../../common/money/money.js";
 import { paymentGateway } from "../../../../common/payments/gateway.js";
+import { tenantToday } from "../../../../common/tenancy/tenant.service.js";
 import { academicYearService } from "../../../academics/academic-years/index.js";
+import { studentService } from "../../../users/students/index.js";
 import { creditService } from "../../credits/index.js";
 import { invoiceService } from "../../invoices/index.js";
 import { financePostings } from "../../ledger/index.js";
 import { paymentSettingsService } from "../../payment-settings/index.js";
+import { financeSettingsService } from "../../settings/index.js";
 import { EXECUTED_REFUND_STATUSES } from "../../shared/constants/finance.constants.js";
 import { nextRefundNumber } from "../../shared/utils/codes.util.js";
 import { paymentRefunds } from "../models/paymentRefund.schema.js";
@@ -23,6 +26,12 @@ export const REFUND_REQUESTED = "finance.refund.requested";
 export const REFUND_DECIDED = "finance.refund.decided";
 
 const money = minor => (minor / 100).toFixed(2);
+
+/* How a refund is named in messages: its number once executed, else what it is */
+export const refundLabel = refund =>
+  refund.refundNumber
+    ? `Refund ${refund.refundNumber}`
+    : `The refund request of ${Number(refund.amount).toFixed(2)}${refund.paymentId ? "" : " from the student's credit"}`;
 
 const person = { columns: { id: true, firstName: true, lastName: true, role: true } };
 
@@ -100,7 +109,8 @@ const applyEffects = async (ctx, tx, { payment, invoice, refundNumber, amountMin
    back (other refunds, a dashboard refund or spent credit may have changed it since the
    request), pay it out (through the gateway for ORIGINAL), move the money, post it to the
    ledger. A gateway refusal rolls everything back and leaves the request waiting. */
-const execute = async (ctx, tx, { refund, payment }) => {
+const execute = async (ctx, tx, { refund, payment }, approval) => {
+  if (!payment) return executeCredit(ctx, tx, refund, approval);
   if (payment.status !== "SUCCEEDED") throw unprocessable("Only a successful payment can be refunded");
   const amountMinor = toMinor(refund.amount);
   const refundableMinor = refundableOf(payment);
@@ -109,12 +119,14 @@ const execute = async (ctx, tx, { refund, payment }) => {
       (refundableMinor > 0
         ? `Only ${money(refundableMinor)} of payment ${payment.receiptNumber} can still be refunded`
         : `Payment ${payment.receiptNumber} has already been refunded in full`) +
-        `; reject ${refund.refundNumber} and request again if needed`
+        "; reject this request and request again if needed"
     );
   }
   const invoice = await invoiceService.lockForUpdate(ctx.tenantId, payment.invoiceId, { dbc: tx });
   const split = await allocate(ctx, tx, payment, invoice, amountMinor);
   coverable(split, amountMinor);
+  /* Numbered now, so rejected requests leave no gaps; a gateway refusal rolls the number back too */
+  const refundNumber = await refundNumberFor(ctx, invoice, tx);
 
   let gateway = null;
   if (refund.method === "ORIGINAL") {
@@ -123,7 +135,7 @@ const execute = async (ctx, tx, { refund, payment }) => {
       gateway = await paymentGateway().refund(credentials, {
         paymentId: payment.gatewayPaymentId,
         amountMinor,
-        notes: { refundNumber: refund.refundNumber, reason: refund.reason ?? "" }
+        notes: { refundNumber, reason: refund.reason ?? "" }
       });
     } catch (error) {
       logger.warn({ err: error, refundId: refund.id }, "Gateway refund failed");
@@ -141,20 +153,63 @@ const execute = async (ctx, tx, { refund, payment }) => {
     refund.id,
     {
       status,
+      refundNumber,
       fromInvoice: fromMinor(split.fromInvoice),
       fromCredit: fromMinor(split.fromCredit),
       unallocated: 0,
       gatewayProvider: gateway ? paymentGateway().name : null,
       gatewayRefundId: gateway?.refundId ?? null,
-      approvedBy: ctx.userId,
-      approvedAt: now,
+      ...approvalOf(ctx, approval, now),
       processedAt: status === "PROCESSED" ? now : null
     },
     { dbc: tx }
   );
-  await applyEffects(ctx, tx, { payment, invoice, refundNumber: refund.refundNumber, amountMinor, split });
+  await applyEffects(ctx, tx, { payment, invoice, refundNumber, amountMinor, split });
   await financePostings.refundExecuted(ctx, { refund: executed, receiptNumber: payment.receiptNumber }, { dbc: tx });
   return executed;
+};
+
+const approvalOf = (ctx, approval, now) => ({
+  approvedBy: ctx.userId,
+  approvedAt: now,
+  autoApproved: Boolean(approval?.autoApproved)
+});
+
+/* Execute an approved refund of a student's credit (no payment): take it off the credit,
+   number it, post it. The credit may have been used since the request. */
+const executeCredit = async (ctx, tx, refund, approval) => {
+  await refunds.lockStudentCredit(ctx.tenantId, refund.studentId, { dbc: tx });
+  const refundNumber = await refundNumberFor(ctx, null, tx);
+  const remaining = await creditService.takeForRefund(
+    ctx,
+    { studentId: refund.studentId, paymentId: null, amount: refund.amount, notes: refundNumber },
+    { dbc: tx }
+  );
+  if (remaining === null) {
+    const left = await creditService.balance(ctx, refund.studentId, { dbc: tx });
+    throw unprocessable(
+      `Only ${Number(left).toFixed(2)} of the student's credit is left; reject this request and request again if needed`
+    );
+  }
+  const now = new Date();
+  const executed = await refunds.update(
+    ctx.tenantId,
+    refund.id,
+    { status: "PROCESSED", refundNumber, ...approvalOf(ctx, approval, now), processedAt: now },
+    { dbc: tx }
+  );
+  await financePostings.refundExecuted(ctx, { refund: executed, receiptNumber: null }, { dbc: tx });
+  return executed;
+};
+
+/* An accountant's refund within the school's approval limit needs no administrator. The
+   limit counts everything it already let through on the same payment (or credit). */
+const withinApprovalLimit = async (ctx, tx, { paymentId, studentId, amountMinor }) => {
+  if (ctx.role === ROLES.ADMIN) return false;
+  const limitMinor = toMinor(await financeSettingsService.refundApprovalLimit(ctx, { dbc: tx }));
+  if (limitMinor <= 0) return false;
+  const soFar = await refunds.autoApprovedSoFar(ctx.tenantId, { paymentId, studentId }, { dbc: tx });
+  return soFar + amountMinor <= limitMinor;
 };
 
 /* A failed gateway refund: put everything back (any part the invoice no longer needs becomes credit) */
@@ -185,9 +240,12 @@ const reverse = async (ctx, tx, refund) => {
   return refunds.update(ctx.tenantId, refund.id, { status: "FAILED", failedAt: new Date() }, { dbc: tx });
 };
 
+/* Numbered by the invoice's academic year; a credit refund by the current year (or today) */
 const refundNumberFor = async (ctx, invoice, tx) => {
-  const year = await academicYearService.findById(ctx, invoice.academicYearId);
-  return nextRefundNumber(ctx.tenantId, year.startDate, { dbc: tx });
+  const year = invoice
+    ? await academicYearService.findById(ctx, invoice.academicYearId)
+    : await academicYearService.findCurrent(ctx);
+  return nextRefundNumber(ctx.tenantId, year?.startDate ?? (await tenantToday(ctx.tenantId)), { dbc: tx });
 };
 
 const notice = refund => ({
@@ -200,28 +258,36 @@ const notice = refund => ({
 
 const announce = refund => publish(REFUND_PROCESSED, notice(refund));
 
-/* A request and its payment, both locked (payment first, as every refund path does) */
+/* A request and its payment, both locked (payment first, as every refund path does; a
+   credit refund locks the student's credit instead) */
 const lockRequest = async (ctx, refundId, tx) => {
   const found = await refunds.findById(ctx.tenantId, refundId, { dbc: tx });
   if (!found) throw notFound("Refund");
-  const payment = await refunds.lockPayment(ctx.tenantId, found.paymentId, { dbc: tx });
+  const payment = found.paymentId ? await refunds.lockPayment(ctx.tenantId, found.paymentId, { dbc: tx }) : null;
+  if (!found.paymentId) await refunds.lockStudentCredit(ctx.tenantId, found.studentId, { dbc: tx });
   const refund = await refunds.lockById(ctx.tenantId, refundId, { dbc: tx });
   if (refund.status !== "REQUESTED") {
     throw conflict(
       refund.status === "REJECTED"
-        ? `Refund ${refund.refundNumber} was rejected`
-        : `Refund ${refund.refundNumber} was already approved (${refund.status.toLowerCase()})`
+        ? `${refundLabel(refund)} was rejected`
+        : `${refundLabel(refund)} was already approved (${refund.status.toLowerCase()})`
     );
   }
   return { refund, payment };
 };
 
+const afterCreate = async refund => {
+  if (refund.status === "REQUESTED") await publish(REFUND_REQUESTED, notice(refund));
+  if (refund.status === "PROCESSED") await announce(refund);
+};
+
 export const refundService = {
   /* Staff: refund (part of) a successful payment. Online payments go back through the
      school's gateway account (method ORIGINAL); others are paid back by hand and recorded.
-     It is a request until an administrator approves it; an administrator's own request is
-     approved (and executed) at once, recorded as approved by them. Requests already waiting
-     on the same payment are set aside, so together they never exceed what it can refund. */
+     It is a request until an administrator other than the requester approves it. An
+     accountant's refund within the school's approval limit is approved at once. Requests
+     already waiting on the same payment are set aside, so together they never exceed what
+     it can refund. */
   create: async (ctx, paymentId, { amount, method, reason, reference }) => {
     const refund = await transaction(async tx => {
       const payment = await refunds.lockPayment(ctx.tenantId, paymentId, { dbc: tx });
@@ -257,7 +323,6 @@ export const refundService = {
           paymentId,
           invoiceId: payment.invoiceId,
           studentId: payment.studentId,
-          refundNumber: await refundNumberFor(ctx, invoice, tx),
           amount: fromMinor(amountMinor),
           fromInvoice: fromMinor(split.fromInvoice),
           fromCredit: fromMinor(split.fromCredit),
@@ -271,16 +336,71 @@ export const refundService = {
         },
         { dbc: tx }
       );
-      return ctx.role === ROLES.ADMIN ? execute(ctx, tx, { refund: requested, payment }) : requested;
+      return (await withinApprovalLimit(ctx, tx, { paymentId, amountMinor }))
+        ? execute(ctx, tx, { refund: requested, payment }, { autoApproved: true })
+        : requested;
     });
-    if (refund.status === "REQUESTED") await publish(REFUND_REQUESTED, notice(refund));
-    if (refund.status === "PROCESSED") await announce(refund);
+    await afterCreate(refund);
     return refundService.getById(ctx, refund.id);
   },
 
-  /* Administrator: approve a request, which executes it (exactly once, under the payment's lock) */
+  /* Staff: pay a student's credit back to the family (cash, cheque, UPI, bank transfer).
+     The same procedure as any refund: a request, approved by an administrator other than
+     the requester (or by the approval limit), numbered, with a receipt and ledger entry.
+     Credit the family keeps stays with the school for later fees. */
+  requestCreditRefund: async (ctx, studentId, { amount, method, reason, reference }) => {
+    if (!(await studentService.exists(ctx, studentId))) throw notFound("Student");
+    const refund = await transaction(async tx => {
+      await refunds.lockStudentCredit(ctx.tenantId, studentId, { dbc: tx });
+      const balanceMinor = toMinor(await creditService.balance(ctx, studentId, { dbc: tx }));
+      const waitingMinor = await refunds.awaitingCreditApproval(ctx.tenantId, studentId, { dbc: tx });
+      const availableMinor = balanceMinor - waitingMinor;
+      if (balanceMinor <= 0) throw unprocessable("The student has no credit to pay back");
+      if (availableMinor <= 0)
+        throw conflict(`All of the student's credit (${money(waitingMinor)}) is already waiting for approval`);
+      const amountMinor = amount === undefined ? availableMinor : toMinor(amount);
+      if (amountMinor > availableMinor) {
+        throw unprocessable(
+          `At most ${money(availableMinor)} of the student's credit can be paid back` +
+            (waitingMinor > 0 ? ` (${money(waitingMinor)} more is waiting for approval)` : "")
+        );
+      }
+      const requested = await refunds.create(
+        ctx.tenantId,
+        {
+          paymentId: null,
+          invoiceId: null,
+          studentId,
+          amount: fromMinor(amountMinor),
+          fromInvoice: 0,
+          fromCredit: fromMinor(amountMinor),
+          unallocated: 0,
+          method,
+          status: "REQUESTED",
+          source: "STAFF",
+          reason,
+          reference,
+          requestedBy: ctx.userId
+        },
+        { dbc: tx }
+      );
+      return (await withinApprovalLimit(ctx, tx, { studentId, amountMinor }))
+        ? execute(ctx, tx, { refund: requested, payment: null }, { autoApproved: true })
+        : requested;
+    });
+    await afterCreate(refund);
+    return refundService.getById(ctx, refund.id);
+  },
+
+  /* Administrator: approve someone else's request, which executes it (exactly once, under
+     the payment's lock). Nobody approves their own. */
   approve: async (ctx, refundId) => {
-    const refund = await transaction(async tx => execute(ctx, tx, await lockRequest(ctx, refundId, tx)));
+    const refund = await transaction(async tx => {
+      const request = await lockRequest(ctx, refundId, tx);
+      if (request.refund.requestedBy === ctx.userId)
+        throw forbidden("You asked for this refund, so another administrator must approve it");
+      return execute(ctx, tx, request);
+    });
     await publish(REFUND_DECIDED, notice(refund));
     if (refund.status === "PROCESSED") await announce(refund);
     return refundService.getById(ctx, refundId);
@@ -365,7 +485,7 @@ export const refundService = {
     return { handled: outcome.handled };
   },
 
-  list: (ctx, { page, limit, studentId, paymentId, status, needsReview, from, to }) =>
+  list: (ctx, { page, limit, studentId, paymentId, status, needsReview, creditOnly, from, to }) =>
     refunds.list(ctx.tenantId, {
       page,
       limit,
@@ -373,6 +493,7 @@ export const refundService = {
       conditions: [
         studentId && eq(paymentRefunds.studentId, studentId),
         paymentId && eq(paymentRefunds.paymentId, paymentId),
+        creditOnly && isNull(paymentRefunds.paymentId),
         status && eq(paymentRefunds.status, status),
         needsReview && and(eq(paymentRefunds.source, "GATEWAY"), sql`${paymentRefunds.unallocated} > 0`),
         from && to && between(paymentRefunds.createdAt, new Date(from), new Date(`${to}T23:59:59.999Z`))
@@ -385,11 +506,21 @@ export const refundService = {
     return refund;
   },
 
-  /* For statements and notifications */
-  forInvoices: (ctx, invoiceIds) =>
-    invoiceIds.length
-      ? refunds.findMany(ctx.tenantId, { conditions: [inArray(paymentRefunds.invoiceId, invoiceIds)] })
-      : [],
+  /* For statements: refunds of the year's invoices, and refunds of the student's credit
+     requested in the year (credit has no invoice, so no year of its own) */
+  forStatement: (ctx, studentId, { invoiceIds, from, to }) =>
+    refunds.findMany(ctx.tenantId, {
+      conditions: [
+        or(
+          invoiceIds.length ? inArray(paymentRefunds.invoiceId, invoiceIds) : sql`false`,
+          and(
+            isNull(paymentRefunds.paymentId),
+            eq(paymentRefunds.studentId, studentId),
+            between(paymentRefunds.createdAt, new Date(from), new Date(`${to}T23:59:59.999Z`))
+          )
+        )
+      ]
+    }),
 
   findById: (ctx, refundId) => refunds.findById(ctx.tenantId, refundId, { with: withDetails })
 };
