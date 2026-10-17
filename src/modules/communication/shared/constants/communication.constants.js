@@ -6,6 +6,8 @@ export const NOTIFICATION_TYPES = [
   "ANNOUNCEMENT",
   "MESSAGE",
   "ATTENDANCE_ABSENT",
+  /* Teachers: registers they answer for were not taken that day */
+  "ATTENDANCE_MISSED",
   "RESULTS_PUBLISHED",
   "INVOICE_ISSUED",
   "PAYMENT_RECEIVED",

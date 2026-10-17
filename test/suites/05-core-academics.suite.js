@@ -78,7 +78,10 @@ describe("attendance", () => {
     /* D-11: the daily register is the class teacher's; teacher2 only teaches English in 1-A */
     const subjectTeacher = await register("2026-07-07", marks, { as: h.tokens.teacher2 });
     assert.equal(subjectTeacher.status, 403);
-    assert.equal(subjectTeacher.body.message, "Only the class teacher of Class 1-A can take its daily register");
+    assert.equal(
+      subjectTeacher.body.message,
+      "Only the class teacher of Class 1-A or its deputy can take its daily register"
+    );
     const tuesday = await register("2026-07-07", marks, { as: h.tokens.teacher });
     assert.equal(tuesday.status, 201);
   });

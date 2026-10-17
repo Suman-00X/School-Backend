@@ -1,8 +1,6 @@
-import { and, asc, between, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, between, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { db } from "../../../../common/database/postgres.js";
-import { classes } from "../../classes/models/class.schema.js";
-import { sections } from "../../sections/models/section.schema.js";
 import { subjects } from "../../subjects/models/subject.schema.js";
 import { attendanceRecords, attendanceSessions } from "../models/attendance.schema.js";
 import { attendanceModeRules } from "../models/attendanceModeRule.schema.js";
@@ -28,6 +26,7 @@ export const attendanceSessionRepository = {
         set: {
           subjectId: excluded(attendanceSessions.subjectId),
           takenBy: excluded(attendanceSessions.takenBy),
+          isSubstitute: excluded(attendanceSessions.isSubstitute),
           takenAt: new Date(),
           remarks: excluded(attendanceSessions.remarks),
           lockOverrideReason: excluded(attendanceSessions.lockOverrideReason),
@@ -54,6 +53,7 @@ export const attendanceSessionRepository = {
             subjectId: attendanceSessions.subjectId,
             subjectName: subjects.subjectName,
             takenBy: attendanceSessions.takenBy,
+            isSubstitute: attendanceSessions.isSubstitute,
             takenAt: attendanceSessions.takenAt,
             lockOverrideReason: attendanceSessions.lockOverrideReason,
             lockOverriddenBy: attendanceSessions.lockOverriddenBy,
@@ -70,28 +70,7 @@ export const attendanceSessionRepository = {
             )
           )
           .orderBy(asc(attendanceSessions.date), asc(attendanceSessions.kind), asc(attendanceSessions.periodNumber))
-      : [],
-
-  /* The latest register on or after `from` (of some classes, or of the whole school):
-     -> { date, className, sectionName } or null */
-  latestFrom: async (tenantId, from, { classIds, dbc = db } = {}) => {
-    const [row] = await dbc
-      .select({ date: attendanceSessions.date, className: classes.className, sectionName: sections.sectionName })
-      .from(attendanceSessions)
-      .innerJoin(sections, eq(sections.id, attendanceSessions.sectionId))
-      .innerJoin(classes, eq(classes.id, sections.classId))
-      .where(
-        scoped(
-          attendanceSessions,
-          tenantId,
-          gte(attendanceSessions.date, from),
-          classIds ? inArray(sections.classId, classIds) : undefined
-        )
-      )
-      .orderBy(desc(attendanceSessions.date))
-      .limit(1);
-    return row ?? null;
-  }
+      : []
 };
 
 export const attendanceRecordRepository = {
@@ -150,8 +129,9 @@ export const attendancePolicyRepository = {
     return policy;
   },
 
-  /* Registers take it FOR SHARE and mode changes FOR UPDATE, so a register and a
-     back-dated mode change can never both pass their checks */
+  /* Mode changes take it FOR UPDATE, and so do concurrent policy edits. A mode change
+     starts tomorrow at the earliest, so only a register for today can meet one (made just
+     before the school's midnight): that register takes it FOR SHARE. */
   lock: async (tenantId, policyId, { dbc, strength = "update" }) => {
     const [row] = await dbc
       .select()

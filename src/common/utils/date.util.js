@@ -13,6 +13,10 @@ const format = date => date.toISOString().slice(0, 10);
 export const todayIn = (timeZone = "UTC") =>
   new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 
+/* The hour (0–23) it is now in a time zone */
+export const hourIn = (timeZone = "UTC") =>
+  Number(new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(new Date()));
+
 /* 0 = Sunday … 6 = Saturday */
 export const dayOfWeek = dateString => parse(dateString).getUTCDay();
 

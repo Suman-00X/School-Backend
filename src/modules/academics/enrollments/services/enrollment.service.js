@@ -226,6 +226,16 @@ export const enrollmentService = {
       }
     }),
 
+  /* Sections of a year with at least one student currently in them */
+  sectionIdsWithStudents: async (ctx, academicYearId) =>
+    new Set(
+      (
+        await enrollmentRepository.findMany(ctx.tenantId, {
+          conditions: [eq(enrollments.academicYearId, academicYearId), eq(enrollments.status, "ACTIVE")]
+        })
+      ).map(enrollment => enrollment.sectionId)
+    ),
+
   /* A student's enrollment in a year (any status), or null */
   findForStudent: (ctx, studentId, academicYearId) =>
     enrollmentRepository.findOne(ctx.tenantId, [

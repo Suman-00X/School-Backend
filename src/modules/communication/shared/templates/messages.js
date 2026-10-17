@@ -25,6 +25,12 @@ export const messages = {
     sms: `${schoolName}: ${studentName} was marked absent in ${periods.join(", ")} on ${date}.`
   }),
 
+  /* To a teacher, in the evening: registers of the day they answer for that nobody took */
+  registersMissed: ({ date, registers }) => ({
+    title: `${registers.length === 1 ? "1 attendance register was" : `${registers.length} attendance registers were`} not taken on ${date}`,
+    body: `Nobody took ${registers.length === 1 ? "this register" : "these registers"} you are responsible for on ${date}: ${registers.join(", ")}. Please take ${registers.length === 1 ? "it" : "them"} while the register is still open.`
+  }),
+
   resultsPublished: ({ examName }) => ({
     title: `${examName} results are out`,
     body: `Results for ${examName} have been published. Open the report card to see the marks.`,

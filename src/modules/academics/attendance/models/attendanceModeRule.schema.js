@@ -10,7 +10,8 @@ export const attendanceMode = pgEnum("attendance_mode", ATTENDANCE_MODES);
 /* How often attendance is taken, from a date on: the school's mode (class_id NULL)
    or one class's override (mode NULL = follow the school again). The rule in force on
    a date is the latest one starting on or before it; with none, the school is DAILY.
-   Rules are a schedule, so a change never alters the meaning of registers already taken. */
+   A rule starts tomorrow (school time) at the earliest, enforced by a trigger, so a
+   change never alters the meaning of registers already taken. */
 export const attendanceModeRules = pgTable(
   "attendance_mode_rules",
   {

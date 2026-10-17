@@ -19,17 +19,26 @@ export const sections = pgTable(
     sectionName: text("section_name").notNull(),
     capacity: integer("capacity"),
     classTeacherId: uuid("class_teacher_id").references(() => teachers.id),
+    /* Stands in for the class teacher: daily and half-day registers, the section's scope (not report cards) */
+    deputyClassTeacherId: uuid("deputy_class_teacher_id").references(() => teachers.id),
     description: text("description")
   },
   t => [
     uniqueIndex("sections_year_class_name_uq").on(t.academicYearId, t.classId, t.sectionName),
     index("sections_class_teacher_idx").on(t.classTeacherId, t.academicYearId),
-    check("sections_capacity_chk", sql`${t.capacity} IS NULL OR ${t.capacity} > 0`)
+    index("sections_deputy_class_teacher_idx").on(t.deputyClassTeacherId, t.academicYearId),
+    check("sections_capacity_chk", sql`${t.capacity} IS NULL OR ${t.capacity} > 0`),
+    /* The deputy is someone other than the class teacher */
+    check(
+      "sections_deputy_class_teacher_chk",
+      sql`${t.deputyClassTeacherId} IS NULL OR ${t.classTeacherId} IS NULL OR ${t.deputyClassTeacherId} <> ${t.classTeacherId}`
+    )
   ]
 );
 
 export const sectionsRelations = relations(sections, ({ one }) => ({
   academicYear: one(academicYears, { fields: [sections.academicYearId], references: [academicYears.id] }),
   class: one(classes, { fields: [sections.classId], references: [classes.id] }),
-  classTeacher: one(teachers, { fields: [sections.classTeacherId], references: [teachers.id] })
+  classTeacher: one(teachers, { fields: [sections.classTeacherId], references: [teachers.id] }),
+  deputyClassTeacher: one(teachers, { fields: [sections.deputyClassTeacherId], references: [teachers.id] })
 }));

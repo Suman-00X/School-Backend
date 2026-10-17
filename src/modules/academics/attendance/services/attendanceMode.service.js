@@ -1,7 +1,7 @@
-import { conflict, unprocessable } from "../../../../common/http/errors.js";
+import { unprocessable } from "../../../../common/http/errors.js";
 import { addDays } from "../../../../common/utils/date.util.js";
 import { classService } from "../../classes/index.js";
-import { attendanceModeRuleRepository, attendanceSessionRepository } from "../repositories/attendance.repository.js";
+import { attendanceModeRuleRepository } from "../repositories/attendance.repository.js";
 
 export const DEFAULT_MODE = "DAILY";
 
@@ -66,27 +66,21 @@ export const attendanceModeService = {
   },
 
   /* Schedule a school mode and/or class overrides from one date (default: tomorrow).
-     Runs in the caller's transaction, which holds the policy row FOR UPDATE.
-     A rule replaces or cancels the same scope's rules from that date on. It may start
-     today or earlier only while no register exists from that date, so registers
-     already taken never change meaning. */
+     Runs in the caller's transaction, which holds the policy row FOR UPDATE; `today` is
+     read after taking it. A rule replaces or cancels the same scope's rules from that
+     date on. It starts tomorrow at the earliest (D-66), so registers already taken never
+     change meaning; a database trigger holds the same line. */
   schedule: async (ctx, { mode, classModes = [], effectiveFrom }, { dbc, today }) => {
-    const from = effectiveFrom ?? addDays(today, 1);
+    const tomorrow = addDays(today, 1);
+    const from = effectiveFrom ?? tomorrow;
+    if (from < tomorrow) {
+      throw unprocessable(
+        `A new attendance mode can start tomorrow (${tomorrow}) at the earliest. Choose ${tomorrow} or a later date.`
+      );
+    }
     const classIds = classModes.map(c => c.classId);
     if (classIds.length && !(await classService.allExist(ctx, classIds))) {
       throw unprocessable("classModes: one or more classes do not exist");
-    }
-
-    if (from <= today) {
-      const latest = await attendanceSessionRepository.latestFrom(ctx.tenantId, from, {
-        classIds: mode ? undefined : classIds,
-        dbc
-      });
-      if (latest) {
-        throw conflict(
-          `${latest.className}-${latest.sectionName} already has registers up to ${latest.date}, and a mode change cannot reach back over registers already taken. Start it on ${addDays(latest.date, 1)} or later.`
-        );
-      }
     }
 
     const scopes = [...(mode ? [{ classId: null, mode }] : []), ...classModes];

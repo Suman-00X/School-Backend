@@ -1,6 +1,7 @@
 import { created, ok } from "../../../../common/http/responses.js";
 import { MODE_TEXT } from "../services/attendanceMode.service.js";
 import { attendancePolicyService, attendanceService } from "../services/attendance.service.js";
+import { missingRegisterService } from "../services/missingRegisters.service.js";
 
 const windowText = policy =>
   policy.editWindowDays === 0 ? "the same day" : `${policy.editWindowDays} day(s) after the date`;
@@ -51,6 +52,14 @@ export const attendanceController = {
       await attendanceService.sectionSummary(req.context, req.query),
       "Attendance summary retrieved successfully"
     ),
+
+  missingRegisters: async (req, res) => {
+    const result = await missingRegisterService.list(req.context, req.query);
+    const message = result.total
+      ? `${result.total} register(s) not taken from ${result.from} to ${result.to}`
+      : `Every expected register was taken from ${result.from} to ${result.to}`;
+    return ok(res, result, message);
+  },
 
   student: async (req, res) =>
     ok(

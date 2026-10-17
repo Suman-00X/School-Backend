@@ -7,7 +7,7 @@ import { calendarService } from "../../../academics/calendar/index.js";
 import { enrollmentService } from "../../../academics/enrollments/index.js";
 import { reportCardPdfService, reportSnapshotService } from "../../../academics/report-cards/index.js";
 import { sectionService } from "../../../academics/sections/index.js";
-import { teacherAssignmentService } from "../../../academics/teacher-assignments/index.js";
+import { teachingScope } from "../../../academics/teacher-assignments/index.js";
 import { timetableService } from "../../../academics/timetable/index.js";
 import { studentAccess } from "../../shared/services/studentAccess.service.js";
 
@@ -86,30 +86,22 @@ export const learningService = {
     return timetableService.forTeacher(ctx, teacher.id, await currentYear(ctx));
   },
 
+  /* The current year's sections from the teacher's scope (D-11), with their role in each */
   teacherSections: async ctx => {
-    const teacher = await teacherService.findByUserId(ctx, ctx.userId);
-    if (!teacher) throw notFound("Teacher profile");
+    const scope = await teachingScope.of(ctx);
+    if (!scope?.teacherId) throw notFound("Teacher profile");
     const year = await currentYear(ctx);
+    const inYear = new Map((await sectionService.findAllInYear(ctx, year.id)).map(section => [section.id, section]));
+    const sectionIds = await teachingScope.sectionIds(ctx);
 
-    const [assignments, classSections, sections] = await Promise.all([
-      teacherAssignmentService.findForTeacher(ctx, teacher.id),
-      sectionService.findByClassTeacher(ctx, teacher.id),
-      sectionService.findAllInYear(ctx, year.id)
-    ]);
-    const inYear = new Map(sections.map(section => [section.id, section]));
-    const classTeacherOf = new Set(classSections.map(s => s.id));
-
-    const bySection = new Map();
-    for (const section of [...classSections, ...assignments.map(a => ({ id: a.sectionId }))]) {
-      if (inYear.has(section.id) && !bySection.has(section.id)) bySection.set(section.id, { subjectIds: [] });
-    }
-    for (const assignment of assignments) bySection.get(assignment.sectionId)?.subjectIds.push(assignment.subjectId);
-
-    return [...bySection.entries()].map(([sectionId, { subjectIds }]) => ({
-      sectionId,
-      section: sectionName(inYear.get(sectionId)),
-      isClassTeacher: classTeacherOf.has(sectionId),
-      subjectIds
-    }));
+    return sectionIds
+      .filter(sectionId => inYear.has(sectionId))
+      .map(sectionId => ({
+        sectionId,
+        section: sectionName(inYear.get(sectionId)),
+        isClassTeacher: scope.classTeacherOf.has(sectionId),
+        isDeputyClassTeacher: scope.deputyOf.has(sectionId),
+        subjectIds: [...(scope.subjectsBySection.get(sectionId) ?? [])]
+      }));
   }
 };

@@ -1,5 +1,17 @@
 import { relations, sql } from "drizzle-orm";
-import { check, date, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  check,
+  date,
+  index,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid
+} from "drizzle-orm/pg-core";
 import { baseColumns } from "../../../../common/database/columns.js";
 import { users } from "../../../users/accounts/models/user.schema.js";
 import { students } from "../../../users/students/models/student.schema.js";
@@ -30,11 +42,14 @@ export const attendanceSessions = pgTable(
     date: date("date").notNull(),
     kind: attendanceKind("kind").notNull().default("DAY"),
     periodNumber: integer("period_number").notNull().default(0),
-    /* PERIOD: the subject the timetable has in that period */
+    /* PERIOD: the subject taught, the timetable's unless the teacher said otherwise */
     subjectId: uuid("subject_id").references(() => subjects.id),
+    /* Who took (or last retook) the register */
     takenBy: uuid("taken_by")
       .notNull()
       .references(() => users.id),
+    /* PERIOD: taken by a teacher who is neither the timetabled nor the subject teacher */
+    isSubstitute: boolean("is_substitute").notNull().default(false),
     takenAt: timestamp("taken_at", { withTimezone: true }).notNull().defaultNow(),
     remarks: text("remarks"),
     /* Set when an override role changed the register after it locked */
@@ -44,7 +59,8 @@ export const attendanceSessions = pgTable(
   },
   t => [
     uniqueIndex("attendance_sessions_section_date_kind_period_uq").on(t.sectionId, t.date, t.kind, t.periodNumber),
-    check("attendance_sessions_period_kind_chk", periodMatchesKind(t))
+    check("attendance_sessions_period_kind_chk", periodMatchesKind(t)),
+    check("attendance_sessions_substitute_chk", sql`${t.kind} = 'PERIOD' OR NOT ${t.isSubstitute}`)
   ]
 );
 

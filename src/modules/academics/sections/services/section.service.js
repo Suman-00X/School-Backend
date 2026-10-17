@@ -1,6 +1,6 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, or, sql } from "drizzle-orm";
 import { createCrudService } from "../../../../common/crud/crudService.js";
-import { forbidden, unprocessable } from "../../../../common/http/errors.js";
+import { forbidden, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { toYearYY } from "../../../../common/utils/date.util.js";
 import { teacherService } from "../../../users/teachers/index.js";
 import { academicYearService } from "../../academic-years/index.js";
@@ -11,17 +11,30 @@ import { sectionRepository } from "../repositories/section.repository.js";
 
 const withDetails = {
   class: { columns: { id: true, className: true, classOrder: true } },
-  classTeacher: { columns: { id: true, employeeCode: true } }
+  classTeacher: { columns: { id: true, employeeCode: true } },
+  deputyClassTeacher: { columns: { id: true, employeeCode: true } }
 };
 
 const base = createCrudService(sectionRepository, { entity: "Section", with: withDetails });
 
-const assertReferences = async (ctx, { classId, classTeacherId }) => {
+const assertReferences = async (ctx, { classId, classTeacherId, deputyClassTeacherId }) => {
   if (classId && !(await classService.exists(ctx, classId))) {
     throw unprocessable("classId does not refer to an existing class");
   }
   if (classTeacherId && !(await teacherService.exists(ctx, classTeacherId))) {
     throw unprocessable("classTeacherId does not refer to an existing teacher");
+  }
+  if (deputyClassTeacherId && !(await teacherService.exists(ctx, deputyClassTeacherId))) {
+    throw unprocessable("deputyClassTeacherId does not refer to an existing teacher");
+  }
+};
+
+/* After an update, the deputy must still be someone other than the class teacher */
+const assertDeputyDiffers = (existing, data) => {
+  const classTeacherId = data.classTeacherId ?? existing.classTeacherId;
+  const deputyId = data.deputyClassTeacherId === undefined ? existing.deputyClassTeacherId : data.deputyClassTeacherId;
+  if (deputyId && deputyId === classTeacherId) {
+    throw unprocessable("The deputy class teacher must be a different teacher from the class teacher");
   }
 };
 
@@ -73,6 +86,11 @@ export const sectionService = {
 
   update: async (ctx, sectionId, data) => {
     await assertReferences(ctx, data);
+    if (data.classTeacherId || data.deputyClassTeacherId) {
+      const existing = await sectionRepository.findById(ctx.tenantId, sectionId);
+      if (!existing) throw notFound("Section");
+      assertDeputyDiffers(existing, data);
+    }
     return base.update(ctx, sectionId, data);
   },
 
@@ -117,7 +135,12 @@ export const sectionService = {
       ? sectionRepository.findMany(ctx.tenantId, { conditions: [inArray(sections.id, sectionIds)] })
       : [],
 
-  /* Sections where the teacher is class teacher */
-  findByClassTeacher: (ctx, teacherId) =>
-    sectionRepository.findMany(ctx.tenantId, { conditions: [eq(sections.classTeacherId, teacherId)] })
+  /* Sections of a year where the teacher is class teacher or deputy class teacher */
+  findLedBy: (ctx, teacherId, academicYearId) =>
+    sectionRepository.findMany(ctx.tenantId, {
+      conditions: [
+        eq(sections.academicYearId, academicYearId),
+        or(eq(sections.classTeacherId, teacherId), eq(sections.deputyClassTeacherId, teacherId))
+      ]
+    })
 };

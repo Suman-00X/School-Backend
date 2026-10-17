@@ -1,10 +1,14 @@
 import { z } from "../../../../common/validation/zod.js";
+import { daysBetween } from "../../../../common/utils/date.util.js";
 import { date, id, idParams, optionalText, patchBody } from "../../../../common/validation/schemas.js";
 import { ATTENDANCE_KINDS, ATTENDANCE_MODES, ATTENDANCE_STATUSES } from "../../shared/constants/academic.constants.js";
 
 const range = z
   .object({ from: date().optional(), to: date().optional() })
   .refine(q => !q.from || !q.to || q.to >= q.from, { path: ["to"], message: "must be on or after from" });
+
+/* Missing registers: at most a term at a time */
+const MAX_MISSING_DAYS = 92;
 
 /* Period numbers follow the bell schedule (1..20) */
 const periodNumber = () => z.number().int().min(0).max(20);
@@ -34,7 +38,7 @@ export const attendanceValidators = {
           .min(1)
           .max(100)
           .refine(list => new Set(list.map(c => c.classId)).size === list.length, "must not list the same class twice"),
-        /* Default: tomorrow */
+        /* Default: tomorrow, also the earliest (D-66) */
         modeEffectiveFrom: date()
       })
     ).refine(body => !body.modeEffectiveFrom || body.mode || body.classModes, {
@@ -51,7 +55,8 @@ export const attendanceValidators = {
         kind: z.enum(ATTENDANCE_KINDS).optional(),
         /* 0 = not a period; 1..20 = a period of the timetable */
         periodNumber: periodNumber().default(0),
-        /* Period registers: the timetable's subject (optional, checked when sent) */
+        /* Period registers: the subject taught. Default: the timetable's; required when
+           the section has no class timetabled then (a substitute's own subject) */
         subjectId: id().optional(),
         remarks: optionalText(500),
         /* Required (and only allowed for override roles) once the register is locked */
@@ -84,5 +89,14 @@ export const attendanceValidators = {
       .refine(...periodFitsKind)
   },
   summary: { query: range.and(z.object({ sectionId: id() })) },
+  missingRegisters: {
+    query: z
+      .object({ from: date(), to: date(), sectionId: id().optional(), teacherId: id().optional() })
+      .refine(q => q.to >= q.from, { path: ["to"], message: "must be on or after from" })
+      .refine(q => daysBetween(q.from, q.to) <= MAX_MISSING_DAYS, {
+        path: ["to"],
+        message: `must be within ${MAX_MISSING_DAYS} days of from`
+      })
+  },
   student: { params: idParams("studentId"), query: range.and(z.object({ academicYearId: id().optional() })) }
 };

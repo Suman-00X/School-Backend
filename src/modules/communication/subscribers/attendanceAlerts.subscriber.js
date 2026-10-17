@@ -1,8 +1,10 @@
 import { subscribe } from "../../../common/events/events.js";
-import { claimOnce } from "../../../common/jobs/claims.js";
+import { claimOnce, releaseClaim } from "../../../common/jobs/claims.js";
+import { defineJob, defineSchedule } from "../../../common/jobs/queue.js";
 import { getTenant } from "../../../common/tenancy/tenant.service.js";
+import { addDays, hourIn, todayIn } from "../../../common/utils/date.util.js";
 import { studentService } from "../../users/students/index.js";
-import { ATTENDANCE_RECORDED, attendanceService } from "../../academics/attendance/index.js";
+import { ATTENDANCE_RECORDED, attendanceService, missingRegisterService } from "../../academics/attendance/index.js";
 import { notificationService } from "../notifications/index.js";
 import { recipients } from "../shared/services/recipients.service.js";
 import { messages } from "../shared/templates/messages.js";
@@ -62,4 +64,52 @@ subscribe(ATTENDANCE_RECORDED, "communication.absenceAlerts", async payload => {
       channels: ["IN_APP", "SMS"]
     });
   }
+});
+
+/* Before this hour (school time) the day is not over: a run then covers the day before */
+const EVENING_HOUR = 17;
+
+const registerText = register =>
+  `${register.section.name}: ${register.kind === "DAY" ? "daily register" : register.label}`;
+
+/* Evening, every school: each teacher hears once (in-app) about the registers of the day
+   they answer for that nobody took. Closed days send nothing. `date` picks the day. */
+export const remindMissedRegisters = async ({ tenantId, date }) => {
+  const ctx = { tenantId, role: "SYSTEM" };
+  const timeZone = (await getTenant(tenantId))?.timezone ?? "UTC";
+  const today = todayIn(timeZone);
+  const day = date ?? (hourIn(timeZone) >= EVENING_HOUR ? today : addDays(today, -1));
+  const missed = await missingRegisterService.missedByTeacher(ctx, day);
+  if (!missed) return { date: day, closed: true, sent: 0 };
+
+  let sent = 0;
+  for (const { teacher, registers } of missed) {
+    const key = `missed-registers:${tenantId}:${day}:${teacher.teacherId}`;
+    if (!(await claimOnce(key))) continue;
+    try {
+      await notificationService.notify(ctx, {
+        userIds: [teacher.userId],
+        type: "ATTENDANCE_MISSED",
+        ...messages.registersMissed({ date: day, registers: registers.map(registerText) }),
+        data: {
+          date: day,
+          registers: registers.map(r => ({ sectionId: r.section.id, kind: r.kind, periodNumber: r.periodNumber }))
+        }
+      });
+      sent++;
+    } catch (error) {
+      await releaseClaim(key);
+      throw error;
+    }
+  }
+  return { date: day, sent };
+};
+
+export const missedRegistersJob = defineJob("communication.missedRegisters", remindMissedRegisters, { attempts: 2 });
+
+/* 14:00 UTC is 19:30 in India */
+defineSchedule("communication.missedRegisters.evening", {
+  job: missedRegistersJob,
+  cron: "0 14 * * *",
+  everyMs: 24 * 60 * 60 * 1000
 });

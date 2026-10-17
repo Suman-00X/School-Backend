@@ -79,13 +79,13 @@ In every school's database.
 | academic-years | `academic_years` | School years (2026-27): weekly off days, current flag, `archived_at` | Unique name. **At most one current year** (partial unique). CHECK end > start. CHECK not both current and archived. **Archived years are read-only** (trigger) |
 | classes | `classes` | Grade levels, shared across years | Unique name and order |
 | subjects | `subjects` | Subjects offered | Unique code and name |
-| sections | `sections` | A class's division in one year (1-A, 2026-27), with class teacher and capacity | Unique (year, class, section name). CHECK capacity > 0 |
+| sections | `sections` | A class's division in one year (1-A, 2026-27), with class teacher, optional deputy class teacher (`deputy_class_teacher_id`: daily and half-day registers and the section's scope, not report cards) and capacity | Unique (year, class, section name). CHECK capacity > 0. CHECK the deputy is not the class teacher |
 | section-subjects | `section_subjects` | Subjects taught in a section | Partial unique (section, subject) and (section, display code) |
-| teacher-assignments | `teacher_assignments` | Who teaches a subject in a section. Drives teacher record-level scope | Partial unique (section, subject) |
+| teacher-assignments | `teacher_assignments` | Who teaches a subject in a section. With the class and deputy class teachers of `sections`, drives teacher record-level scope (current academic year only) | Partial unique (section, subject) |
 | enrollments | `student_enrollments` | A student's section and roll number for one year. Promotion adds next year's row | Unique (year, student) and (section, roll number) |
 | calendar | `calendar_events` | Holidays, events and exam days that affect working days | CHECK end ≥ start |
-| attendance | `attendance_sessions` | One register: section × date × kind (DAY, FORENOON, AFTERNOON, PERIOD) × period (0 unless PERIOD) | Unique (section, date, kind, period); CHECK period > 0 exactly when kind is PERIOD |
-| attendance | `attendance_mode_rules` | How attendance is taken (DAILY, TWO_SESSIONS, PERIOD_WISE) from a date, for the school (`class_id` null) or one class (mode null = follow the school) | Partial unique (school, date) and (class, date); a school rule must have a mode |
+| attendance | `attendance_sessions` | One register: section × date × kind (DAY, FORENOON, AFTERNOON, PERIOD) × period (0 unless PERIOD). Periods keep the subject taught (the timetable's, or the one the teacher gave). `taken_by` is who took it last; `is_substitute` marks a period taken by a teacher neither timetabled for it nor assigned its subject | Unique (section, date, kind, period); CHECK period > 0 exactly when kind is PERIOD; CHECK only periods are substitute registers |
+| attendance | `attendance_mode_rules` | How attendance is taken (DAILY, TWO_SESSIONS, PERIOD_WISE) from a date, for the school (`class_id` null) or one class (mode null = follow the school) | Partial unique (school, date) and (class, date); a school rule must have a mode. **A trigger refuses a rule starting before tomorrow** in the school's time zone (ZA422) |
 | attendance | `attendance_records` | One student's mark in a register: PRESENT, ABSENT, LATE, HALF_DAY, EXCUSED | Unique (session, student). Indexed by student/date and section/date |
 | timetable | `periods` | The bell schedule for a year | Partial unique (year, period number). CHECK end > start |
 | timetable | `timetable_slots` | Section × weekday × period → subject, teacher, room | Partial uniques stop clashes: one slot per section, one per teacher, one per room, per weekday and period |
@@ -269,7 +269,7 @@ erDiagram
 | `announcements` | `communication/announcements` | Circulars with audience rules (everyone, roles, classes, sections), draft → published | (tenant, status, time) |
 | `importjobs` | `administration/imports` | CSV import progress and per-row errors | (tenant, time) |
 | `storedfiles` | `files/documents` | Upload metadata: owner, category, type, size, storage key (never returned), uploader | (tenant, owner type, owner id, time) |
-| `jobclaims` | `common/jobs/claims.js` | Once-only side effects (results published, absence alert sent today) | Unique `key`; TTL 90 days |
+| `jobclaims` | `common/jobs/claims.js` | Once-only side effects (results published, absence alert sent today, a teacher reminded of the day's missing registers) | Unique `key`; TTL 90 days |
 | `report_snapshots` | `academics/report-cards` | A student's report card exactly as published, one per publication version: student, policy (with its settings), the report body (subjects, grades, GPA/CGPA, grace, result, ranks). **Write-once** (never updated or deleted; visibility lives in `result_publications`) and HMAC-**sealed**: the publication row lists every seal (`snapshot_seals`), so edits, forgeries and deletions are detected on read. The portal and its PDFs read these, never live marks | Unique (tenant, publication, student); (tenant, kind, source, version); (tenant, student, year, publishedAt) |
 
 IDs in Mongo documents are the **PostgreSQL UUIDs** stored as strings. There are no cross-database foreign keys; PostgreSQL stays the source of truth. File bytes live in object storage (S3 or local disk), never in a database.

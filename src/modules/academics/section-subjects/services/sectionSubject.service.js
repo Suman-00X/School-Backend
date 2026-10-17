@@ -60,5 +60,16 @@ export const sectionSubjectService = {
       : [],
 
   isTaught: (ctx, academicYearId, sectionId, subjectId) =>
-    sectionSubjectRepository.exists(ctx.tenantId, taughtConditions(academicYearId, sectionId, subjectId))
+    sectionSubjectRepository.exists(ctx.tenantId, taughtConditions(academicYearId, sectionId, subjectId)),
+
+  /* Taught in the section, or in another section of its class that year */
+  isTaughtInClass: async (ctx, section, subjectId) => {
+    const classSections = (await sectionService.findAllInYear(ctx, section.academicYearId))
+      .filter(other => other.classId === section.classId)
+      .map(other => other.id);
+    return sectionSubjectRepository.exists(ctx.tenantId, [
+      inArray(sectionSubjects.sectionId, classSections),
+      eq(sectionSubjects.subjectId, subjectId)
+    ]);
+  }
 };

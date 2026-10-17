@@ -15,6 +15,9 @@ const claimSchema = new mongoose.Schema({
 const JobClaim = tenantModel("JobClaim", claimSchema);
 
 export const claimOnce = async key => {
+  /* The unique index must exist before the first claim on a school's database: a
+     duplicate written while it is still building makes the build fail for good */
+  await JobClaim.init();
   try {
     await JobClaim.create({ key });
     return true;

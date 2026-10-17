@@ -84,6 +84,36 @@ describe("year end", () => {
     assert.equal(Number(current.rows[0].count), 1);
   });
 
+  it("limits teachers to the current year's sections from the switch on", async () => {
+    /* world.teacher was class teacher of 1-A in 2026-27: that year is outside their scope now */
+    const lastYear = { headers: { "x-academic-year-id": world.y1.id } };
+    assert.equal((await get(`${A}/sections`, { as: h.tokens.teacher, ...lastYear })).meta.total, 0);
+    assert.equal((await get(`${A}/sections`, { as: h.tokens.teacher })).meta.total, 0);
+    await get(`${A}/sections/${world.s1A.id}`, { as: h.tokens.teacher }, 403);
+    await get(`${A}/attendance/summary?sectionId=${world.s1A.id}`, { as: h.tokens.teacher }, 403);
+    await get(`${A}/enrollments?sectionId=${world.s1A.id}`, { as: h.tokens.teacher, ...lastYear }, 403);
+    assert.equal((await get("/api/v1/users/students?limit=100", { as: h.tokens.teacher })).meta.total, 0);
+    await get(`/api/v1/users/students/${world.s2.id}`, { as: h.tokens.teacher }, 404);
+    assert.deepEqual((await get("/api/v1/me/teaching/sections", { as: h.tokens.teacher })).data, []);
+
+    /* ADMIN and PRINCIPAL keep every year */
+    assert.ok((await get(`${A}/sections`, { as: h.tokens.principal, ...lastYear })).meta.total > 0);
+    await get(`/api/v1/users/students/${world.s2.id}`, { as: h.tokens.principal });
+
+    /* Class teacher of a section this year: that section and its students again */
+    await patch(`${A}/sections/${world.s1ANext.id}`, { classTeacherId: world.teacher.id });
+    const repeaters = (await get(`${A}/enrollments?sectionId=${world.s1ANext.id}`)).data.map(e => e.studentId);
+    const mine = await get("/api/v1/users/students?limit=100", { as: h.tokens.teacher });
+    assert.deepEqual(
+      mine.data.map(s => s.id),
+      repeaters
+    );
+    assert.deepEqual(
+      (await get(`${A}/sections`, { as: h.tokens.teacher })).data.map(s => s.id),
+      [world.s1ANext.id]
+    );
+  });
+
   it("recorded every write in the audit trail", async () => {
     await request("DELETE", `/api/v1/users/${world.accountant.userId}`);
     await new Promise(resolve => setTimeout(resolve, 300));

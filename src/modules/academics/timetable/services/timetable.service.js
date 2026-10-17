@@ -123,6 +123,11 @@ const toGrid = (periods, slots, weeklyOffDays) => ({
     }))
 });
 
+const lessonsWhere = async (ctx, condition) =>
+  (await timetableSlotRepository.findMany(ctx.tenantId, { conditions: [condition], with: slotDetails })).sort(
+    (a, b) => a.weekday - b.weekday || a.period.periodNumber - b.period.periodNumber
+  );
+
 export const timetableService = {
   create: async (ctx, data) => {
     const slot = await checkSlot(ctx, data);
@@ -145,12 +150,11 @@ export const timetableService = {
     return row;
   },
 
-  /* Weekly grid of a section. Teachers: only as its class teacher (D-11). */
+  /* Weekly grid of a section. Teachers: only as its class teacher or deputy (D-11). */
   forSection: async (ctx, sectionId) => {
     const section = await sectionService.findById(ctx, sectionId);
     if (!section) throw notFound("Section");
-    const scope = await teachingScope.of(ctx);
-    if (scope && !scope.classTeacherOf.has(sectionId)) {
+    if (!(await teachingScope.leadsSection(ctx, sectionId))) {
       throw forbidden("You can see your own timetable, and a section's timetable only as its class teacher");
     }
     const academicYear = await academicYearService.findById(ctx, section.academicYearId);
@@ -201,19 +205,9 @@ export const timetableService = {
       { with: slotDetails }
     ),
 
-  /* Does the teacher have any weekly class in the section? */
-  teachesIn: (ctx, teacherId, sectionId) =>
-    timetableSlotRepository.exists(ctx.tenantId, [
-      eq(timetableSlots.teacherId, teacherId),
-      eq(timetableSlots.sectionId, sectionId)
-    ]),
-
   /* Every weekly class of a section, by weekday and bell order */
-  lessonsOf: async (ctx, sectionId) =>
-    (
-      await timetableSlotRepository.findMany(ctx.tenantId, {
-        conditions: [eq(timetableSlots.sectionId, sectionId)],
-        with: slotDetails
-      })
-    ).sort((a, b) => a.weekday - b.weekday || a.period.periodNumber - b.period.periodNumber)
+  lessonsOf: (ctx, sectionId) => lessonsWhere(ctx, eq(timetableSlots.sectionId, sectionId)),
+
+  /* Every weekly class of an academic year, by weekday and bell order */
+  lessonsInYear: (ctx, academicYearId) => lessonsWhere(ctx, eq(timetableSlots.academicYearId, academicYearId))
 };

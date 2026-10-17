@@ -23,13 +23,21 @@ const base = createCrudService(teacherAssignmentRepository, {
 export const teacherAssignmentService = {
   remove: base.remove,
 
-  /* For other submodules: every active assignment of a teacher (all years) */
-  findForTeacher: (ctx, teacherId) =>
-    teacherAssignmentRepository.findMany(ctx.tenantId, { conditions: [eq(teacherAssignments.teacherId, teacherId)] }),
+  /* For other submodules: every active assignment of a teacher in an academic year */
+  findForTeacher: (ctx, teacherId, academicYearId) =>
+    teacherAssignmentRepository.findMany(ctx.tenantId, {
+      conditions: [eq(teacherAssignments.teacherId, teacherId), eq(teacherAssignments.academicYearId, academicYearId)]
+    }),
 
   /* Assignments of one section */
   findForSection: (ctx, sectionId) =>
     teacherAssignmentRepository.findMany(ctx.tenantId, { conditions: [eq(teacherAssignments.sectionId, sectionId)] }),
+
+  /* Every assignment of an academic year */
+  findInYear: (ctx, academicYearId) =>
+    teacherAssignmentRepository.findMany(ctx.tenantId, {
+      conditions: [eq(teacherAssignments.academicYearId, academicYearId)]
+    }),
 
   /* Year-scoped; filter by section and/or teacher. Teachers: their sections only. */
   list: async (ctx, { page, limit, sectionId, teacherId }) => {
