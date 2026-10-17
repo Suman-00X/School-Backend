@@ -9,6 +9,7 @@ Only **open** items are here: things that need your decision, or that you may wa
 | | Item |
 |---|---|
 | 🟡 | D-64 hostel; the fee and result choices to confirm (D-17 to D-21, D-09/D-10) |
+| Building | Round 9: one attendance mode for the whole school; only the section's own teachers substitute, else the period is marked free |
 | 🟡 | D-70: attendance as you answered D-66 is built; small choices to confirm |
 | 🟡 | D-69: owners, handovers and activity logs are built; small choices to confirm |
 | Later | D-44: restore drill, once there is drill data |

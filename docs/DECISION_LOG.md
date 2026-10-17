@@ -422,6 +422,7 @@ You decided, and it is built:
 
   It replaces the old on/off "skip closed days" setting. Schools that counted every day keep doing so.
 - **Round 8 follow-ups:**
+  - **How many titles a reader may hold is each school's own setting** (`maxHoldsPerBorrower` in the library policy, 0–50; 5 is only the starting value). So are the hold pickup days.
   - Exceptional closed days (such as the break between academic years) are **entered by hand** (`/library/closures`). Fines skip them on either basis, and due dates move past them.
   - Blocks stay on by default, but **the fine limit is each school's own**: there is no preset amount. Until a school sets it, fines do not block, and the policy says so (`setupNeeded`).
 - The other library choices stay as built: loan terms fixed at issue, rule precedence, fines only go up, the lost-book charge and found refund, holds, notifications, leavers' holds.
