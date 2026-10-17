@@ -796,6 +796,28 @@ describe("attendance modes: substitutes take period registers (Class 6)", () => 
     await get(`${U}/students/${t.a6.id}`, { as: h.tokens.ct5 }, 404);
     assert.equal((await get(`${U}/students?limit=100`, { as: h.tokens.ct5 })).meta.total, 2, "still 5-A only");
 
+    /* Covering a class today: the roster of that one period opens, to take its register */
+    const today = todayIn("Asia/Kolkata");
+    const cover = await get(`${A}/attendance/register?sectionId=${t.s6A.id}&date=${today}&periodNumber=4`, {
+      as: h.tokens.ct5
+    });
+    assert.deepEqual(
+      [cover.data.taken, cover.data.students.map(s => [s.firstName, s.status])],
+      [
+        false,
+        [
+          ["Fa6", null],
+          ["Fb6", null],
+          ["Fc6", null]
+        ]
+      ]
+    );
+    for (const url of [
+      `${A}/attendance/register?sectionId=${t.s6A.id}&date=${today}`,
+      `${A}/attendance/register?sectionId=${t.s6A.id}&date=${addDays(today, -1)}&periodNumber=4`
+    ])
+      await get(url, { as: h.tokens.ct5 }, 403);
+
     /* Staff see who stood in */
     const day = await get(`${A}/attendance/register?sectionId=${t.s6A.id}&date=2026-08-20`);
     assert.deepEqual(

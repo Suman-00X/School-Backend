@@ -9,7 +9,7 @@ Only **open** items are here: things that need your decision, or that you may wa
 | | Item |
 |---|---|
 | 🟡 | D-64 hostel; the fee and result choices to confirm (D-17 to D-21, D-09/D-10) |
-| Building | D-66 attendance, as you answered (round 7) |
+| 🔴 | D-70: attendance as you answered D-66 is built; one choice needs you (last year closed to teachers) |
 | 🟡 | D-69: owners, handovers and activity logs are built; small choices to confirm |
 | Later | D-44: restore drill, once there is drill data |
 
@@ -37,6 +37,25 @@ Built: a school picks **once a day**, **forenoon and afternoon**, or **every per
 - **Class teacher away:** only ADMIN or PRINCIPAL can take the daily register. *Option:* a deputy class teacher per section.
 - **Last year:** a teacher still sees last year's sections (not its students). *Option:* current year only.
 - **Absence alerts:** parents get one alert per missed session; in period mode, one per day at the first missed period.
+
+### 🔴 D-70: Attendance as you answered (D-66): choices to confirm
+Built (DECISION_LOG.md › D-66).
+- 🔴 **Last year closes to teachers when the new year becomes current.** You said teachers see the current year only. Late marks, report-card fixes or attendance corrections for last year must then be done by ADMIN or the principal. *Option:* keep last year open to its teachers for N days after the switch.
+- 🟡 **Substitutes:**
+  - A substitute (any teacher covering a period) can open that period's student list today, take the register, and read it back later. Nothing else of the section.
+  - A teacher counts as a substitute when they are neither the timetabled teacher nor the subject teacher; the class teacher covering a period counts too. The last person to take or retake the register is the one recorded.
+- 🟡 **Missed registers:**
+  - Each evening (19:30 India time), every teacher gets one in-app notice for the registers they missed that day.
+  - The deputy is never held responsible. A register whose class teacher's account is deactivated is listed as "unassigned".
+  - Past days are checked against today's timetable, because the timetable keeps no history.
+- 🟡 **Per-subject attendance:**
+  - In period-wise classes, each subject has its own held / attended / percentage / days attended.
+  - A half-day mark in a period counts as attended for "days attended".
+  - The overall figures stay alongside.
+- 🟡 **Deputy class teacher:**
+  - One per section. The deputy takes daily registers and sees the section's students, attendance and timetable.
+  - Marks and homework only for the subjects they teach; report cards stay with the class teacher.
+- 🟡 **A refused mode change saves nothing**, including other policy settings sent in the same request.
 
 ### 🟡 D-69: Owners, handovers and activity logs: choices to confirm
 Built as you answered D-67 (DECISION_LOG.md › D-67). Small choices, staying as built unless you say otherwise:

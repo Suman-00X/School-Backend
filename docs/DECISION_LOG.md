@@ -437,6 +437,14 @@ You decided, and it is built:
   - Both views filter by person, action, record, method, dates and text.
   - Changes to a module's operators and handovers appear in that module's tab.
 
+### ✅ D-66: Three attendance systems (round 7)
+1. **Mode changes only start tomorrow or later.** They can be made on any day, never back-dated; a database trigger enforces it.
+2. **Registers nobody took count against the student, and the responsible person is held to account.** This is the class teacher for daily and half-day registers; for a period, the timetabled teacher, else the subject teacher. It works through an evening notice and a missed-registers report per teacher (`GET /academics/attendance/missing-registers`).
+3. **Period-wise attendance per subject:** each subject has its own percentage and days attended.
+4. **No hard timetable rule:** whoever takes the class takes the register; substitutes are marked as such.
+5. **Deputy class teacher per section.**
+6. **Teachers see the current academic year only;** ADMIN and the principal see every year.
+
 ## Fixed during the night (for your information)
 
 A review agent audited tonight's code. Every finding was fixed and covered by a test:

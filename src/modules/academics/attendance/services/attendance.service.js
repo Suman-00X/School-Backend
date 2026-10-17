@@ -311,7 +311,8 @@ export const attendanceService = {
   /* A section's day: the registers the mode expects (and any taken), and every enrolled
      student's marks. With `kind` (and periodNumber for a period), or in DAILY mode, one
      register; otherwise the whole day, with each student's day status.
-     Outside their sections, a teacher can read back a period register they took. */
+     Outside their sections, a teacher sees one period register only: today's, to cover the
+     class as a substitute (the roster with names and roll numbers), or one they took. */
   register: async (ctx, { sectionId, date, kind, periodNumber }) => {
     const { section } = await loadSection(ctx, sectionId);
     const sessions = await attendanceSessionRepository.findInRange(ctx.tenantId, {
@@ -321,10 +322,12 @@ export const attendanceService = {
     });
     const readBack = !(await teachingScope.canAccessSection(ctx, sectionId));
     if (readBack) {
-      const tookIt =
-        kind === "PERIOD" &&
-        sessions.some(s => s.kind === "PERIOD" && s.periodNumber === periodNumber && s.takenBy === ctx.userId);
-      if (!tookIt) throw forbidden(OUTSIDE_SCOPE);
+      const period =
+        kind === "PERIOD" ? sessions.find(s => s.kind === "PERIOD" && s.periodNumber === periodNumber) : null;
+      const tookIt = period?.takenBy === ctx.userId;
+      /* Covering today's class: open while nobody else has taken it */
+      const covering = kind === "PERIOD" && !period && date === (await tenantToday(ctx.tenantId));
+      if (!tookIt && !covering) throw forbidden(OUTSIDE_SCOPE);
     }
 
     const [mode, marks, roster, policy, today] = await Promise.all([
