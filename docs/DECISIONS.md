@@ -9,7 +9,7 @@ Only **open** items are here: things that need your decision, or that you may wa
 | | Item |
 |---|---|
 | 🟡 | D-64 hostel; the fee and result choices to confirm (D-17 to D-21, D-09/D-10) |
-| Building | Round 9: one attendance mode for the whole school; only the section's own teachers substitute, else the period is marked free |
+| 🟡 | D-71: free periods and the school-wide mode are built; small choices to confirm |
 | 🟡 | D-70: attendance as you answered D-66 is built; small choices to confirm |
 | 🟡 | D-69: owners, handovers and activity logs are built; small choices to confirm |
 | Later | D-44: restore drill, once there is drill data |
@@ -39,12 +39,19 @@ Built: a school picks **once a day**, **forenoon and afternoon**, or **every per
 - **Last year:** a teacher still sees last year's sections (not its students). *Option:* current year only.
 - **Absence alerts:** parents get one alert per missed session; in period mode, one per day at the first missed period.
 
+### 🟡 D-71: Free periods and one mode for the whole school (round 9): choices to confirm
+Built as you said (DECISION_LOG.md › D-66, round 9). These stay as built unless you say otherwise:
+- **A timetabled teacher who teaches no subject in the section** (the timetable allows any teacher in a slot) can take and see that one period's register, nothing else of the section. *Option:* refuse them.
+- **No future free periods:** a period can be marked free for today or a past day, not ahead for planned leave. *Option:* allow marking ahead.
+- **A period with nothing timetabled** can be marked free too; whoever takes its register is not a substitute (nobody is replaced).
+- **Removing a free period after the edit window** needs the override reason, as for registers.
+- **Free periods in the missed-registers report** are listed separately, never as missed.
+- **API changes for the app:** the dashboard shows the school's modes over the range (no per-section mode); the attendance policy has no `classModes`.
+- **Class-level modes were removed by the migration.** That is safe only because no school is live with per-class modes.
+
 ### 🟡 D-70: Attendance as you answered (D-66): choices to confirm
 Built (DECISION_LOG.md › D-66).
-- 🟡 **Substitutes (period-wise classes only):**
-  - A substitute (any teacher covering a period) picks the section and period from the cover screen; the subject comes from the timetable and can be changed.
-  - They can then open that period's student list today, take the register, and read it back later. Nothing else of the section.
-  - A teacher counts as a substitute when they are neither the timetabled teacher nor the subject teacher; the class teacher covering a period counts too. The last person to take or retake the register is the one recorded.
+- 🟡 **Substitutes (period-wise only; round 9, see D-71):** only a teacher of the section (a subject teacher, the class teacher or the deputy) can stand in; otherwise the period is marked free. Anyone other than the timetabled teacher who takes the register is recorded as a substitute.
 - 🟡 **Missed registers:**
   - Each evening (19:30 India time), every teacher gets one in-app notice for the registers they missed that day.
   - The deputy is never held responsible. A register whose class teacher's account is deactivated is listed as "unassigned".

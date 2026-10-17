@@ -454,6 +454,14 @@ Round 8 follow-ups (your answers):
 - **Substitutes only in period-wise classes.** Daily and forenoon/afternoon registers are taken by the class teacher, else the deputy, else ADMIN or the principal (when both are away).
 - **Substitute screen:** section → period (subject filled in from the timetable, changeable) → student list. Backed by `GET /academics/attendance/cover` and `/cover/:sectionId`, then the register.
 
+Round 9 (your answers):
+- **One attendance mode for the whole school.** Per-class modes are removed; the school's mode can change from tomorrow on, and ranges spanning a change are split by date.
+- **Only teachers of the section stand in** for an absent teacher: a subject teacher of the section, the class teacher or the deputy (plus ADMIN and the principal). Anyone else is refused.
+- **Otherwise the period is free (leisure):** the admin, principal, class teacher or deputy marks it free with a reason (`/academics/attendance/free-periods`).
+  - A free period is never a missed register and counts in nobody's attendance.
+  - A register and a free mark can never both exist for one period; the database guarantees it.
+- **The cover screen** shows the teacher's own sections taking attendance by period today.
+
 ## Fixed during the night (for your information)
 
 A review agent audited tonight's code. Every finding was fixed and covered by a test:
