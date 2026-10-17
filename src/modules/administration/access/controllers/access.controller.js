@@ -9,6 +9,13 @@ const plural = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 const permissionCount = count => plural(count, "permission");
 const moduleCount = count => plural(count, "module");
 
+/* Access changes appear in the activity log of the module they concern (hostel's operators
+   in /hostel/activity), not only under administration */
+const fileUnder = (res, record) => {
+  res.locals.auditModule = record.module;
+  return record;
+};
+
 export const catalogueController = {
   list: async (req, res) => {
     const { total, modules } = catalogueService.list(req.context, req.query);
@@ -29,7 +36,7 @@ export const operatorRoleController = {
     ),
 
   create: async (req, res) => {
-    const role = await operatorRoleService.create(req.context, req.body);
+    const role = fileUnder(res, await operatorRoleService.create(req.context, req.body));
     return created(
       res,
       role,
@@ -38,13 +45,13 @@ export const operatorRoleController = {
   },
 
   update: async (req, res) => {
-    const role = await operatorRoleService.update(req.context, req.params.operatorRoleId, req.body);
+    const role = fileUnder(res, await operatorRoleService.update(req.context, req.params.operatorRoleId, req.body));
     const holders = role.holders ? `; applies to its ${role.holders} holder(s) at once` : "";
     return ok(res, role, `Operator role ${role.name} updated (${permissionCount(role.permissions.length)})${holders}`);
   },
 
   remove: async (req, res) => {
-    const role = await operatorRoleService.remove(req.context, req.params.operatorRoleId);
+    const role = fileUnder(res, await operatorRoleService.remove(req.context, req.params.operatorRoleId));
     return ok(res, role, `Operator role ${role.name} removed`);
   }
 };
@@ -58,7 +65,7 @@ export const assignmentController = {
 
   /* "Asha Rao now holds Transport desk (Transport) from 2026-10-17 until 2026-12-31" */
   create: async (req, res) => {
-    const assignment = await assignmentService.create(req.context, req.body);
+    const assignment = fileUnder(res, await assignmentService.create(req.context, req.body));
     const status = assignment.status === "SCHEDULED" ? " (scheduled)" : "";
     const what =
       assignment.kind === "OWNER" ? `is now an ${accessLabel(assignment)}` : `now holds ${accessLabel(assignment)}`;
@@ -66,12 +73,12 @@ export const assignmentController = {
   },
 
   update: async (req, res) => {
-    const assignment = await assignmentService.update(req.context, req.params.assignmentId, req.body);
+    const assignment = fileUnder(res, await assignmentService.update(req.context, req.params.assignmentId, req.body));
     return ok(res, assignment, `${fullName(assignment.user)}: ${accessLabel(assignment)}, ${period(assignment)}`);
   },
 
   revoke: async (req, res) => {
-    const assignment = await assignmentService.revoke(req.context, req.params.assignmentId);
+    const assignment = fileUnder(res, await assignmentService.revoke(req.context, req.params.assignmentId));
     const what =
       assignment.kind === "OWNER"
         ? `is no longer an ${accessLabel(assignment)}`
@@ -87,7 +94,7 @@ export const handoverController = {
   /* "Hostel work of Asha Rao handed over to Ravi Kumar: 1 operator assignment (Warden desk);
       Hostels (warden): Boys Hostel (HST-001)" */
   create: async (req, res) => {
-    const handover = await handoverService.create(req.context, req.body);
+    const handover = fileUnder(res, await handoverService.create(req.context, req.body));
     const operator = handover.assignments.filter(a => a.kind === "OPERATOR").map(a => a.operatorRole.name);
     const parts = [
       handover.assignments.some(a => a.kind === "OWNER") && "ownership of the module",

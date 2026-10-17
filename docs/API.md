@@ -180,7 +180,7 @@ Every successful write (`POST`, `PUT`, `PATCH`, `DELETE`) is recorded after the 
 | Field | Example |
 |---|---|
 | `createdAt` | `2026-10-17T09:12:44.120Z` |
-| `module` | `library` (the permission's first part; else the `/api/v1/<module>/` path) |
+| `module` | `library` (the permission's first part; else the `/api/v1/<module>/` path). Operator roles, assignments and handovers are filed under the module they concern, so `/hostel/activity` shows who was given or lost hostel access |
 | `permission`, `action` | `library.loans.circulate`, "Issue, return and renew books; collect fines" (the permission's catalogue label) |
 | `summary` | "Book issued to Asha Rao. Due 2026-11-02" (the response's message) |
 | `userId`, `role`, `actor` | Who did it; `actor: { name, role }` is a snapshot taken at the time, so the log reads the same after a rename or a role change |

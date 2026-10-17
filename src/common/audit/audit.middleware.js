@@ -54,7 +54,9 @@ export const auditTrail = (req, res, next) => {
         userId: req.context.userId,
         role: req.context.role,
         actor: await actorOf(req.context),
-        /* module and action follow from the permission (see the model) */
+        /* module and action follow from the permission (see the model), unless the
+           handler filed the change under the module it concerns (res.locals.auditModule) */
+        module: res.locals.auditModule,
         permission: res.locals.permission,
         summary: res.locals.summary,
         entityId: entityIdOf(res),

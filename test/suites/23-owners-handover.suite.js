@@ -275,18 +275,32 @@ describe("handover: a new operator takes over completely", () => {
     /* Nothing left to hand over */
     assert.equal((await handOver({ fromUserId: t.from.userId, toUserId: t.to.userId })).status, 422);
 
-    /* Audited under the handover permission, filed under the person who handed over */
+    /* Audited under the handover permission, filed under the person who handed over, and
+       in the hostel module's own activity log */
     const audit = await auditEntry({ permission: "administration.access.handOver" });
     assert.deepEqual(
       [audit.entityId, audit.userId, audit.module, audit.action, audit.summary],
       [
         t.from.userId,
         world.hostelManager.userId,
-        "administration",
+        "hostel",
         "Hand over an operator's access and duties in owned modules",
         res.body.message
       ]
     );
+  });
+
+  it("shows a module's operator changes and handovers in that module's own log", async () => {
+    const log = await get("/api/v1/hostel/activity?limit=100", as(h.tokens.hostelManager));
+    assert.ok(
+      log.data.some(entry => entry.permission === "administration.access.handOver"),
+      "the handover"
+    );
+    assert.ok(
+      log.data.some(entry => entry.path.startsWith("/api/v1/administration/access/assignments")),
+      "operator assignments"
+    );
+    assert.ok(log.data.every(entry => entry.module === "hostel"));
   });
 
   it("refuses to hand over to someone who already holds the same role", async () => {
