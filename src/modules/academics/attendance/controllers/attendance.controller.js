@@ -1,6 +1,7 @@
 import { created, ok } from "../../../../common/http/responses.js";
 import { MODE_TEXT } from "../services/attendanceMode.service.js";
 import { attendancePolicyService, attendanceService } from "../services/attendance.service.js";
+import { coverService } from "../services/cover.service.js";
 import { missingRegisterService } from "../services/missingRegisters.service.js";
 
 const windowText = policy =>
@@ -59,6 +60,21 @@ export const attendanceController = {
       ? `${result.total} register(s) not taken from ${result.from} to ${result.to}`
       : `Every expected register was taken from ${result.from} to ${result.to}`;
     return ok(res, result, message);
+  },
+
+  coverSections: async (req, res) => {
+    const result = await coverService.sections(req.context);
+    return ok(res, result, `${result.sections.length} section(s) take attendance by period today`);
+  },
+
+  coverSection: async (req, res) => {
+    const result = await coverService.section(req.context, req.params.sectionId);
+    const open = result.periods.filter(period => !period.taken).length;
+    return ok(
+      res,
+      result,
+      `${result.section.label} today: ${open} of ${result.periods.length} period register(s) not taken yet`
+    );
   },
 
   student: async (req, res) =>

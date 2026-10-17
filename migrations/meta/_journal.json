@@ -211,6 +211,13 @@
       "when": 1792256980116,
       "tag": "0029_attendance_d66",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792257675863,
+      "tag": "0030_academic_year_grace",
+      "breakpoints": true
     }
   ]
 }

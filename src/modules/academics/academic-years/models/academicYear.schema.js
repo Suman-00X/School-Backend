@@ -16,6 +16,8 @@ export const academicYears = pgTable(
       .notNull()
       .default(sql`'{0}'::integer[]`),
     description: text("description"),
+    /* When it stopped being the current year: its teachers keep it for a grace period */
+    currentUntil: timestamp("current_until", { withTimezone: true }),
     /* Archived years are read-only (enforced by database triggers, see migrations) */
     archivedAt: timestamp("archived_at", { withTimezone: true })
   },

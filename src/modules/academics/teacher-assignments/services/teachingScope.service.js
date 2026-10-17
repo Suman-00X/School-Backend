@@ -9,7 +9,8 @@ import { teacherAssignmentService } from "./teacherAssignment.service.js";
 /* Record-level access for teachers (D-11). Other roles that passed authorize() are
    not restricted by section. A teacher's scope is the sections of the current academic
    year where they are class teacher or deputy class teacher, or are assigned to teach a
-   subject. Earlier years' sections, with their students and records, are outside it. */
+   subject. Last year's sections stay in it for a month after the academic year changes
+   (PREVIOUS_YEAR_GRACE_MONTHS: late marks, report-card fixes); older years are outside it. */
 
 export const OUTSIDE_SCOPE = "You can only do this for sections you teach";
 
@@ -25,11 +26,18 @@ const buildScope = async ctx => {
   const teacher = await teacherService.findByUserId(ctx, ctx.userId);
   const year = teacher && (await academicYearService.findCurrent(ctx));
   if (!year) return emptyScope(teacher?.id ?? null);
+  const years = [year, await academicYearService.findInGrace(ctx)].filter(Boolean);
 
-  const [assignments, ledSections] = await Promise.all([
-    teacherAssignmentService.findForTeacher(ctx, teacher.id, year.id),
-    sectionService.findLedBy(ctx, teacher.id, year.id)
-  ]);
+  const perYear = await Promise.all(
+    years.map(y =>
+      Promise.all([
+        teacherAssignmentService.findForTeacher(ctx, teacher.id, y.id),
+        sectionService.findLedBy(ctx, teacher.id, y.id)
+      ])
+    )
+  );
+  const assignments = perYear.flatMap(([rows]) => rows);
+  const ledSections = perYear.flatMap(([, rows]) => rows);
 
   const subjectsBySection = new Map();
   for (const assignment of assignments) {
@@ -40,6 +48,8 @@ const buildScope = async ctx => {
   return {
     teacherId: teacher.id,
     academicYearId: year.id,
+    /* The current year, and last year during its grace month */
+    academicYearIds: years.map(y => y.id),
     classTeacherOf: idsWhere(section => section.classTeacherId === teacher.id),
     deputyOf: idsWhere(section => section.deputyClassTeacherId === teacher.id),
     subjectsBySection

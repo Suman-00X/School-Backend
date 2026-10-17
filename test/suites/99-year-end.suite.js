@@ -84,8 +84,24 @@ describe("year end", () => {
     assert.equal(Number(current.rows[0].count), 1);
   });
 
-  it("limits teachers to the current year's sections from the switch on", async () => {
-    /* world.teacher was class teacher of 1-A in 2026-27: that year is outside their scope now */
+  it("keeps last year's sections open to their teachers for a month after the switch", async () => {
+    /* world.teacher was class teacher of 1-A in 2026-27 */
+    const lastYear = { headers: { "x-academic-year-id": world.y1.id } };
+    const { rows } = await h.pool.query("SELECT current_until FROM academic_years WHERE id = $1", [world.y1.id]);
+    assert.ok(rows[0].current_until, "the switch is recorded");
+    const sections = await get(`${A}/sections`, { as: h.tokens.teacher, ...lastYear });
+    assert.ok(sections.data.some(s => s.id === world.s1A.id));
+    await get(`${A}/sections/${world.s1A.id}`, { as: h.tokens.teacher });
+    await get(`${A}/attendance/summary?sectionId=${world.s1A.id}`, { as: h.tokens.teacher });
+
+    /* A month later */
+    await h.pool.query("UPDATE academic_years SET current_until = now() - interval '32 days' WHERE id = $1", [
+      world.y1.id
+    ]);
+  });
+
+  it("limits teachers to the current year's sections once the month is over", async () => {
+    /* That year is outside their scope now */
     const lastYear = { headers: { "x-academic-year-id": world.y1.id } };
     assert.equal((await get(`${A}/sections`, { as: h.tokens.teacher, ...lastYear })).meta.total, 0);
     assert.equal((await get(`${A}/sections`, { as: h.tokens.teacher })).meta.total, 0);

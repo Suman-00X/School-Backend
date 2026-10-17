@@ -445,6 +445,11 @@ You decided, and it is built:
 5. **Deputy class teacher per section.**
 6. **Teachers see the current academic year only;** ADMIN and the principal see every year.
 
+Round 8 follow-ups (your answers):
+- **Last year stays open to its teachers for one month** after the **academic year** changes, i.e. after the new year is made current. The calendar year does not matter. Then only ADMIN and the principal reach it. `academic_years.current_until` records the switch.
+- **Substitutes only in period-wise classes.** Daily and forenoon/afternoon registers are taken by the class teacher, else the deputy, else ADMIN or the principal (when both are away).
+- **Substitute screen:** section → period (subject filled in from the timetable, changeable) → student list. Backed by `GET /academics/attendance/cover` and `/cover/:sectionId`, then the register.
+
 ## Fixed during the night (for your information)
 
 A review agent audited tonight's code. Every finding was fixed and covered by a test:

@@ -1,0 +1,1 @@
+ALTER TABLE "academic_years" ADD COLUMN "current_until" timestamp with time zone;

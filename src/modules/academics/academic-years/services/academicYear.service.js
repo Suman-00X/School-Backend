@@ -1,10 +1,11 @@
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, gt } from "drizzle-orm";
 import { cache } from "../../../../common/cache/cache.js";
 import { createCrudService } from "../../../../common/crud/crudService.js";
 import { transaction } from "../../../../common/database/postgres.js";
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { tenantToday } from "../../../../common/tenancy/tenant.service.js";
 import { studentEnrollments as enrollments } from "../../enrollments/models/enrollment.schema.js";
+import { PREVIOUS_YEAR_GRACE_MONTHS } from "../../shared/constants/academic.constants.js";
 import { academicYears } from "../models/academicYear.schema.js";
 import { academicYearRepository } from "../repositories/academicYear.repository.js";
 
@@ -61,7 +62,14 @@ export const academicYearService = {
       if (!existing) throw notFound("Academic year");
 
       if (data.isCurrent) await academicYearRepository.clearCurrent(ctx.tenantId, academicYearId, { dbc: tx });
-      return academicYearRepository.update(ctx.tenantId, academicYearId, data, { dbc: tx });
+      /* Becoming current again ends any grace; stopping being current starts it */
+      const since =
+        data.isCurrent === true
+          ? { currentUntil: null }
+          : data.isCurrent === false && existing.isCurrent
+            ? { currentUntil: new Date() }
+            : {};
+      return academicYearRepository.update(ctx.tenantId, academicYearId, { ...data, ...since }, { dbc: tx });
     }),
 
   /* Freeze a finished year: its academic records become read-only.
@@ -114,5 +122,16 @@ export const academicYearService = {
   findCurrent: ctx =>
     cache.wrap(currentKey(ctx.tenantId), CURRENT_TTL_SECONDS, async () =>
       academicYearRepository.findOne(ctx.tenantId, [eq(academicYears.isCurrent, true)])
-    )
+    ),
+
+  /* The year that stopped being current less than PREVIOUS_YEAR_GRACE_MONTHS ago (or null):
+     its teachers keep it for that long */
+  findInGrace: async ctx => {
+    const since = new Date();
+    since.setMonth(since.getMonth() - PREVIOUS_YEAR_GRACE_MONTHS);
+    return academicYearRepository.findOne(ctx.tenantId, [
+      eq(academicYears.isCurrent, false),
+      gt(academicYears.currentUntil, since)
+    ]);
+  }
 };

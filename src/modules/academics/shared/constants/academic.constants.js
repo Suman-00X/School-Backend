@@ -14,6 +14,9 @@ export const ATTENDANCE_WEIGHT = { PRESENT: 1, LATE: 1, HALF_DAY: 0.5, EXCUSED: 
 
 /* How often a class takes attendance: once a day, forenoon + afternoon, or every period */
 export const ATTENDANCE_MODES = ["DAILY", "TWO_SESSIONS", "PERIOD_WISE"];
+/* After the academic year changes, teachers keep last year's sections this many months
+   (late marks, report-card fixes, attendance corrections); then ADMIN and PRINCIPAL only */
+export const PREVIOUS_YEAR_GRACE_MONTHS = 1;
 /* What one register covers: the whole day, a half day, or one period */
 export const ATTENDANCE_KINDS = ["DAY", "FORENOON", "AFTERNOON", "PERIOD"];
 /* The registers each mode takes */

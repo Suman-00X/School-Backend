@@ -89,6 +89,7 @@ export const attendanceValidators = {
       .refine(...periodFitsKind)
   },
   summary: { query: range.and(z.object({ sectionId: id() })) },
+  cover: { params: idParams("sectionId") },
   missingRegisters: {
     query: z
       .object({ from: date(), to: date(), sectionId: id().optional(), teacherId: id().optional() })

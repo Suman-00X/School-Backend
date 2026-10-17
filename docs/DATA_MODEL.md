@@ -76,7 +76,7 @@ In every school's database.
 
 | Submodule | Table | Purpose | Key constraints |
 |---|---|---|---|
-| academic-years | `academic_years` | School years (2026-27): weekly off days, current flag, `archived_at` | Unique name. **At most one current year** (partial unique). CHECK end > start. CHECK not both current and archived. **Archived years are read-only** (trigger) |
+| academic-years | `academic_years` | School years (2026-27): weekly off days, current flag, `current_until` (when it stopped being current: its teachers keep it one more month), `archived_at` | Unique name. **At most one current year** (partial unique). CHECK end > start. CHECK not both current and archived. **Archived years are read-only** (trigger) |
 | classes | `classes` | Grade levels, shared across years | Unique name and order |
 | subjects | `subjects` | Subjects offered | Unique code and name |
 | sections | `sections` | A class's division in one year (1-A, 2026-27), with class teacher, optional deputy class teacher (`deputy_class_teacher_id`: daily and half-day registers and the section's scope, not report cards) and capacity | Unique (year, class, section name). CHECK capacity > 0. CHECK the deputy is not the class teacher |

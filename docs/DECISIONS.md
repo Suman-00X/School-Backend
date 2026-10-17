@@ -9,7 +9,7 @@ Only **open** items are here: things that need your decision, or that you may wa
 | | Item |
 |---|---|
 | 🟡 | D-64 hostel; the fee and result choices to confirm (D-17 to D-21, D-09/D-10) |
-| 🔴 | D-70: attendance as you answered D-66 is built; one choice needs you (last year closed to teachers) |
+| 🟡 | D-70: attendance as you answered D-66 is built; small choices to confirm |
 | 🟡 | D-69: owners, handovers and activity logs are built; small choices to confirm |
 | Later | D-44: restore drill, once there is drill data |
 
@@ -38,11 +38,11 @@ Built: a school picks **once a day**, **forenoon and afternoon**, or **every per
 - **Last year:** a teacher still sees last year's sections (not its students). *Option:* current year only.
 - **Absence alerts:** parents get one alert per missed session; in period mode, one per day at the first missed period.
 
-### 🔴 D-70: Attendance as you answered (D-66): choices to confirm
+### 🟡 D-70: Attendance as you answered (D-66): choices to confirm
 Built (DECISION_LOG.md › D-66).
-- 🔴 **Last year closes to teachers when the new year becomes current.** You said teachers see the current year only. Late marks, report-card fixes or attendance corrections for last year must then be done by ADMIN or the principal. *Option:* keep last year open to its teachers for N days after the switch.
-- 🟡 **Substitutes:**
-  - A substitute (any teacher covering a period) can open that period's student list today, take the register, and read it back later. Nothing else of the section.
+- 🟡 **Substitutes (period-wise classes only):**
+  - A substitute (any teacher covering a period) picks the section and period from the cover screen; the subject comes from the timetable and can be changed.
+  - They can then open that period's student list today, take the register, and read it back later. Nothing else of the section.
   - A teacher counts as a substitute when they are neither the timetabled teacher nor the subject teacher; the class teacher covering a period counts too. The last person to take or retake the register is the one recorded.
 - 🟡 **Missed registers:**
   - Each evening (19:30 India time), every teacher gets one in-app notice for the registers they missed that day.

@@ -24,6 +24,10 @@ router.get(
   inYear,
   controller.missingRegisters
 );
+/* Covering a class today: sections taking attendance by period, then one section's periods
+   and subjects; then GET /register?…&periodNumber= opens the student list */
+router.get("/cover", authorize(can.record), controller.coverSections);
+router.get("/cover/:sectionId", authorize(can.record), validate(rules.cover), controller.coverSection);
 router.get("/students/:studentId", authorize(can.read), validate(rules.student), controller.student);
 
 export default router;

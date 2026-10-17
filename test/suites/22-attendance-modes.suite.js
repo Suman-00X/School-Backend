@@ -812,6 +812,22 @@ describe("attendance modes: substitutes take period registers (Class 6)", () => 
         ]
       ]
     );
+    /* The cover screen: sections taking attendance by period today, then one section */
+    const options = await get(`${A}/attendance/cover`, { as: h.tokens.ct5 });
+    assert.equal(options.data.date, today);
+    const listed = options.data.sections.find(x => x.id === t.s6A.id);
+    assert.equal(listed?.label, "Class 6-A");
+    assert.ok(
+      options.data.sections.every(x => x.id !== world.s1A.id),
+      "daily classes have no substitutes"
+    );
+    const six = await get(`${A}/attendance/cover/${t.s6A.id}`, { as: h.tokens.ct5 });
+    assert.ok(six.data.periods.length > 0 && six.data.periods.every(p => typeof p.taken === "boolean"));
+    assert.ok(six.data.subjects.some(x => x.subjectName === "Science"));
+    const daily = await request("GET", `${A}/attendance/cover/${world.s1A.id}`, { as: h.tokens.ct5 });
+    assert.equal(daily.status, 422);
+    assert.match(daily.body.message, /does not take attendance by period today/);
+
     for (const url of [
       `${A}/attendance/register?sectionId=${t.s6A.id}&date=${today}`,
       `${A}/attendance/register?sectionId=${t.s6A.id}&date=${addDays(today, -1)}&periodNumber=4`

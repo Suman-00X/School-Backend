@@ -15,7 +15,7 @@ export const academicYearRepository = {
   clearCurrent: (tenantId, exceptId, { dbc }) =>
     dbc
       .update(academicYears)
-      .set({ isCurrent: false })
+      .set({ isCurrent: false, currentUntil: new Date() })
       .where(
         and(
           eq(academicYears.tenantId, tenantId),
