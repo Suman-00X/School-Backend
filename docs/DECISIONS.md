@@ -8,9 +8,8 @@ Only **open** items are here: things that need your decision, or that you may wa
 
 | | Item |
 |---|---|
-| 🔴 | D-65: library choices (two need you: borrowing blocks, holiday calendar) |
 | 🟡 | D-64 hostel; the fee and result choices to confirm (D-17 to D-21, D-09/D-10) |
-| 🟡 | D-66 attendance modes and D-67 module owners and operators: built, choices to confirm |
+| Building | D-66 attendance and D-67 owners, handover and activity logs, as you answered (round 7) |
 | Later | D-44: restore drill, once there is drill data |
 
 **Before go-live** (checklist; details in OPERATIONS.md):
@@ -22,34 +21,6 @@ Only **open** items are here: things that need your decision, or that you may wa
 ---
 
 ## Needs your decision
-
-### 🔴 D-65: Library: choices made while building it (D-47 to D-50)
-Built as a full library system: circulation rules, holds, stock-taking, lost and found, reports. Two choices need you:
-- 🔴 **Borrowing blocks are on by default.**
-  - A borrower cannot take a book while their unpaid fines are above **100**, or while they have any overdue book.
-  - Each school can change both in the library policy, or switch them off.
-  - Is that the right default?
-- 🔴 **Holidays between academic years.**
-  - Fines skip the days the library is closed. Inside an academic year, that means the school calendar (weekly offs, holidays, vacations).
-  - **Between two years** (for example a summer gap with no year defined), only the weekly off days are skipped, so a book due before summer collects fines over the break.
-  - Is that acceptable, or should the gap count as closed?
-
-The rest stays as built unless you say otherwise:
-- 🟡 **Loan terms are fixed at issue.** The loan period, fine per day and renewal limit are copied onto the loan when the book is issued. A later rule change does not alter books already out.
-- 🟡 **Which rule applies:** a rule for the borrower's **class** beats one for their **role**, which beats "anyone". Then a rule for a specific item type (reference, magazine) beats "any item".
-- 🟡 **Late fines only go up.**
-  - A fine shown on a date is never lowered later, even if a holiday is added afterwards. Lowering it is a waiver.
-  - A fine never exceeds the book's price (`capFineAtPrice`).
-- 🟡 **Lost books:**
-  - The charge is the larger of (price + processing fee) and the minimum charge, plus the late fine so far.
-  - Money already paid on a lost book stays paid.
-  - If the book turns up within **30 days**, the replacement charge is reversed. Anything already paid becomes library credit.
-- 🟡 **Holds:**
-  - A reader may hold up to **5** titles.
-  - A returned copy goes to the first reader in the queue, who has **3 days** to collect it; then it passes to the next.
-  - Readers are told when their copy is ready.
-- 🟢 **Notifications** go out as general messages with a library tag. Separate notification types (due soon, overdue, hold ready) are an easy follow-up if the app wants its own icons.
-- 🟢 **A student who leaves** has their holds cancelled automatically; their loans stay open until returned or written off.
 
 ---
 

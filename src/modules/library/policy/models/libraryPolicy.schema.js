@@ -1,12 +1,14 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, integer, pgTable, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, check, integer, pgEnum, pgTable, uniqueIndex } from "drizzle-orm/pg-core";
 import { baseColumns } from "../../../../common/database/columns.js";
-import { DEFAULT_POLICY as D } from "../../shared/constants/library.constants.js";
+import { DEFAULT_POLICY as D, FINE_DAY_BASES } from "../../shared/constants/library.constants.js";
 import { money } from "../../shared/models/money.columns.js";
 
 /* School-wide library settings: one row per school, created with the defaults
    (and the default circulation rules) on first read. Loan periods, limits and
    fines per borrower and item type are library_circulation_rules. */
+export const libraryFineDayBasis = pgEnum("library_fine_day_basis", FINE_DAY_BASES);
+
 export const libraryPolicies = pgTable(
   "library_policies",
   {
@@ -15,7 +17,7 @@ export const libraryPolicies = pgTable(
     fineBlockThreshold: money("fine_block_threshold").default(D.fineBlockThreshold),
     blockOnOverdue: boolean("block_on_overdue").notNull().default(D.blockOnOverdue),
     /* Fines and due dates follow the school calendar */
-    skipClosedDaysInFines: boolean("skip_closed_days_in_fines").notNull().default(D.skipClosedDaysInFines),
+    fineDayBasis: libraryFineDayBasis("fine_day_basis").notNull().default(D.fineDayBasis),
     capFineAtPrice: boolean("cap_fine_at_price").notNull().default(D.capFineAtPrice),
     /* Lost copies */
     lostProcessingFee: money("lost_processing_fee").notNull().default(D.lostProcessingFee),

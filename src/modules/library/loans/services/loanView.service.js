@@ -19,7 +19,7 @@ const calendarFor = async (ctx, loans, onDate) => {
 /* An open loan's late fine on `onDate` (never below what was already recorded) */
 const lateFineOn = (loan, onDate, { policy, calendar }) => {
   if (loan.status !== "ISSUED" || loan.dueDate >= onDate) return loan.lateFine;
-  const days = calendar.lateDays(loan.dueDate, onDate, { skipClosed: policy.skipClosedDaysInFines });
+  const days = calendar.lateDays(loan.dueDate, onDate, { basis: policy.fineDayBasis });
   return max(lateFineFor(loan, days), loan.lateFine);
 };
 

@@ -414,6 +414,15 @@ You decided, and it is built:
 5. **Razorpay payouts are imported automatically** (daily, plus "import now") and posted to the books: bank, gateway charges, gateway clearing.
 6. **Concessions stay posted gross** (fee income plus a concessions contra-income account).
 
+### ✅ D-65: Library choices (round 7)
+- **Borrowing blocks stay on by default:** unpaid fines above 100, or any overdue book. Each school can change both.
+- **Fine days are a school option** (`fineDayBasis` in the library policy):
+  - `ACADEMIC_DAYS` (default) counts only the school's working days: no weekly off days, holidays or vacations, and no days in the gap between two academic years.
+  - `CALENDAR_DAYS` counts every day.
+
+  It replaces the old on/off "skip closed days" setting. Schools that counted every day keep doing so.
+- The other library choices stay as built: loan terms fixed at issue, rule precedence, fines only go up, the lost-book charge and found refund, holds, notifications, leavers' holds.
+
 ## Fixed during the night (for your information)
 
 A review agent audited tonight's code. Every finding was fixed and covered by a test:

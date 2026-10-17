@@ -30,12 +30,18 @@ export const STAFF_BORROWER_ROLES = ROLE_GROUPS.ALL_EMPLOYEES;
 export const BORROWER_ROLES = [ROLES.STUDENT, ...STAFF_BORROWER_ROLES];
 
 /* School-wide settings, used when a school first opens its library */
+/* Late fines count either
+     ACADEMIC_DAYS  the school's working days: not weekly off days, holidays, vacations,
+                    nor the gap between two academic years (summer break with no year)
+     CALENDAR_DAYS  every day, the gap included */
+export const FINE_DAY_BASES = ["ACADEMIC_DAYS", "CALENDAR_DAYS"];
+
 export const DEFAULT_POLICY = Object.freeze({
   /* Borrowing is blocked while outstanding fines are above this (null: never) */
   fineBlockThreshold: 100,
   blockOnOverdue: true,
-  /* Weekly off days and holidays are not counted as late days */
-  skipClosedDaysInFines: true,
+  /* Which days a late fine counts (FINE_DAY_BASES) */
+  fineDayBasis: "ACADEMIC_DAYS",
   /* A late fine never exceeds the copy's price */
   capFineAtPrice: true,
   /* Lost copy: max(price + processing fee, minimum charge) */
