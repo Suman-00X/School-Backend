@@ -17,11 +17,12 @@ import { ledgerService } from "./ledger.service.js";
      refund                Dr receivables / student credit (its split) / Cr gateway clearing, cash or bank
                            (credit paid back to the family is a refund with no payment: Dr student credit)
      refund failed         its reversal
+     gateway settlement    Dr bank (what arrived) + Dr gateway charges (fees, tax included) / Cr gateway clearing
 
    Concessions are posted gross: fee income shows what was charged, the concessions account
    what was given up, so the income summary can show both. */
 
-const { INVOICE, PAYMENT, REFUND, STUDENT_CREDIT } = JOURNAL_SOURCES;
+const { INVOICE, PAYMENT, REFUND, SETTLEMENT, STUDENT_CREDIT } = JOURNAL_SOURCES;
 
 const money = minor => fromMinor(minor).toFixed(2);
 const methodAccount = method => ({ key: METHOD_ACCOUNT_KEYS[method] ?? "BANK" });
@@ -201,6 +202,35 @@ export const financePostings = {
       },
       { dbc }
     ),
+
+  /* The gateway paid collected money into the school's bank, keeping its fees */
+  settlementReceived: async (ctx, { settlement }, { dbc }) => {
+    const tenant = await getTenant(ctx.tenantId);
+    const feesMinor = toMinor(settlement.fees);
+    return ledgerService.post(
+      ctx,
+      {
+        date: dateIn(tenant?.timezone ?? "UTC", settlement.settledAt),
+        narration:
+          `Payment gateway settlement ${settlement.settlementId}` +
+          (settlement.utr ? ` (UTR ${settlement.utr})` : "") +
+          (feesMinor > 0 ? `, fees ${money(feesMinor)} incl. tax ${Number(settlement.tax).toFixed(2)}` : ""),
+        sourceType: SETTLEMENT,
+        sourceId: settlement.id,
+        event: "settled",
+        lines: [
+          { account: { key: "BANK" }, debit: settlement.amount, memo: settlement.utr },
+          { account: { key: "GATEWAY_CHARGES" }, debit: settlement.fees, memo: settlement.settlementId },
+          {
+            account: { key: "GATEWAY_CLEARING" },
+            credit: fromMinor(toMinor(settlement.amount) + feesMinor),
+            memo: settlement.settlementId
+          }
+        ].filter(line => toMinor(line.debit ?? line.credit) > 0)
+      },
+      { dbc }
+    );
+  },
 
   /* The gateway could not pay a refund out: the money is back with the school. What it took
      from the invoice goes back there while the invoice still owes it, the rest to credit. */

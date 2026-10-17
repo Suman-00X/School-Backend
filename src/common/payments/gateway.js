@@ -12,6 +12,9 @@ import env from "../config/env.config.js";
    gateway.parseWebhook(body)                     -> { event, orderId, paymentId, amountMinor, captured } |
                                                      { event, refund: { refundId, paymentId, amountMinor, status } } | null
    gateway.refund(credentials, { paymentId, amountMinor, notes }) -> { refundId, amountMinor, status: "PENDING" | "PROCESSED" | "FAILED" }
+   gateway.settlements(credentials, { from, to }) -> [{ settlementId, amountMinor, feesMinor, taxMinor, utr, status, settledAt }]
+                                                     (payouts to the school's bank between two Dates; amount is
+                                                     what reached the bank, fees include tax)
    gateway.testConnection(credentials)            -> { ok, status? }  (are the keys accepted?)
    gateway.modeOf(keyId)                          -> "test" | "live" */
 
@@ -39,6 +42,19 @@ const modeOf = keyId => (String(keyId ?? "").startsWith("rzp_live_") ? "live" : 
 
 /* Razorpay refund statuses -> ours */
 const REFUND_STATUSES = { created: "PENDING", pending: "PENDING", processed: "PROCESSED", failed: "FAILED" };
+
+/* Razorpay settlement statuses -> ours */
+const SETTLEMENT_STATUSES = { created: "PENDING", processed: "PROCESSED", failed: "FAILED" };
+
+const settlementOf = item => ({
+  settlementId: item.id,
+  amountMinor: item.amount,
+  feesMinor: item.fees ?? 0,
+  taxMinor: item.tax ?? 0,
+  utr: item.utr ?? null,
+  status: SETTLEMENT_STATUSES[item.status] ?? "PENDING",
+  settledAt: new Date(item.created_at * 1000)
+});
 
 /* Razorpay's payment.captured / payment.authorized and refund.* webhook payloads */
 const parseRazorpayWebhook = body => {
@@ -109,6 +125,27 @@ export const razorpayGateway = {
     return { refundId: refund.id, amountMinor: refund.amount, status: REFUND_STATUSES[refund.status] ?? "PENDING" };
   },
 
+  /* Settlements created between two Dates, 100 per page */
+  settlements: async (credentials, { from, to }) => {
+    requireKeys(credentials);
+    const found = [];
+    for (let skip = 0; ; skip += 100) {
+      const query = new URLSearchParams({
+        from: String(Math.floor(from.getTime() / 1000)),
+        to: String(Math.floor(to.getTime() / 1000)),
+        count: "100",
+        skip: String(skip)
+      });
+      const response = await fetch(`${RAZORPAY_API}/settlements?${query}`, {
+        headers: { authorization: basicAuth(credentials) }
+      });
+      if (!response.ok) throw new Error(`Razorpay settlements could not be read (${response.status})`);
+      const page = await response.json();
+      found.push(...(page.items ?? []).map(settlementOf));
+      if ((page.items ?? []).length < 100) return found;
+    }
+  },
+
   /* A cheap authenticated read: 200 = keys accepted, 401 = rejected */
   testConnection: async credentials => {
     requireKeys(credentials);
@@ -145,6 +182,11 @@ export const mockGateway = {
   refund: async (credentials, { amountMinor }) => {
     requireKeys(credentials);
     return { refundId: `rfnd_mock_${randomUUID().replaceAll("-", "").slice(0, 14)}`, amountMinor, status: "PROCESSED" };
+  },
+  /* None by default; tests replace this to simulate payouts */
+  settlements: async credentials => {
+    requireKeys(credentials);
+    return [];
   },
   testConnection: async credentials => {
     requireKeys(credentials);

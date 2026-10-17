@@ -176,6 +176,13 @@
       "when": 1792253680977,
       "tag": "0024_refund_approvals",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792254158486,
+      "tag": "0025_gateway_settlements",
+      "breakpoints": true
     }
   ]
 }

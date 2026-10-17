@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { todayIn } from "../../src/common/utils/date.util.js";
-import { h, world, request, get, post, patch, del, uuid } from "../helpers/harness.js";
+import { h, world, request, get, post, patch, del, uuid, settleJobs } from "../helpers/harness.js";
 
 /* The double-entry general ledger. Runs after every other finance suite: by now each
    flow (invoices, plan changes, concessions, late fees and waivers, counter and online
@@ -37,7 +37,8 @@ describe("finance: general ledger, chart of accounts", () => {
       ["2100", "Student credit (advances)"],
       ["3000", "Opening balance equity"],
       ["4800", "Late-fee income"],
-      ["4900", "Concessions (contra-income)"]
+      ["4900", "Concessions (contra-income)"],
+      ["5800", "Payment gateway charges"]
     ]) {
       assert.equal(codes[code]?.name, name, `${code} ${name}`);
       assert.equal(codes[code].isSystem, true);
@@ -497,6 +498,74 @@ describe("finance: general ledger, manual entries and reports", () => {
 });
 
 /* Keep last among the finance suites: every flow above and before has posted by now */
+describe("finance: payment gateway settlements", () => {
+  const S = "/api/v1/finance/settlements";
+  const gateway = () => h.modules.gateway.paymentGateway();
+  const withPayouts = async (payouts, fn) => {
+    const real = gateway().settlements;
+    gateway().settlements = async () => payouts;
+    try {
+      return await fn();
+    } finally {
+      gateway().settlements = real;
+    }
+  };
+  const payout = (id, rupees, fees, tax, status = "PROCESSED") => ({
+    settlementId: id,
+    amountMinor: Math.round(rupees * 100),
+    feesMinor: Math.round(fees * 100),
+    taxMinor: Math.round(tax * 100),
+    utr: `UTR${id.slice(-4)}`,
+    status,
+    settledAt: new Date()
+  });
+
+  it("imports Razorpay payouts into the books once: bank, gateway charges, clearing", async () => {
+    await post(`${S}/imports`, {}, { as: h.tokens.office }, 403);
+    const result = await withPayouts(
+      [payout("setl_auto_0001", 976.4, 23.6, 3.6), payout("setl_auto_0002", 50, 1, 0.18, "PENDING")],
+      () => post(`${S}/imports`, {}, asAccountant(), 200)
+    );
+    assert.equal(result.message, "1 settlement imported and posted to the ledger");
+    assert.deepEqual(
+      [result.data.found, result.data.imported, result.data.alreadyImported, result.data.notYetProcessed],
+      [1, 1, 0, 1]
+    );
+    const [imported] = result.data.settlements;
+    const [entry] = await journalOf("SETTLEMENT", imported.id);
+    assert.deepEqual(linesOf(entry), [
+      ["1010", 976.4, 0],
+      ["1020", 0, 1000],
+      ["5800", 23.6, 0]
+    ]);
+    assert.equal(entry.narration, "Payment gateway settlement setl_auto_0001 (UTR UTR0001), fees 23.60 incl. tax 3.60");
+
+    /* Again: nothing new */
+    const again = await withPayouts([payout("setl_auto_0001", 976.4, 23.6, 3.6)], () =>
+      post(`${S}/imports`, { from: "2026-01-01" }, asAccountant(), 200)
+    );
+    assert.equal(again.message, "No new settlements: every payout in this period is already imported");
+    assert.equal((await journalOf("SETTLEMENT", imported.id)).length, 1);
+    const listed = await get(S, { as: h.tokens.principal });
+    assert.deepEqual(
+      listed.data.map(x => [x.settlementId, x.amount, x.fees, x.journalEntry.entryNumber]),
+      [["setl_auto_0001", 976.4, 23.6, entry.entryNumber]]
+    );
+    await post(`${S}/imports`, { from: "2026-05-02", to: "2026-05-01" }, asAccountant(), 422);
+  });
+
+  it("imports every school's payouts daily; schools without keys are skipped", async () => {
+    await withPayouts([payout("setl_auto_0003", 300, 6, 1.08)], async () => {
+      await h.modules.jobs.enqueue("schedule:finance.importSettlements.daily");
+      await settleJobs();
+    });
+    assert.deepEqual((await get(S)).data.map(x => x.settlementId).sort(), ["setl_auto_0001", "setl_auto_0003"]);
+    const other = await request("POST", `${S}/imports`, { as: h.tokens.otherAdmin, body: {} });
+    assert.equal(other.status, 422);
+    assert.equal(other.body.message, "Online payments are not set up for this school");
+  });
+});
+
 describe("finance: general ledger invariants", () => {
   it("balances: total debits equal total credits", async () => {
     const tb = await trialBalance("2099-12-31");
@@ -556,7 +625,7 @@ describe("finance: general ledger invariants", () => {
     assert.deepEqual(mismatched.rows, []);
   });
 
-  it("the gateway clearing account holds online receipts less gateway refunds", async () => {
+  it("the gateway clearing account holds online receipts less gateway refunds and payouts", async () => {
     const tb = await trialBalance("2099-12-31");
     const received = await scalar(
       `SELECT coalesce(sum(amount), 0) AS value FROM payments
@@ -568,6 +637,11 @@ describe("finance: general ledger invariants", () => {
        WHERE tenant_id = $1 AND is_active AND method = 'ORIGINAL' AND status IN ('PROCESSED', 'PENDING')`,
       [h.tenant.id]
     );
-    assert.equal(balanceIn(tb, "1020"), Math.round((received - refunded) * 100) / 100);
+    const settled = await scalar(
+      "SELECT coalesce(sum(amount + fees), 0) AS value FROM gateway_settlements WHERE tenant_id = $1 AND is_active",
+      [h.tenant.id]
+    );
+    assert.ok(settled > 0);
+    assert.equal(balanceIn(tb, "1020"), Math.round((received - refunded - settled) * 100) / 100);
   });
 });

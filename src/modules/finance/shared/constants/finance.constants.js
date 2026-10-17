@@ -40,7 +40,8 @@ export const SYSTEM_ACCOUNTS = {
   STUDENT_CREDIT: { code: "2100", name: "Student credit (advances)", accountType: "LIABILITY" },
   OPENING_BALANCES: { code: "3000", name: "Opening balance equity", accountType: "EQUITY" },
   LATE_FEE_INCOME: { code: "4800", name: "Late-fee income", accountType: "INCOME" },
-  CONCESSIONS: { code: "4900", name: "Concessions (contra-income)", accountType: "INCOME", isContra: true }
+  CONCESSIONS: { code: "4900", name: "Concessions (contra-income)", accountType: "INCOME", isContra: true },
+  GATEWAY_CHARGES: { code: "5800", name: "Payment gateway charges", accountType: "EXPENSE" }
 };
 /* One income account per fee head (system key FEE_INCOME), numbered 4101, 4102… */
 export const FEE_INCOME_KEY = "FEE_INCOME";
@@ -63,6 +64,7 @@ export const JOURNAL_SOURCES = {
   PAYMENT: "PAYMENT",
   REFUND: "REFUND",
   STUDENT_CREDIT: "STUDENT_CREDIT",
+  SETTLEMENT: "SETTLEMENT",
   MANUAL: "MANUAL"
 };
 
