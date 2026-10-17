@@ -8,7 +8,7 @@ Only **open** items are here: things that need your decision, or that you may wa
 
 | | Item |
 |---|---|
-| 🟡 | D-63: refunds, now in plain words (six short questions) |
+| 🔴 | D-68: refunds built as you decided; two follow-ups (one-admin schools, the limit for admins) |
 | 🔴 | D-65: library choices (two need you: borrowing blocks, holiday calendar) |
 | 🟡 | D-64 hostel; the fee and result choices to confirm (D-17 to D-21, D-09/D-10) |
 | 🟡 | D-66 attendance modes and D-67 module owners and operators: built, choices to confirm |
@@ -87,15 +87,10 @@ To confirm:
 - **Who can be an operator:** any active employee, teachers included. Not students, parents or ADMIN.
 - **History:** removing someone keeps the record as revoked. An operator role that someone holds cannot be deleted until they are removed.
 
-### 🟡 D-63: Refunds, in plain words
-Refunds work as you asked: the accountant requests, the admin approves, a refund receipt is printed, and the books (double-entry ledger) are updated. Six small questions remain. Reply with the numbers you want changed; the rest stays as it is.
-
-1. **Small refunds.** Today every refund an accountant asks for waits for an admin, even ₹50. *Option:* an amount (say ₹500) below which the accountant can refund alone. **As built: always the admin.**
-2. **Who checks the admin?** When an admin makes a refund themselves, nobody else approves it. *Option:* a second admin must approve. **As built: the admin alone.**
-3. **Paying back extra money.** When a parent pays too much, the extra is kept as credit for the student. Handing that credit back as cash happens at once, without approval. *Option:* the same request-and-approve step as refunds. **My recommendation: yes, add it.**
-4. **Gaps in refund numbers.** A refund gets its number (for example RF-0005) when it is requested. If the admin rejects it, that number is never used. *Option:* give the number only on approval, so there are no gaps. **As built: numbered at request.**
-5. **Razorpay money reaching the bank.** Razorpay sends online fee payments to the school's bank a few days later, minus its fee. Today the accountant records that deposit in the books by hand. *Option:* fetch it from Razorpay automatically. **My recommendation: by hand now, automatic later.**
-6. **Concessions in the books.** A ₹10,000 fee with a ₹1,000 concession is recorded as ₹10,000 income and ₹1,000 concession, not as ₹9,000 income. This is what accountants and Tally expect. **My recommendation: keep it.**
+### 🔴 D-68: Refunds as you decided (D-63): two follow-ups
+Built as you answered (DECISION_LOG.md › D-63). Two consequences to confirm:
+- **A school with only one administrator cannot refund at all** from an administrator's request, because nobody approves their own. As built, the request waits until a second administrator exists. *Option:* let the principal approve an administrator's refund.
+- **The approval limit applies to accountants only.** An administrator's own refund always needs another administrator, even ₹50, as you said ("no admin can refund without approval"). *Option:* apply the limit to administrators too.
 
 ### 🟡 D-64: Hostel, flexible assignments: points to confirm
 - **Pre-booking:** a student with an active enrollment in any year can be booked, so next year's room can be booked in March. Leavers' bookings are cancelled automatically.

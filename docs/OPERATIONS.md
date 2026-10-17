@@ -218,7 +218,8 @@ npm run db:migrate                              # bring an older backup up to th
 - [ ] The app's database user owns nothing it does not need, and cannot create databases.
 - [ ] The application's MongoDB user has the `school_app` role, so published report cards are insert-only even for the application. Self-hosted: `npm run mongo:app-role -- --all --user <user> --password …` with `MONGO_ADMIN_URI`. Atlas does not allow creating roles from the driver: run `npm run mongo:app-role -- --all --dry-run` and create the printed custom role in the Atlas UI. Run it again after releases that add collections, and after adding a school.
 - [ ] `POSTGRES_ADMIN_URL` (the role that creates databases) is used only by operators, not set on the API and worker.
-- [ ] Razorpay webhooks are configured for each school: `payment.captured`, `refund.processed`, `refund.failed`, all pointing at `POST /api/v1/public/payments/razorpay/<schoolId>/webhook`.
+- [ ] Razorpay webhooks are configured for each school: `payment.captured`, `refund.processed`, `refund.failed`, all pointing at `POST /api/v1/public/payments/razorpay/<schoolId>/webhook`. Settlements are read daily with the school's keys (06:00, the last 7 days); nothing to configure.
+- [ ] Each school has at least two administrators: nobody approves their own refund.
 - [ ] The S3 bucket is private. Downloads always go through short-lived signed URLs.
 - [ ] Mock gateway is off (`PAYMENT_PROVIDER` unset or `razorpay` in production). Each school enters its own Razorpay keys and points its webhook at the URL shown in `GET /finance/payment-settings`. `DATA_ENCRYPTION_KEY` is backed up: without it the stored keys cannot be read.
 - [ ] `METRICS_TOKEN` is set, and `/metrics` is reachable only from the monitoring network.

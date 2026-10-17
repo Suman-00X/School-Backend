@@ -405,6 +405,15 @@ Movements are never edited or deleted; a correction is an ADJUSTMENT movement (A
 ### ✅ D-62: The general ledger starts from zero (round 5: "start from 0")
 Every school's books start empty on the day it starts using the system. There is no backfill of earlier invoices and no opening-balance entry. Fees, payments, refunds and concessions recorded from then on are posted automatically.
 
+### ✅ D-63: Refunds (round 6)
+You decided, and it is built:
+1. **Approval limit, set by the school's administrator** (`PATCH /finance/settings`, default 0 = off). An accountant's refund up to it needs no approval. It counts what it already let through on the same payment, so it cannot be bypassed by splitting.
+2. **No administrator refunds without approval.** Nobody approves their own refund (a service check, plus a database CHECK). An administrator's request goes to the other administrators.
+3. **Credit:** the family may leave it with the school for later fees. Paying it back follows the usual refund procedure: request, approval (or the limit), number, refund receipt, ledger entry.
+4. **Refund numbers are given on approval**, so rejected requests leave no gaps.
+5. **Razorpay payouts are imported automatically** (daily, plus "import now") and posted to the books: bank, gateway charges, gateway clearing.
+6. **Concessions stay posted gross** (fee income plus a concessions contra-income account).
+
 ## Fixed during the night (for your information)
 
 A review agent audited tonight's code. Every finding was fixed and covered by a test:
