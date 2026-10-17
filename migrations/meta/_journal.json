@@ -218,6 +218,13 @@
       "when": 1792257675863,
       "tag": "0030_academic_year_grace",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792258054805,
+      "tag": "0031_library_closures",
+      "breakpoints": true
     }
   ]
 }

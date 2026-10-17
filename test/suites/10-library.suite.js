@@ -63,14 +63,18 @@ describe("library: policy, circulation rules and catalogue", () => {
     assert.deepEqual(
       [
         settings.data.fineBlockThreshold,
+        settings.data.blockOnFines,
         settings.data.blockOnOverdue,
         settings.data.fineDayBasis,
         settings.data.lostFoundRefundDays,
         settings.data.holdPickupDays,
         settings.data.notifyParents
       ],
-      [100, true, "ACADEMIC_DAYS", 30, 3, true]
+      [null, true, true, "ACADEMIC_DAYS", 30, 3, true]
     );
+    /* Blocks are on, but the fine limit is each school's own: asked for until set */
+    assert.deepEqual(settings.data.setupNeeded, ["fineBlockThreshold"]);
+    assert.match(settings.message, /Set fineBlockThreshold: until the school sets its own limit, fines do not block/);
 
     /* Concurrent first reads in a school without a policy create exactly one policy and its rules */
     const reads = await Promise.all([1, 2, 3].map(() => request("GET", `${L}/policy`, { as: h.tokens.otherAdmin })));
@@ -92,7 +96,13 @@ describe("library: policy, circulation rules and catalogue", () => {
     await patch(`${L}/policy`, { holdPickupDays: 0 }, { as: h.tokens.librarian }, 400);
     /* Plain calendar days for fines until the closed-day rule is tested */
     await patch(`${L}/policy`, { fineDayBasis: "SCHOOL_DAYS" }, { as: h.tokens.librarian }, 400);
-    const updated = await policy({ fineDayBasis: "CALENDAR_DAYS", lostProcessingFee: 50, lostMinimumCharge: 100 });
+    const updated = await policy({
+      fineBlockThreshold: 100,
+      fineDayBasis: "CALENDAR_DAYS",
+      lostProcessingFee: 50,
+      lostMinimumCharge: 100
+    });
+    assert.deepEqual([updated.data.fineBlockThreshold, updated.data.setupNeeded], [100, []]);
     assert.equal(updated.data.fineDayBasis, "CALENDAR_DAYS");
     assert.equal(updated.data.lostProcessingFee, 50);
     assert.equal(updated.message, "Library policy updated successfully");
@@ -1327,6 +1337,39 @@ describe("library: reminders", () => {
     );
     assert.equal(everyDay, 14);
     assert.equal(academic, (await openDays(first, on)).length, "only the year's working days count");
+  });
+
+  it("skips closures entered by hand, on either fine-day basis", async () => {
+    const C = `${L}/closures`;
+    await post(C, { fromDate: "2026-05-01", toDate: "2026-05-03", reason: "x" }, { as: h.tokens.teacher }, 403);
+    await post(
+      C,
+      { fromDate: "2026-05-03", toDate: "2026-05-01", reason: "Backwards" },
+      { as: h.tokens.librarian },
+      400
+    );
+    const closure = await post(
+      C,
+      { fromDate: "2026-05-11", toDate: "2026-05-15", reason: "Summer break, no academic year" },
+      { as: h.tokens.librarian }
+    );
+    assert.equal(
+      closure.message,
+      "Library closed 2026-05-11 to 2026-05-15 (Summer break, no academic year). Late fines skip these days and due dates move past them"
+    );
+    assert.equal((await get(C, { as: h.tokens.student1 })).meta.total, 1, "borrowers can see closures");
+
+    const { libraryCalendar } = await import("../../src/modules/library/shared/services/libraryCalendar.service.js");
+    const ctx = { tenantId: h.tenant.id, role: "SYSTEM" };
+    const late = basis => h.inSchool(() => libraryCalendar.lateDays(ctx, "2026-05-08", "2026-05-20", { basis }));
+    assert.equal(await late("CALENDAR_DAYS"), 12 - 5, "every day but the 5 closed ones");
+    const before = await late("ACADEMIC_DAYS");
+    /* A due date on a closed day moves past it */
+    assert.equal((await h.inSchool(() => libraryCalendar.nextOpenDay(ctx, "2026-05-12"))) > "2026-05-15", true);
+
+    await del(`${C}/${closure.data.id}`, { as: h.tokens.librarian });
+    assert.equal(await late("CALENDAR_DAYS"), 12);
+    assert.ok((await late("ACADEMIC_DAYS")) >= before);
   });
 });
 

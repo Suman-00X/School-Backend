@@ -38,7 +38,7 @@ const blocksOf = (name, standing, policy, today) => {
     });
   }
   const threshold = policy.fineBlockThreshold;
-  if (threshold !== null && toMinor(standing.finesOutstanding) > toMinor(threshold)) {
+  if (policy.blockOnFines && threshold !== null && toMinor(standing.finesOutstanding) > toMinor(threshold)) {
     blocks.push({
       reason: "FINES",
       message:

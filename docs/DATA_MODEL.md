@@ -165,6 +165,7 @@ Lock order in the library: borrower (advisory lock), then loan, then book, then 
 
 | Submodule | Table | Purpose | Key constraints |
 |---|---|---|---|
+| library closures | `library_closures` | Days closed outside the school calendar, entered by hand (from, to, reason) | CHECK to ≥ from |
 | hostels | `hostels` | Hostel with resident gender (BOYS/GIRLS/COED) and warden | Partial unique name and code |
 | rooms | `hostel_rooms` | Rooms with capacity (beds), type, monthly fee, status | Partial unique (hostel, room number). CHECK 1 ≤ capacity ≤ 50 |
 | allocations | `hostel_allocations` | A student's bed for a date range `[from_date, to_date]` (open-ended when `to_date` is null), not tied to an academic year: pre-bookings, changeovers, transfers and roll-overs link to the allocation they continue | **No two ACTIVE allocations of one bed, and none of one student, share a day**: GiST exclusion constraints on `daterange(from_date, to_date, '[]')` (btree_gist), plus a room row lock. CHECK to_date ≥ from_date |

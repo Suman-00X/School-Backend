@@ -8,6 +8,7 @@ import { borrowerRoutes, loanRoutes, myFineRoutes, myLoanRoutes } from "./loans/
 import { holdRoutes, myHoldRoutes } from "./holds/index.js";
 import { stockCheckRoutes } from "./stock-checks/index.js";
 import { libraryReportRoutes } from "./reports/index.js";
+import { libraryClosureRoutes } from "./closures/index.js";
 
 /* Library module, mounted at /api/v1/library */
 const router = createRouter();
@@ -17,6 +18,7 @@ router.use("/activity", activityRoutes("library"));
 
 router.use("/policy", libraryPolicyRoutes);
 router.use("/circulation-rules", circulationRuleRoutes);
+router.use("/closures", libraryClosureRoutes);
 router.use("/catalogue", catalogueRoutes);
 router.use("/books", bookCopyRoutes);
 router.use("/books", bookRoutes);

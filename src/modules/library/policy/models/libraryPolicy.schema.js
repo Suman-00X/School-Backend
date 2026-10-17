@@ -13,8 +13,10 @@ export const libraryPolicies = pgTable(
   "library_policies",
   {
     ...baseColumns(),
-    /* Blocks: fines above the threshold (null: fines never block), any overdue loan */
-    fineBlockThreshold: money("fine_block_threshold").default(D.fineBlockThreshold),
+    /* Blocks: fines above the school's threshold (set by the school; null: not set yet, so
+       fines do not block), any overdue loan */
+    blockOnFines: boolean("block_on_fines").notNull().default(D.blockOnFines),
+    fineBlockThreshold: money("fine_block_threshold"),
     blockOnOverdue: boolean("block_on_overdue").notNull().default(D.blockOnOverdue),
     /* Fines and due dates follow the school calendar */
     fineDayBasis: libraryFineDayBasis("fine_day_basis").notNull().default(D.fineDayBasis),

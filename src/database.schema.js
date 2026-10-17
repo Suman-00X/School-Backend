@@ -64,6 +64,7 @@ export * from "./modules/library/copies/models/copy.schema.js";
 export * from "./modules/library/loans/models/loan.schema.js";
 export * from "./modules/library/holds/models/hold.schema.js";
 export * from "./modules/library/stock-checks/models/stockCheck.schema.js";
+export * from "./modules/library/closures/models/libraryClosure.schema.js";
 
 /* hr */
 export * from "./modules/hr/leaves/models/leave.schema.js";

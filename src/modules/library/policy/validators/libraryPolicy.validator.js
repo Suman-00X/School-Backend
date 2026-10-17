@@ -6,7 +6,8 @@ import { amount } from "../../shared/utils/schemas.util.js";
 const days = (min, max) => z.number().int().min(min).max(max);
 
 const fields = z.object({
-  /* null: fines never block borrowing */
+  /* Fines above this amount block borrowing (while blockOnFines) */
+  blockOnFines: z.boolean(),
   fineBlockThreshold: amount({ max: 100_000 }).nullable(),
   blockOnOverdue: z.boolean(),
   fineDayBasis: z.enum(FINE_DAY_BASES),

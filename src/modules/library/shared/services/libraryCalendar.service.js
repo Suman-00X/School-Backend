@@ -1,17 +1,21 @@
 import { addDays, dayOfWeek, daysBetween, eachDay } from "../../../../common/utils/date.util.js";
 import { academicYearService } from "../../../academics/academic-years/index.js";
 import { calendarService } from "../../../academics/calendar/index.js";
+import { libraryClosureService } from "../../closures/index.js";
 
 /* How far ahead a due date may be moved to find an open day */
 const LOOKAHEAD_DAYS = 120;
 
-/* Days in [from, to] when the library is closed, and days outside every academic year.
-   Inside a year, closed days are the school calendar (weekly off days, holidays,
-   vacations); between years only the current year's weekly off days close the library. */
+/* Days in [from, to] when the library is closed, days outside every academic year, and
+   closures entered by hand (library/closures). Inside a year, closed days are the school
+   calendar (weekly off days, holidays, vacations); between years only the current year's
+   weekly off days close the library, plus any manual closure. */
 const closedDaysBetween = async (ctx, from, to) => {
   const { rows: years } = await academicYearService.list(ctx, { page: 1, limit: 100 });
   const closed = new Set();
   const outsideYears = new Set();
+  const manual = await libraryClosureService.daysBetween(ctx, from, to);
+  for (const day of manual) closed.add(day);
   for (const year of years.filter(y => y.startDate <= to && y.endDate >= from)) {
     const { closedDays } = await calendarService.workingDays(ctx, year, from, to);
     for (const { date } of closedDays) closed.add(date);
@@ -23,13 +27,15 @@ const closedDaysBetween = async (ctx, from, to) => {
     outsideYears.add(day);
     if (weeklyOff.includes(dayOfWeek(day))) closed.add(day);
   }
-  return { closed, outsideYears };
+  return { closed, outsideYears, manual };
 };
 
 /* The school calendar for a window of dates, loaded once and used synchronously */
 export const loadLibraryCalendar = async (ctx, from, to) => {
-  const { closed, outsideYears } =
-    from <= to ? await closedDaysBetween(ctx, from, to) : { closed: new Set(), outsideYears: new Set() };
+  const { closed, outsideYears, manual } =
+    from <= to
+      ? await closedDaysBetween(ctx, from, to)
+      : { closed: new Set(), outsideYears: new Set(), manual: new Set() };
   const isOpen = day => !closed.has(day);
   return {
     isOpen,
@@ -41,12 +47,12 @@ export const loadLibraryCalendar = async (ctx, from, to) => {
       return day;
     },
     /* Days after dueDate up to and including onDate that a fine counts (FINE_DAY_BASES):
-       every day, or only academic working days (no closed days, no gap between years) */
+       every day, or only academic working days (no closed days, no gap between years).
+       Closures entered by hand are skipped on either basis. */
     lateDays: (dueDate, onDate, { basis }) => {
       if (onDate <= dueDate) return 0;
       const days = daysBetween(dueDate, onDate);
-      if (basis === "CALENDAR_DAYS") return days;
-      const skipped = new Set([...closed, ...outsideYears]);
+      const skipped = basis === "CALENDAR_DAYS" ? manual : new Set([...closed, ...outsideYears]);
       return days - [...skipped].filter(day => day > dueDate && day <= onDate).length;
     }
   };

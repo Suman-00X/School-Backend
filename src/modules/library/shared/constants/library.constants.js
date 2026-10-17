@@ -37,8 +37,10 @@ export const BORROWER_ROLES = [ROLES.STUDENT, ...STAFF_BORROWER_ROLES];
 export const FINE_DAY_BASES = ["ACADEMIC_DAYS", "CALENDAR_DAYS"];
 
 export const DEFAULT_POLICY = Object.freeze({
-  /* Borrowing is blocked while outstanding fines are above this (null: never) */
-  fineBlockThreshold: 100,
+  /* Borrowing is blocked while outstanding fines are above the school's own limit (D-65:
+     each school sets the amount; until it does, fines do not block) */
+  blockOnFines: true,
+  fineBlockThreshold: null,
   blockOnOverdue: true,
   /* Which days a late fine counts (FINE_DAY_BASES) */
   fineDayBasis: "ACADEMIC_DAYS",

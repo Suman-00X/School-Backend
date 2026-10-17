@@ -421,6 +421,9 @@ You decided, and it is built:
   - `CALENDAR_DAYS` counts every day.
 
   It replaces the old on/off "skip closed days" setting. Schools that counted every day keep doing so.
+- **Round 8 follow-ups:**
+  - Exceptional closed days (such as the break between academic years) are **entered by hand** (`/library/closures`). Fines skip them on either basis, and due dates move past them.
+  - Blocks stay on by default, but **the fine limit is each school's own**: there is no preset amount. Until a school sets it, fines do not block, and the policy says so (`setupNeeded`).
 - The other library choices stay as built: loan terms fixed at issue, rule precedence, fines only go up, the lost-book charge and found refund, holds, notifications, leavers' holds.
 
 ### ✅ D-67: Module owners and operators (round 7)
