@@ -423,6 +423,20 @@ You decided, and it is built:
   It replaces the old on/off "skip closed days" setting. Schools that counted every day keep doing so.
 - The other library choices stay as built: loan terms fixed at issue, rule precedence, fines only go up, the lost-book charge and found refund, holds, notifications, leavers' holds.
 
+### ✅ D-67: Module owners and operators (round 7)
+- **Owners:** the built-in managers, plus anyone the admin makes owner, can do **everything inside their module**, except changing the owner, which stays admin-only. This is decided centrally in the permission check.
+- **Operators:** roles customised by ticking actions; one or more people per role, optionally between two dates. Owner-only actions are never given to operators. The HR manager can cancel approved leave.
+- **Who can be an operator:** any active employee, teachers included. Not students, parents or ADMIN.
+- **Handover** (`POST /administration/access/handovers`):
+  - the new person takes over the old operator's roles and the records in their charge (today: hostel warden);
+  - the old operator loses all access to the module;
+  - history (who did what) is never rewritten.
+- **Activity logs:** every change records who did it (name and role at the time), what action, a plain sentence of what happened, the record and the time.
+  - Admins see a **central log** across modules.
+  - Each module has its own **log tab** (`GET /<module>/activity`) for admins and that module's owners.
+  - Both views filter by person, action, record, method, dates and text.
+  - Changes to a module's operators and handovers appear in that module's tab.
+
 ## Fixed during the night (for your information)
 
 A review agent audited tonight's code. Every finding was fixed and covered by a test:

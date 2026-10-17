@@ -9,7 +9,8 @@ Only **open** items are here: things that need your decision, or that you may wa
 | | Item |
 |---|---|
 | 🟡 | D-64 hostel; the fee and result choices to confirm (D-17 to D-21, D-09/D-10) |
-| Building | D-66 attendance and D-67 owners, handover and activity logs, as you answered (round 7) |
+| Building | D-66 attendance, as you answered (round 7) |
+| 🟡 | D-69: owners, handovers and activity logs are built; small choices to confirm |
 | Later | D-44: restore drill, once there is drill data |
 
 **Before go-live** (checklist; details in OPERATIONS.md):
@@ -37,25 +38,14 @@ Built: a school picks **once a day**, **forenoon and afternoon**, or **every per
 - **Last year:** a teacher still sees last year's sections (not its students). *Option:* current year only.
 - **Absence alerts:** parents get one alert per missed session; in period mode, one per day at the first missed period.
 
-### 🟡 D-67: Module owners and operators: choices to confirm
-Built under `/administration/access`:
-- **Owners:** the built-in managers (librarian, transport, hostel, HR, inventory) own their module. ADMIN can also make any staff member the owner of a module.
-- **Operators:** an owner creates operator roles by ticking the actions of their module (for example "Issue, return and renew books"), and assigns them to one or more people, optionally between two dates.
-- **Changes** take effect on the next request.
-
-To confirm:
-- **Owner powers:** an owner gets what the built-in manager can do in that module, plus managing its operators. Anything that is ADMIN-only stays ADMIN-only.
-- **Never given to operators (owner-only):**
-  - library: fine waivers, library policy;
-  - inventory: stock adjustments;
-  - HR: approving leave, cancelling anyone's leave, finalising payroll;
-  - every module: managing operators.
-
-  Everything else, salary and bank details included, can be ticked into an operator role.
-- **The HR manager can now cancel approved leave**, as "admin inside the module". Before, only ADMIN could.
-- **Granularity:** actions are as fine as the module's permissions today. For example, "manage seat assignments" covers assigning, changing and ending a seat. Finer ticks mean splitting permissions per module; say where you want them.
-- **Who can be an operator:** any active employee, teachers included. Not students, parents or ADMIN.
-- **History:** removing someone keeps the record as revoked. An operator role that someone holds cannot be deleted until they are removed.
+### 🟡 D-69: Owners, handovers and activity logs: choices to confirm
+Built as you answered D-67 (DECISION_LOG.md › D-67). Small choices, staying as built unless you say otherwise:
+- **Upcoming assignments move too.** A handover also moves the old operator's assignments that have not started yet, keeping their start date, so the old operator has no access now or later.
+- **Already holding the same role:** if the new operator already holds that role for overlapping dates, the handover is refused (409). *Option:* skip that one and keep theirs.
+- **Built-in managers:** a handover from a built-in manager account (for example the hostel manager) moves their duties, but their role still gives them access. To remove it, change their role or deactivate the account.
+- **Only one "responsible person" field exists today:** the hostel warden. Transport driver and attendant are plain names, not accounts; library and inventory have no in-charge fields. Add more when you want them, and handover will carry them.
+- **Log dates** (`from`/`to`) are whole days in UTC, not the school's time zone.
+- **Sign-ins** are in the central log (module `auth`), not in module tabs.
 
 ### 🟡 D-64: Hostel, flexible assignments: points to confirm
 - **Pre-booking:** a student with an active enrollment in any year can be booked, so next year's room can be booked in March. Leavers' bookings are cancelled automatically.
