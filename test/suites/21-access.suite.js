@@ -60,6 +60,7 @@ describe("access: permission catalogue", () => {
     const byKey = Object.fromEntries(all.map(p => [p.key, p]));
     assert.deepEqual(Object.keys(byKey).sort(), [
       "transport.access.manage",
+      "transport.activity.read",
       "transport.assignments.manage",
       "transport.assignments.read",
       "transport.myTransport.read",
@@ -82,6 +83,15 @@ describe("access: permission catalogue", () => {
     assert.deepEqual(
       [byKey["transport.myTransport.read"].selfService, byKey["transport.myTransport.read"].grantable],
       [true, false]
+    );
+    /* The module's activity log: ADMIN by role, owners through ownership, never operators */
+    assert.deepEqual(
+      [
+        byKey["transport.activity.read"].roles,
+        byKey["transport.activity.read"].ownerOnly,
+        byKey["transport.activity.read"].grantable
+      ],
+      [["ADMIN"], true, false]
     );
     assert.equal(byKey["transport.routes.read"].grantable, true);
     assert.deepEqual(byKey["transport.routes.read"].roles, ["ADMIN", "PRINCIPAL", "ACCOUNTANT", "TRANSPORT_MANAGER"]);

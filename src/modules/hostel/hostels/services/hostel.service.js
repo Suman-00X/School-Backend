@@ -16,11 +16,13 @@ const withWarden = {
   warden: { columns: { id: true, firstName: true, lastName: true, email: true, phone: true, role: true } }
 };
 
+const canBeWarden = user => Boolean(user) && user.status === "ACTIVE" && WARDEN_ROLES.includes(user.role);
+
 /* The warden must be an active employee account */
 const assertWarden = async (ctx, wardenUserId) => {
   if (!wardenUserId) return;
   const [user] = await accountService.findManyByIds(ctx, [wardenUserId]);
-  if (!user || user.status !== "ACTIVE" || !WARDEN_ROLES.includes(user.role)) {
+  if (!canBeWarden(user)) {
     throw unprocessable(
       `wardenUserId must be an active employee account (${WARDEN_ROLES.join(", ")})${user ? `; ${fullName(user)} is a ${user.role.toLowerCase()} account` : ""}`
     );
@@ -164,4 +166,20 @@ export const hostelService = {
   findById: (ctx, hostelId, options) => hostelRepository.findById(ctx.tenantId, hostelId, options),
 
   exists: (ctx, hostelId) => hostelRepository.exists(ctx.tenantId, [eq(hostels.id, hostelId)])
+};
+
+/* Handover (registered in src/routes.js): the hostels a departing warden looks after go to
+   the person taking over. Only the warden changes; who allocated beds stays as recorded. */
+export const wardenHandover = {
+  kind: "hostelWardens",
+  label: "Hostels (warden)",
+  reassign: async (ctx, { fromUserId, toUser }, { dbc }) => {
+    const moved = await hostelRepository.reassignWarden(ctx.tenantId, fromUserId, toUser.id, { dbc });
+    if (moved.length && !canBeWarden(toUser)) {
+      throw unprocessable(
+        `${fullName(toUser)} cannot be a hostel warden: wardens have ${WARDEN_ROLES.join(", ")} accounts, and theirs is ${toUser.role}`
+      );
+    }
+    return moved.map(hostel => ({ id: hostel.id, name: `${hostel.name} (${hostel.code})` }));
+  }
 };

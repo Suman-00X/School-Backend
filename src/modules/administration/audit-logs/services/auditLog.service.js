@@ -1,34 +1,9 @@
-import { createMongoRepository } from "../../../../common/database/mongoRepository.js";
-import { notFound } from "../../../../common/http/errors.js";
-import AuditLog from "../../../../common/audit/auditLog.model.js";
+import { auditLogs } from "../../../../common/audit/auditLog.query.js";
 
-const auditLogRepository = createMongoRepository(AuditLog);
-
+/* The central log: every module's activity (each module's own tab is /api/v1/<module>/activity) */
 export const auditLogService = {
-  /* Filters: who, which permission/module, which record, when */
-  list: (ctx, { page, limit, userId, permission, entityId, method, from, to }) =>
-    auditLogRepository.list(ctx.tenantId, {
-      page,
-      limit,
-      filter: {
-        ...(userId && { userId }),
-        ...(permission && {
-          permission: permission.endsWith(".") ? { $regex: `^${permission.replace(/\./g, "\\.")}` } : permission
-        }),
-        ...(entityId && { entityId }),
-        ...(method && { method }),
-        ...((from || to) && {
-          createdAt: {
-            ...(from && { $gte: new Date(`${from}T00:00:00Z`) }),
-            ...(to && { $lte: new Date(`${to}T23:59:59Z`) })
-          }
-        })
-      }
-    }),
+  /* Filters: which module, who, which permission, which record, method, when, words in the summary */
+  list: (ctx, query) => auditLogs.list(ctx.tenantId, query),
 
-  getById: async (ctx, auditLogId) => {
-    const entry = await auditLogRepository.findById(ctx.tenantId, auditLogId);
-    if (!entry) throw notFound("Audit log entry");
-    return entry;
-  }
+  getById: (ctx, auditLogId) => auditLogs.getById(ctx.tenantId, auditLogId)
 };

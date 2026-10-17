@@ -1,4 +1,5 @@
 import { createRouter } from "../../common/http/router.js";
+import { activityRoutes } from "../../common/audit/activity.routes.js";
 import { libraryPolicyRoutes } from "./policy/index.js";
 import { circulationRuleRoutes } from "./circulation-rules/index.js";
 import { bookRoutes, catalogueRoutes } from "./books/index.js";
@@ -10,6 +11,9 @@ import { libraryReportRoutes } from "./reports/index.js";
 
 /* Library module, mounted at /api/v1/library */
 const router = createRouter();
+
+/* The module's activity log (first: no other path may capture it) */
+router.use("/activity", activityRoutes("library"));
 
 router.use("/policy", libraryPolicyRoutes);
 router.use("/circulation-rules", circulationRuleRoutes);

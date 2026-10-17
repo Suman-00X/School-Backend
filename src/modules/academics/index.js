@@ -1,4 +1,5 @@
 import { createRouter } from "../../common/http/router.js";
+import { activityRoutes } from "../../common/audit/activity.routes.js";
 import { academicYearRoutes } from "./academic-years/index.js";
 import { classRoutes } from "./classes/index.js";
 import { subjectRoutes } from "./subjects/index.js";
@@ -19,6 +20,9 @@ import { homeworkRoutes } from "./homework/index.js";
 
 /* Academics module, mounted at /api/v1/academics */
 const router = createRouter();
+
+/* The module's activity log (first: no other path may capture it) */
+router.use("/activity", activityRoutes("academics"));
 
 router.use("/academic-years", academicYearRoutes);
 router.use("/classes", classRoutes);

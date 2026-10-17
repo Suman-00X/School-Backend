@@ -25,6 +25,20 @@ const sanitize = value => {
 /* The id the request acted on: the created/returned record, else the last :param */
 const entityIdOf = res => res.locals.entityId ?? Object.values(res.locals.params ?? {}).at(-1);
 
+/* Who acted, as { name, role } at the time. The accounts live in a module, so the application
+   registers the lookup at start-up (src/routes.js) and the framework never imports module code. */
+let actorResolver = null;
+
+export const registerAuditActor = fn => {
+  actorResolver = fn;
+};
+
+/* A failed lookup only leaves the snapshot out */
+const actorOf = async ctx => {
+  if (!actorResolver) return undefined;
+  return (await Promise.resolve(actorResolver(ctx)).catch(() => null)) ?? undefined;
+};
+
 /* Mounted once for the whole API: records every successful write after the
    response is sent. A logging failure never affects the request. */
 export const auditTrail = (req, res, next) => {
@@ -34,12 +48,15 @@ export const auditTrail = (req, res, next) => {
     if (!req.context || res.statusCode >= 400) return;
 
     /* In the school's own database (the request's context may be gone by now) */
-    runInTenant(req.context.tenantId, () =>
+    runInTenant(req.context.tenantId, async () =>
       AuditLog.create({
         tenantId: req.context.tenantId,
         userId: req.context.userId,
         role: req.context.role,
+        actor: await actorOf(req.context),
+        /* module and action follow from the permission (see the model) */
         permission: res.locals.permission,
+        summary: res.locals.summary,
         entityId: entityIdOf(res),
         method: req.method,
         path: req.originalUrl,

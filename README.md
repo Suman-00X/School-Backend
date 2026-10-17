@@ -76,7 +76,8 @@ src/
     http/                AppError + error factories, response helpers, error handler, security
     database/            postgres/mongo clients, base columns, createRepository, platform tables
     crud/                createCrudService, createCrudController
-    audit/               audit-trail middleware + MongoDB model
+    audit/               audit-trail middleware + MongoDB model, log filters, each module's /activity route
+    handover/            registry of what a module hands over when someone takes over a person's work
     sequences/           per-tenant number sequences (for generated codes)
     jobs/  events/       background jobs (BullMQ or in-process), domain events, once-only claims
     cache/  storage/     cache (Redis or memory), file storage (S3 or local) with signed links
@@ -96,7 +97,7 @@ src/
                          enrollments calendar attendance timetable grading exams marks result-policies
                          report-cards assessment-schemes homework
     portal/              /me: profile, learning, fees, homework (students, parents, teachers)
-    administration/      settings, imports, audit-logs, access (permission catalogue, owners, operator roles)
+    administration/      settings, imports, audit-logs, access (permission catalogue, owners, operator roles, handovers)
     finance/             fee-heads installment-plans late-fee-rules fee-structures concessions invoices
                          payments credits payment-settings ledger
     communication/       notifications announcements subscribers (event → message)
@@ -145,6 +146,6 @@ students/
 
 1. Create `models/`, `repositories/`, `services/`, `controllers/`, `validators/`, `permissions/`, `routes/` and `index.js` (copy `academics/classes` as a template).
 2. Register the model in `src/database.schema.js` and run `npm run db:generate -- --name attendance`.
-3. Mount the router in `modules/academics/index.js`. For a new module, mount it in `src/routes.js`, and register any jobs in `src/jobs.js`.
+3. Mount the router in `modules/academics/index.js`. For a new module, mount it in `src/routes.js`, give it an activity tab (`router.use("/activity", activityRoutes("<module>"))`, first in its router), and register any jobs in `src/jobs.js`.
 4. Add a test suite in `test/suites/` and import it in `test/e2e.test.js`.
 5. Run `npm run docs:endpoints`, and describe the tables in `docs/DATA_MODEL.md`.

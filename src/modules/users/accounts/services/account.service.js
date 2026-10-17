@@ -45,6 +45,15 @@ export const accountService = {
   findManyByIds: (ctx, userIds) =>
     userIds.length ? userRepository.findMany(ctx.tenantId, { conditions: [inArray(users.id, userIds)] }) : [],
 
+  /* For other modules: accounts by id, deactivated ones included (people who have left, by name) */
+  findAnyByIds: (ctx, userIds) => (userIds.length ? userRepository.findAnyByIds(ctx.tenantId, userIds) : []),
+
+  /* For the audit trail: who is acting, as { name, role } now (or null) */
+  actorOf: async (ctx, userId) => {
+    const user = await userRepository.findById(ctx.tenantId, userId);
+    return user && { name: `${user.firstName} ${user.lastName}`.trim(), role: user.role };
+  },
+
   /* Active accounts with any of these roles */
   findByRoles: (ctx, roles) => userRepository.findMany(ctx.tenantId, { conditions: [inArray(users.role, roles)] }),
 

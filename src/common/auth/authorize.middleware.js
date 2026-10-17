@@ -45,8 +45,9 @@ export const definePermissions = (resource, actions) => {
 
 /* Route guard: the user's role is in the permission's list, or they hold a grant for it
    (an operator role or module ownership; see grants.js). Also records which permission
-   was used, for the audit trail. */
-export const authorize = permission => {
+   was used, for the audit trail. `refusal`: the 403 message, when a generic one would not
+   tell the user why. */
+export const authorize = (permission, { refusal } = {}) => {
   if (!permission?.key || !Array.isArray(permission.roles)) {
     throw new Error("authorize() expects a permission created with definePermissions()");
   }
@@ -56,7 +57,7 @@ export const authorize = permission => {
     res.locals.params = req.params;
 
     if (!req.context) throw unauthorized();
-    if (!(await hasPermission(req.context, permission))) throw forbidden();
+    if (!(await hasPermission(req.context, permission))) throw forbidden(refusal);
 
     next();
   };

@@ -1,4 +1,5 @@
 import { createRouter } from "../../common/http/router.js";
+import { activityRoutes } from "../../common/audit/activity.routes.js";
 import { myAttendanceRoutes, staffAttendanceRoutes } from "./staff-attendance/index.js";
 import { leaveBalanceRoutes, leaveRequestRoutes, leaveTypeRoutes, myLeaveRoutes } from "./leaves/index.js";
 import {
@@ -11,6 +12,9 @@ import {
 
 /* HR module, mounted at /api/v1/hr */
 const router = createRouter();
+
+/* The module's activity log (first: no other path may capture it) */
+router.use("/activity", activityRoutes("hr", { label: "HR" }));
 
 router.use("/staff-attendance", staffAttendanceRoutes);
 router.use("/leave-types", leaveTypeRoutes);

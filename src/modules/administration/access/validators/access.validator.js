@@ -103,6 +103,24 @@ export const accessValidators = {
     revoke: { params: assignmentParams }
   },
 
+  /* includeOwnership: also hand over fromUser's ownership of the module (ADMIN only) */
+  handovers: {
+    create: {
+      body: z
+        .object({
+          module: accessModule(),
+          fromUserId: id(),
+          toUserId: id(),
+          note: optionalText(500),
+          includeOwnership: z.boolean().default(false)
+        })
+        .refine(body => body.fromUserId !== body.toUserId, {
+          message: "must be someone other than fromUserId; a handover passes work to another person",
+          path: ["toUserId"]
+        })
+    }
+  },
+
   userAccess: { params: idParams("userId"), query: z.object({ module: catalogueModule().optional() }) },
   myAccess: { query: z.object({ module: catalogueModule().optional() }) }
 };

@@ -1,8 +1,8 @@
 import { cache } from "../../../../common/cache/cache.js";
 import { findPermission, listPermissions } from "../../../../common/auth/catalogue.js";
 import { tenantToday } from "../../../../common/tenancy/tenant.service.js";
-import { ACCESS_MODULES, ASSIGNABLE_ROLES } from "../../shared/constants/access.constants.js";
-import { OWNER_ACCESS_KEYS } from "../permissions/access.permissions.js";
+import { ACCESS_MODULE_KEYS, ACCESS_MODULES, ASSIGNABLE_ROLES } from "../../shared/constants/access.constants.js";
+import { ACCESS_PERMISSIONS, OWNER_ACCESS_KEYS } from "../permissions/access.permissions.js";
 import { accessAssignmentRepository } from "../repositories/accessAssignment.repository.js";
 
 /* A user's assignments are cached for 5 minutes under the school's access version.
@@ -30,11 +30,22 @@ export const isLive = (assignment, today) => statusOf(assignment, today) === "AC
 export const operatorGrantable = (entry, module) =>
   Boolean(entry && ACCESS_MODULES[module] && entry.module === module && !entry.ownerOnly && !entry.selfService);
 
-/* What the module's built-in owner role holds in it (self-service aside) */
-export const ownerPermissions = module =>
-  listPermissions().filter(
-    entry => entry.module === module && entry.roles.includes(ACCESS_MODULES[module].ownerRole) && !entry.selfService
-  );
+/* Never held through ownership: who owns a module stays ADMIN's decision. It is not a
+   permission of any owned module, so ownerHolds() leaves it out anyway; listed so it stays so. */
+const NEVER_FOR_OWNERS = new Set([ACCESS_PERMISSIONS.manageOwners.key]);
+
+/* An owner is the administrator inside their module (D-67): every permission of the module,
+   ADMIN-only ones included, whatever roles it lists. Self-service follows the account's role. */
+export const ownerHolds = (entry, module) =>
+  Boolean(entry && ACCESS_MODULES[module] && entry.module === module && !entry.selfService) &&
+  !NEVER_FOR_OWNERS.has(entry.key);
+
+/* What an owner of the module holds in it */
+export const ownerPermissions = module => listPermissions().filter(entry => ownerHolds(entry, module));
+
+/* The modules a built-in owner role runs: LIBRARIAN -> ["library"] */
+export const modulesOwnedByRole = role =>
+  ACCESS_MODULE_KEYS.filter(module => ACCESS_MODULES[module].ownerRole === role);
 
 /* Keys an assignment grants while it is live. A permission later removed from the catalogue,
    or made owner-only, stops being granted by operator roles that still list it. */
@@ -63,15 +74,17 @@ const cachedAssignments = async (tenantId, userId) => {
 };
 
 export const accessGrants = {
-  /* The grants resolver (registered in src/routes.js): permission keys from the user's live
-     assignments. Validity dates are checked against today on every request. */
+  /* The grants resolver (registered in src/routes.js): every permission of the modules the
+     user's role owns (HOSTEL_MANAGER: all of hostel), plus the keys of their live assignments.
+     Validity dates are checked against today on every request. */
   resolve: async ctx => {
     if (!ASSIGNABLE_ROLES.includes(ctx.role)) return [];
     const [assignments, today] = await Promise.all([
       cachedAssignments(ctx.tenantId, ctx.userId),
       tenantToday(ctx.tenantId)
     ]);
-    return [...new Set(assignments.filter(assignment => isLive(assignment, today)).flatMap(keysOf))];
+    const owned = modulesOwnedByRole(ctx.role).flatMap(module => ownerPermissions(module).map(entry => entry.key));
+    return [...new Set([...owned, ...assignments.filter(assignment => isLive(assignment, today)).flatMap(keysOf)])];
   },
 
   /* Call after the change has committed */

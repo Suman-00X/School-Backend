@@ -1,7 +1,10 @@
 /* The single success envelope:
-   { success: true, message, data, meta? } */
-const send = (res, status, message, data = null, meta) =>
-  res.status(status).json({ success: true, message, data, ...(meta && { meta }) });
+   { success: true, message, data, meta? }
+   The message is also kept for the audit trail, as the entry's human summary. */
+const send = (res, status, message, data = null, meta) => {
+  res.locals.summary = message;
+  return res.status(status).json({ success: true, message, data, ...(meta && { meta }) });
+};
 
 export const ok = (res, data, message = "Request successful") => {
   if (data?.id) res.locals.entityId = data.id;

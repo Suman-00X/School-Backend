@@ -17,6 +17,7 @@ Base URL: `/api/v1`. Every endpoint needs `Authorization: Bearer <access token>`
 - [Conventions](#conventions)
 - [Responses and errors](#responses-and-errors)
 - [Roles](#roles)
+- [Activity logs](#activity-logs)
 - [Modules](#modules)
 - [Workflows](#workflows)
 
@@ -151,12 +152,53 @@ The add-on modules (library, transport, hostel, HR, inventory) each have a built
 |---|---|---|
 | **Operator role** (`/operator-roles`): a named set of permissions from one module, e.g. "Transport desk: view routes, assign students, print rosters" | ADMIN, or the module's owners | Exactly those permissions, to every holder |
 | **Operator assignment** (`POST /assignments { operatorRoleId, userId, validFrom?, validTo? }`) | ADMIN, or the module's owners | One user holds the role between the dates (inclusive). A user may hold several roles in several modules |
-| **Owner assignment** (`POST /assignments { kind: "OWNER", module, userId }`) | ADMIN only | A staff account acts as the module's administrator (everything its owner role can do, including managing its operators), on top of its own role |
+| **Owner assignment** (`POST /assignments { kind: "OWNER", module, userId }`) | ADMIN only | A staff account becomes an owner of the module, on top of its own role |
+| **Handover** (`POST /handovers { module, fromUserId, toUserId, note? }`) | ADMIN, or the module's owners | Someone else takes over a person's work in the module (below) |
+
+**What an owner can do.** An owner, built-in role or by assignment, is the administrator inside their module: they hold **every permission of the module**, including any the module lists for ADMIN only (for example its [activity log](#activity-logs)), and they manage its operators. Two things stay ADMIN's: deciding **who owns** a module (making, changing, ending or handing over an ownership, `administration.access.manageOwners`), and anything outside the module. Self-service permissions follow the account's role, so a staff member who owns transport has no "my transport".
 
 - **Permission catalogue:** `GET /administration/access/permissions?module=&grantable=true` lists every permission key with its module, resource, action and label, grouped, for building role editors.
-- **Owner-only permissions** never go into an operator role: managing operators (`<module>.access.manage`) and approval-type actions the module marks (stock adjustments, leave decisions, cancelling approved leave, payroll finalization). **Self-service** permissions (`my-…`, `/hr/me/…`, applying for leave) follow the account's role only.
-- **Effective access:** `GET /administration/access/users/:userId/access` (ADMIN: every module; an owner: their modules) and `GET /administration/access/me/access` show each permission with where it comes from (`ROLE`, `OPERATOR`, `OWNER`).
+- **Owner-only permissions** never go into an operator role: managing operators (`<module>.access.manage`), reading the module's activity log (`<module>.activity.read`), and approval-type actions the module marks (stock adjustments, leave decisions, cancelling approved leave, payroll finalization). **Self-service** permissions (`my-…`, `/hr/me/…`, applying for leave) follow the account's role only.
+- **Effective access:** `GET /administration/access/users/:userId/access` (ADMIN: every module; an owner: their modules) and `GET /administration/access/me/access` show each permission with where it comes from: `ROLE`, `OPERATOR`, or `OWNER` (an owner assignment, or `{ type: "OWNER", role }` for what a built-in owner role holds beyond its own list).
 - **Changes apply on the next request:** revoking (`DELETE /assignments/:id`, the row stays as history with status `REVOKED`) or editing a role takes effect at once. Assignments are listed with a status as of today: `SCHEDULED`, `ACTIVE`, `EXPIRED`, `REVOKED`.
+
+**Handover: a new operator takes over completely.** `POST /administration/access/handovers { module, fromUserId, toUserId, note?, includeOwnership? }` → 201, all in one transaction:
+- Each live or upcoming operator assignment of `fromUser` in the module is revoked (`revokeReason: "HANDOVER"`), and `toUser` gets the same operator role from today (an upcoming one keeps its later start) until the original end date. The note defaults to "Handed over from …".
+- The module's records with `fromUser` as the **responsible person** go to `toUser`. Today that is the hostel warden (`hostels.wardenUserId`); the other modules have no such field yet.
+- **History is never rewritten:** who created, recorded, issued, allocated or approved something stays as it was.
+- `includeOwnership: true` (ADMIN only) also hands over `fromUser`'s ownership of the module.
+- `fromUser` may already be deactivated. Afterwards they have no access in the module through assignments. If their own role gives some, that is unchanged: change their role or deactivate them.
+- The response lists what moved: `assignments` (`endedAssignmentId`, new `assignmentId`, dates) and `records` per kind (`{ kind, label, count, records: [{ id, name }] }`). The message reads "Hostel work of Asha Rao handed over to Ravi Kumar: 1 operator assignment (Hostel desk); Hostels (warden): Boys Hostel (HST-001)".
+- **Refused:** the same person on both sides (400); a `toUser` who is not an active employee, or who cannot hold what moves (already the module's built-in owner, an administrator, not eligible as a warden) (422); nothing to hand over (422); `toUser` already holding the same role for overlapping dates (409). Nothing moves when anything is refused.
+
+---
+
+## Activity logs
+
+Every successful write (`POST`, `PUT`, `PATCH`, `DELETE`) is recorded after the response, in the school's own MongoDB. Entries are read-only: there is no endpoint to change or delete one.
+
+| Field | Example |
+|---|---|
+| `createdAt` | `2026-10-17T09:12:44.120Z` |
+| `module` | `library` (the permission's first part; else the `/api/v1/<module>/` path) |
+| `permission`, `action` | `library.loans.circulate`, "Issue, return and renew books; collect fines" (the permission's catalogue label) |
+| `summary` | "Book issued to Asha Rao. Due 2026-11-02" (the response's message) |
+| `userId`, `role`, `actor` | Who did it; `actor: { name, role }` is a snapshot taken at the time, so the log reads the same after a rename or a role change |
+| `entityId` | The record acted on (the created or returned record, else the last id in the path) |
+| `method`, `path`, `statusCode`, `payload`, `ipAddress` | The request; `payload` is the body with secrets removed and long lists summarised |
+
+**Two views, the same filters** (paginated, newest first):
+
+| Endpoint | Who | Shows |
+|---|---|---|
+| `GET /administration/audit-logs` | ADMIN | Every module. Filter `?module=` too |
+| `GET /<module>/activity` (`/library/activity`, `/finance/activity`, …) | ADMIN, and the module's owners (built-in role or by assignment) | That module only. Everyone else, operators included, gets 403 |
+
+One entry: `GET /administration/audit-logs/:id`, or `GET /<module>/activity/:id` (404 if it belongs to another module). Every module has a tab except `/auth` and `/me`.
+
+Filters: `userId`, `permission` (an exact key, or a prefix ending in a dot: `library.loans.`), `entityId` (a record's history), `method`, `from` and `to` (inclusive days, UTC), and `search` (words in the summary, any casing, matched literally).
+
+Sign-in events (`auth.login`, `auth.login.failed`) are recorded separately under module `auth`. They are in the central log, never in a module's tab.
 
 ---
 
@@ -168,7 +210,7 @@ The add-on modules (library, transport, hostel, HR, inventory) each have a built
 | Academics | `/academics` | Years (with archiving), classes, subjects, sections, teacher assignments, enrollments and promotion, calendar, attendance, timetable, grade scales, exams and papers, marks, report cards, homework |
 | Auth | `/auth` | Sign-in, refresh, sign-out, devices, invitations, password reset and change |
 | Portal | `/me` | Student, parent and teacher self-service, and the notification inbox |
-| Administration | `/administration` | School settings and logo, CSV imports, audit log, access (permission catalogue, module owners, operator roles) |
+| Administration | `/administration` | School settings and logo, CSV imports, the central audit log, access (permission catalogue, module owners, operator roles, handovers) |
 | Finance | `/finance` | Fee heads, installment plans and per-student assignment, structures, late-fee rules and waivers, concessions, invoices, payments (counter and online, partial), student credit, refunds with administrator approval, receipts and refund receipts, statements, the school's own Razorpay keys, double-entry general ledger |
 | Communication | `/communication` | Notifications (in-app, email, SMS) and announcements to audiences |
 | Reports | `/reports` | Dashboards (overview, attendance, fees, academics) and exports |

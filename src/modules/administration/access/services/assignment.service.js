@@ -40,7 +40,7 @@ const present = (assignment, today) => ({
 });
 
 /* The person must be an active employee who would gain something from it */
-const assertAssignable = (user, module) => {
+export const assertAssignable = (user, module) => {
   const name = fullName(user);
   if (user.status !== "ACTIVE") throw unprocessable(`${name}'s account is ${user.status.toLowerCase()}`);
   if (user.role === ROLES.ADMIN) throw unprocessable(`${name} is an administrator and already has full access`);
@@ -67,7 +67,7 @@ const assertDates = ({ validFrom, validTo }, today) => {
   }
 };
 
-const assertNoOverlap = async (ctx, assignment, holder, { dbc, exceptId }) => {
+export const assertNoOverlap = async (ctx, assignment, holder, { dbc, exceptId }) => {
   const overlap = await accessAssignmentRepository.findOverlap(ctx.tenantId, { ...assignment, exceptId }, { dbc });
   if (overlap) {
     const what =
@@ -188,7 +188,7 @@ export const assignmentService = {
       await accessAssignmentRepository.update(
         ctx.tenantId,
         assignmentId,
-        { revokedAt: new Date(), revokedBy: ctx.userId },
+        { revokedAt: new Date(), revokedBy: ctx.userId, revokeReason: "REVOKED" },
         { dbc: tx }
       );
     });

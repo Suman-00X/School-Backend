@@ -14,6 +14,9 @@ export const ACCESS_MODULE_KEYS = Object.keys(ACCESS_MODULES);
 /* OPERATOR: holds one operator role. OWNER: acts as the module's administrator. */
 export const ASSIGNMENT_KINDS = ["OPERATOR", "OWNER"];
 
+/* Why a revoked assignment ended: REVOKED by hand, or HANDOVER (passed on to someone else) */
+export const REVOKE_REASONS = ["REVOKED", "HANDOVER"];
+
 /* Derived from the dates, today and revocation (never stored) */
 export const ASSIGNMENT_STATUSES = ["SCHEDULED", "ACTIVE", "EXPIRED", "REVOKED"];
 

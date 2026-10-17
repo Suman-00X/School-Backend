@@ -197,7 +197,7 @@ Lock order in the library: borrower (advisory lock), then loan, then book, then 
 | Submodule | Table | Purpose | Key constraints |
 |---|---|---|---|
 | access | `operator_roles` | A school-defined set of permission keys (`text[]`) from ONE add-on module (library, transport, hostel, hr, inventory) | Partial unique (tenant, module, `lower(name)`). CHECK 1–100 permissions, **every key starts with the role's module**. The service also checks each key is in the catalogue and not owner-only or self-service |
-| access | `access_assignments` | OPERATOR (holds an operator role) or OWNER (acts as the module's administrator) for a user, with optional `valid_from`/`valid_to` (inclusive). Revoked rows stay as history | CHECK operator role ↔ kind, dates in order. **No two not-revoked assignments of one role to one user share a day**: GiST exclusion constraint (btree_gist), plus the role's row lock. Ownerships: advisory lock per (module, user) |
+| access | `access_assignments` | OPERATOR (holds an operator role) or OWNER (acts as the module's administrator) for a user, with optional `valid_from`/`valid_to` (inclusive). Revoked rows stay as history, with `revoke_reason`: `REVOKED` (by hand) or `HANDOVER` (ended by a handover, which created the matching row for the person taking over) | CHECK operator role ↔ kind, dates in order. **No two not-revoked assignments of one role to one user share a day**: GiST exclusion constraint (btree_gist), plus the role's row lock. Ownerships: advisory lock per (module, user) |
 
 ### Relationships (core)
 
@@ -264,7 +264,7 @@ erDiagram
 
 | Collection | Model | Purpose | Indexes |
 |---|---|---|---|
-| `auditlogs` | `common/audit/auditLog.model.js` | One document per successful write: who, which permission (e.g. `users.students.admit`), which record, status, and the sanitized body (secrets removed, long arrays summarized). Written after the response; a failure never breaks the request | (tenant, entity, time); (tenant, user, time); (tenant, permission, time) |
+| `auditlogs` | `common/audit/auditLog.model.js` | One document per successful write: who (`userId`, `role`, and `actor: { name, role }` as they were at the time), which permission (e.g. `users.students.admit`) with its `module` (`users`; from the path when there is no permission) and `action` (the catalogue label), the `summary` (the response's message), which record (`entityId`), method, path, status, and the sanitized body (secrets removed, long arrays summarized). Sign-in events are documents of module `auth`. Written after the response; a failure never breaks the request. Read-only: the central log and each module's activity tab | (tenant, entity, time); (tenant, user, time); (tenant, permission, time); (tenant, module, time) |
 | `notifications` | `communication/notifications` | One per recipient: in-app inbox (read state) plus delivery status per channel (EMAIL, SMS) | (tenant, user, time); (tenant, user, readAt) |
 | `announcements` | `communication/announcements` | Circulars with audience rules (everyone, roles, classes, sections), draft → published | (tenant, status, time) |
 | `importjobs` | `administration/imports` | CSV import progress and per-row errors | (tenant, time) |

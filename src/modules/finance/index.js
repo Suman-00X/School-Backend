@@ -1,4 +1,5 @@
 import { createRouter } from "../../common/http/router.js";
+import { activityRoutes } from "../../common/audit/activity.routes.js";
 import { feeHeadRoutes } from "./fee-heads/index.js";
 import { installmentPlanRoutes, planAssignmentRoutes } from "./installment-plans/index.js";
 import { lateFeeRuleRoutes } from "./late-fee-rules/index.js";
@@ -14,6 +15,9 @@ import { settlementRoutes } from "./settlements/index.js";
 
 /* Finance module, mounted at /api/v1/finance */
 const router = createRouter();
+
+/* The module's activity log (first: no other path may capture it) */
+router.use("/activity", activityRoutes("finance"));
 
 router.use("/fee-heads", feeHeadRoutes);
 router.use("/installment-plans", installmentPlanRoutes);

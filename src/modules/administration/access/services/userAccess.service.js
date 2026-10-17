@@ -7,7 +7,15 @@ import { accountService } from "../../../users/accounts/index.js";
 import { ACCESS_MODULES, ASSIGNABLE_ROLES } from "../../shared/constants/access.constants.js";
 import { accessAssignmentRepository } from "../repositories/accessAssignment.repository.js";
 import { groupByModule } from "./catalogue.service.js";
-import { isLive, keysOf, operatorGrantable, statusOf } from "./grants.service.js";
+import {
+  isLive,
+  keysOf,
+  modulesOwnedByRole,
+  operatorGrantable,
+  ownerHolds,
+  ownerPermissions,
+  statusOf
+} from "./grants.service.js";
 import { accessScope } from "./scope.service.js";
 
 /* Where a grant comes from */
@@ -23,7 +31,8 @@ const sourceOf = assignment => ({
 });
 
 /* Effective permissions of an account, per module, each with its sources:
-   ROLE (the account's role), OPERATOR (an operator role) or OWNER (module ownership).
+   ROLE (the account's role), OPERATOR (an operator role) or OWNER (module ownership: by an
+   assignment, or { type: "OWNER", role } for what a built-in owner role holds beyond its list).
    `modules`: the modules to show (null = all). */
 const effectiveAccess = async (ctx, user, modules) => {
   const today = await tenantToday(ctx.tenantId);
@@ -36,6 +45,11 @@ const effectiveAccess = async (ctx, user, modules) => {
   const add = (key, source) => sources.set(key, [...(sources.get(key) ?? []), source]);
   for (const entry of listPermissions()) {
     if (entry.roles.includes(user.role)) add(entry.key, { type: "ROLE", role: user.role });
+  }
+  for (const module of modulesOwnedByRole(user.role)) {
+    for (const entry of ownerPermissions(module)) {
+      if (!entry.roles.includes(user.role)) add(entry.key, { type: "OWNER", role: user.role });
+    }
   }
   for (const assignment of current.filter(row => isLive(row, today))) {
     for (const key of keysOf(assignment)) add(key, sourceOf(assignment));
@@ -94,17 +108,17 @@ export const userAccessService = {
 
 /* For other modules */
 export const accessService = {
-  /* Users with an assignment active today that grants this permission (not counting the
-     roles in its list): e.g. everyone besides the built-in role who manages hostel allocations */
+  /* Users with an assignment active today that grants this permission (not counting those
+     who hold it by their role, the built-in owner role included): e.g. everyone besides the
+     hostel manager who manages hostel allocations */
   usersGranted: async (ctx, permission) => {
-    const module = ACCESS_MODULES[permission.module];
-    if (!module) return [];
+    if (!ACCESS_MODULES[permission.module]) return [];
     return accessAssignmentRepository.findHolders(
       ctx.tenantId,
       {
         module: permission.module,
         key: permission.key,
-        ownersHold: permission.roles.includes(module.ownerRole) && !permission.selfService,
+        ownersHold: ownerHolds(permission, permission.module),
         operatorsHold: operatorGrantable(permission, permission.module)
       },
       await tenantToday(ctx.tenantId)

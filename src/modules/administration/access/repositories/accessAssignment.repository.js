@@ -56,6 +56,26 @@ export const accessAssignmentRepository = {
       dbc
     }),
 
+  /* A user's not-revoked assignments of these kinds in a module that have not ended before
+     `from`, locked for the rest of the transaction (a handover) */
+  lockCurrentInModule: (tenantId, { userId, module, kinds }, from, { dbc }) =>
+    dbc
+      .select()
+      .from(assignments)
+      .where(
+        scoped(
+          assignments,
+          tenantId,
+          eq(assignments.userId, userId),
+          eq(assignments.module, module),
+          inArray(assignments.kind, kinds),
+          notRevoked,
+          notEndedBy(from)
+        )
+      )
+      .orderBy(assignments.createdAt)
+      .for("update"),
+
   /* Assignments of a role that are active now or start later */
   countLive: (tenantId, operatorRoleId, today, { dbc } = {}) =>
     accessAssignmentRepository.count(

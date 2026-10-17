@@ -4,19 +4,23 @@ import { validate } from "../../../../common/validation/validate.middleware.js";
 import {
   assignmentController,
   catalogueController,
+  handoverController,
   operatorRoleController,
   userAccessController
 } from "../controllers/access.controller.js";
-import { ACCESS_PERMISSIONS as can } from "../permissions/access.permissions.js";
+import { ACCESS_PERMISSIONS as can, MANAGE_OWNERS_REFUSAL } from "../permissions/access.permissions.js";
 import { accessValidators as rules } from "../validators/access.validator.js";
 
 /* /api/v1/administration/access: the permission catalogue, operator roles, who holds them,
-   module owners, and anyone's effective access. Owners act on their own modules (service). */
+   module owners, handovers, and anyone's effective access. Owners act on their own modules
+   (service). */
 const router = createRouter();
 
-/* Making someone a module owner needs the stricter permission (it is also what the audit trail records) */
-const ownerGuard = authorize(can.manageOwners);
+/* Making someone a module owner, or handing an ownership over, needs the stricter permission
+   (it is also what the audit trail records) */
+const ownerGuard = authorize(can.manageOwners, { refusal: MANAGE_OWNERS_REFUSAL });
 const guardOwners = (req, res, next) => (req.body.kind === "OWNER" ? ownerGuard(req, res, next) : next());
+const guardOwnership = (req, res, next) => (req.body.includeOwnership ? ownerGuard(req, res, next) : next());
 
 router.get("/permissions", authorize(can.read), validate(rules.catalogue), catalogueController.list);
 
@@ -72,6 +76,15 @@ router.delete(
   authorize(can.manage),
   validate(rules.assignments.revoke),
   assignmentController.revoke
+);
+
+/* Someone takes over another person's operator access and duties in a module */
+router.post(
+  "/handovers",
+  authorize(can.handOver),
+  validate(rules.handovers.create),
+  guardOwnership,
+  handoverController.create
 );
 
 router.get("/users/:userId/access", authorize(can.read), validate(rules.userAccess), userAccessController.forUser);

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { db } from "../../../../common/database/postgres.js";
 import { users } from "../models/user.schema.js";
@@ -41,5 +41,12 @@ export const userRepository = {
     dbc
       .update(users)
       .set({ passwordHash, passwordChangedAt: new Date() })
-      .where(scoped(users, tenantId, eq(users.id, userId)))
+      .where(scoped(users, tenantId, eq(users.id, userId))),
+
+  /* Accounts by id, deactivated ones included (never the password hash) */
+  findAnyByIds: (tenantId, userIds, { dbc = db } = {}) =>
+    dbc.query.users.findMany({
+      where: and(eq(users.tenantId, tenantId), inArray(users.id, userIds)),
+      columns: { passwordHash: false }
+    })
 };

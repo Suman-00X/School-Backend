@@ -1,7 +1,11 @@
 import { hasPermission } from "../../../../common/auth/grants.js";
 import { forbidden } from "../../../../common/http/errors.js";
 import { ACCESS_MODULE_KEYS } from "../../shared/constants/access.constants.js";
-import { ACCESS_PERMISSIONS, MODULE_ACCESS_PERMISSIONS } from "../permissions/access.permissions.js";
+import {
+  ACCESS_PERMISSIONS,
+  MANAGE_OWNERS_REFUSAL,
+  MODULE_ACCESS_PERMISSIONS
+} from "../permissions/access.permissions.js";
 import { moduleLabel } from "./catalogue.service.js";
 
 /* Which add-on modules the signed-in user administers: ADMIN all of them, an owner (built-in
@@ -34,7 +38,7 @@ export const accessScope = {
 
   assertManagesOwners: async ctx => {
     if (!(await hasPermission(ctx, ACCESS_PERMISSIONS.manageOwners))) {
-      throw forbidden("Only an administrator can make someone a module owner or change their ownership");
+      throw forbidden(MANAGE_OWNERS_REFUSAL);
     }
   }
 };

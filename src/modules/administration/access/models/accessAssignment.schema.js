@@ -2,17 +2,18 @@ import { relations, sql } from "drizzle-orm";
 import { check, date, index, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { baseColumns } from "../../../../common/database/columns.js";
 import { users } from "../../../users/accounts/models/user.schema.js";
-import { ASSIGNMENT_KINDS } from "../../shared/constants/access.constants.js";
+import { ASSIGNMENT_KINDS, REVOKE_REASONS } from "../../shared/constants/access.constants.js";
 import { accessModule, operatorRoles } from "./operatorRole.schema.js";
 
 export const accessAssignmentKind = pgEnum("access_assignment_kind", ASSIGNMENT_KINDS);
+export const accessRevokeReason = pgEnum("access_revoke_reason", REVOKE_REASONS);
 
 /* A user's extra access in one add-on module, for [valid_from, valid_to] (null = open):
    OPERATOR holds an operator role; OWNER acts as the module's administrator.
-   Revoked rows stay as history (revoked_at). Two not-revoked assignments of the same role
-   to one user never share a day: the service checks under the role's row lock, and the
-   database refuses it too (hand-written exclusion constraint access_assignments_operator_no_overlap,
-   btree_gist). Ownerships of a module are checked under an advisory lock per (module, user). */
+   Revoked rows stay as history (revoked_at; revoke_reason: by hand, or ended by a handover).
+   Two not-revoked assignments of the same role to one user never share a day: the service
+   checks under the role's row lock, and the database refuses it too (hand-written exclusion
+   constraint access_assignments_operator_no_overlap, btree_gist). Ownerships of a module are checked under an advisory lock per (module, user). */
 export const accessAssignments = pgTable(
   "access_assignments",
   {
@@ -29,7 +30,9 @@ export const accessAssignments = pgTable(
     note: text("note"),
     assignedBy: uuid("assigned_by").references(() => users.id),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
-    revokedBy: uuid("revoked_by").references(() => users.id)
+    revokedBy: uuid("revoked_by").references(() => users.id),
+    /* Null on rows revoked before reasons were recorded */
+    revokeReason: accessRevokeReason("revoke_reason")
   },
   t => [
     index("access_assignments_tenant_user_idx").on(t.tenantId, t.userId),
@@ -40,7 +43,8 @@ export const accessAssignments = pgTable(
       "access_assignments_dates_chk",
       sql`${t.validFrom} IS NULL OR ${t.validTo} IS NULL OR ${t.validTo} >= ${t.validFrom}`
     ),
-    check("access_assignments_revoked_chk", sql`${t.revokedBy} IS NULL OR ${t.revokedAt} IS NOT NULL`)
+    check("access_assignments_revoked_chk", sql`${t.revokedBy} IS NULL OR ${t.revokedAt} IS NOT NULL`),
+    check("access_assignments_revoke_reason_chk", sql`${t.revokeReason} IS NULL OR ${t.revokedAt} IS NOT NULL`)
   ]
 );
 
