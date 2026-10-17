@@ -8,7 +8,6 @@ Only **open** items are here: things that need your decision, or that you may wa
 
 | | Item |
 |---|---|
-| 🔴 | D-68: refunds built as you decided; two follow-ups (one-admin schools, the limit for admins) |
 | 🔴 | D-65: library choices (two need you: borrowing blocks, holiday calendar) |
 | 🟡 | D-64 hostel; the fee and result choices to confirm (D-17 to D-21, D-09/D-10) |
 | 🟡 | D-66 attendance modes and D-67 module owners and operators: built, choices to confirm |
@@ -86,11 +85,6 @@ To confirm:
 - **Granularity:** actions are as fine as the module's permissions today. For example, "manage seat assignments" covers assigning, changing and ending a seat. Finer ticks mean splitting permissions per module; say where you want them.
 - **Who can be an operator:** any active employee, teachers included. Not students, parents or ADMIN.
 - **History:** removing someone keeps the record as revoked. An operator role that someone holds cannot be deleted until they are removed.
-
-### 🔴 D-68: Refunds as you decided (D-63): two follow-ups
-Built as you answered (DECISION_LOG.md › D-63). Two consequences to confirm:
-- **A school with only one administrator cannot refund at all** from an administrator's request, because nobody approves their own. As built, the request waits until a second administrator exists. *Option:* let the principal approve an administrator's refund.
-- **The approval limit applies to accountants only.** An administrator's own refund always needs another administrator, even ₹50, as you said ("no admin can refund without approval"). *Option:* apply the limit to administrators too.
 
 ### 🟡 D-64: Hostel, flexible assignments: points to confirm
 - **Pre-booking:** a student with an active enrollment in any year can be booked, so next year's room can be booked in March. Leavers' bookings are cancelled automatically.

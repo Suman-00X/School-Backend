@@ -14,9 +14,9 @@ export const refundSource = pgEnum("refund_source", REFUND_SOURCES);
 
 /* Money paid back from a payment, or from a student's credit (no payment: the family asked
    for its advance back). A staff refund starts as a request (REQUESTED, the maker) that an
-   administrator approves (the checker); the approval executes it. Nobody approves their own
-   request, administrators included. An accountant's refund within the school's approval
-   limit is approved at once (auto_approved). Gateway-dashboard refunds already happened, so
+   administrator approves (the checker); the approval executes it. An administrator's own
+   refund is approved at once, by them. An accountant's refund within the school's approval
+   limit is approved at once too (auto_approved). Gateway-dashboard refunds already happened, so
    they skip approval. The refund number is given when it is executed, so rejected requests
    leave no gaps.
    The amount is taken from the payment's leftover credit first (an overpayment kept for the
@@ -80,11 +80,6 @@ export const paymentRefunds = pgTable(
     check(
       "payment_refunds_approval_chk",
       sql`${t.source} <> 'STAFF' OR ${t.status}::text IN ('REQUESTED', 'REJECTED') OR (${t.approvedBy} IS NOT NULL AND ${t.approvedAt} IS NOT NULL)`
-    ),
-    /* Maker-checker: the approver is someone else, unless the approval limit approved it */
-    check(
-      "payment_refunds_four_eyes_chk",
-      sql`${t.autoApproved} OR ${t.approvedBy} IS NULL OR ${t.requestedBy} IS NULL OR ${t.approvedBy} <> ${t.requestedBy}`
     ),
     check("payment_refunds_auto_chk", sql`NOT ${t.autoApproved} OR ${t.source} = 'STAFF'`),
     check(

@@ -408,7 +408,7 @@ Every school's books start empty on the day it starts using the system. There is
 ### ✅ D-63: Refunds (round 6)
 You decided, and it is built:
 1. **Approval limit, set by the school's administrator** (`PATCH /finance/settings`, default 0 = off). An accountant's refund up to it needs no approval. It counts what it already let through on the same payment, so it cannot be bypassed by splitting.
-2. **No administrator refunds without approval.** Nobody approves their own refund (a service check, plus a database CHECK). An administrator's request goes to the other administrators.
+2. **Administrators refund without approval** (corrected in round 7: "no, admin can refund without approval"). An administrator's refund is executed at once and recorded as approved by them, so a school with one administrator works normally. Only accountants need approval, and only above the limit.
 3. **Credit:** the family may leave it with the school for later fees. Paying it back follows the usual refund procedure: request, approval (or the limit), number, refund receipt, ledger entry.
 4. **Refund numbers are given on approval**, so rejected requests leave no gaps.
 5. **Razorpay payouts are imported automatically** (daily, plus "import now") and posted to the books: bank, gateway charges, gateway clearing.

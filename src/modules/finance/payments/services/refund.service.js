@@ -2,7 +2,7 @@ import { and, between, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { ROLES } from "../../../../common/auth/roles.js";
 import { transaction } from "../../../../common/database/postgres.js";
 import { publish } from "../../../../common/events/events.js";
-import { conflict, forbidden, notFound, unprocessable } from "../../../../common/http/errors.js";
+import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { logger } from "../../../../common/logging/logger.js";
 import { fromMinor, toMinor } from "../../../../common/money/money.js";
 import { paymentGateway } from "../../../../common/payments/gateway.js";
@@ -202,14 +202,27 @@ const executeCredit = async (ctx, tx, refund, approval) => {
   return executed;
 };
 
-/* An accountant's refund within the school's approval limit needs no administrator. The
-   limit counts everything it already let through on the same payment (or credit). */
-const withinApprovalLimit = async (ctx, tx, { paymentId, studentId, amountMinor }) => {
-  if (ctx.role === ROLES.ADMIN) return false;
+/* Is a new request approved at once? An administrator's refund needs nobody's approval
+   (approved by them). An accountant's needs an administrator, unless it is within the
+   school's approval limit, which counts everything it already let through on the same
+   payment (or credit), so a refund cannot be split to avoid approval.
+   -> { autoApproved } to execute now, or null to wait for an administrator */
+const approvalOnRequest = async (ctx, tx, { paymentId, studentId, amountMinor }) => {
+  if (ctx.role === ROLES.ADMIN) return { autoApproved: false };
   const limitMinor = toMinor(await financeSettingsService.refundApprovalLimit(ctx, { dbc: tx }));
-  if (limitMinor <= 0) return false;
+  if (limitMinor <= 0) return null;
   const soFar = await refunds.autoApprovedSoFar(ctx.tenantId, { paymentId, studentId }, { dbc: tx });
-  return soFar + amountMinor <= limitMinor;
+  return soFar + amountMinor <= limitMinor ? { autoApproved: true } : null;
+};
+
+/* Execute a new request now, or leave it waiting */
+const settleRequest = async (ctx, tx, { refund, payment, amountMinor }) => {
+  const approval = await approvalOnRequest(ctx, tx, {
+    paymentId: payment?.id,
+    studentId: refund.studentId,
+    amountMinor
+  });
+  return approval ? execute(ctx, tx, { refund, payment }, approval) : refund;
 };
 
 /* A failed gateway refund: put everything back (any part the invoice no longer needs becomes credit) */
@@ -284,8 +297,9 @@ const afterCreate = async refund => {
 export const refundService = {
   /* Staff: refund (part of) a successful payment. Online payments go back through the
      school's gateway account (method ORIGINAL); others are paid back by hand and recorded.
-     It is a request until an administrator other than the requester approves it. An
-     accountant's refund within the school's approval limit is approved at once. Requests
+     An administrator's refund is executed at once (approved by them). An accountant's is a
+     request until an administrator approves it, unless it is within the school's approval
+     limit. Requests
      already waiting on the same payment are set aside, so together they never exceed what
      it can refund. */
   create: async (ctx, paymentId, { amount, method, reason, reference }) => {
@@ -336,17 +350,16 @@ export const refundService = {
         },
         { dbc: tx }
       );
-      return (await withinApprovalLimit(ctx, tx, { paymentId, amountMinor }))
-        ? execute(ctx, tx, { refund: requested, payment }, { autoApproved: true })
-        : requested;
+      return settleRequest(ctx, tx, { refund: requested, payment, amountMinor });
     });
     await afterCreate(refund);
     return refundService.getById(ctx, refund.id);
   },
 
   /* Staff: pay a student's credit back to the family (cash, cheque, UPI, bank transfer).
-     The same procedure as any refund: a request, approved by an administrator other than
-     the requester (or by the approval limit), numbered, with a receipt and ledger entry.
+     The same procedure as any refund: at once from an administrator; from an accountant a
+     request for an administrator (or within the approval limit). Numbered, with a receipt
+     and a ledger entry.
      Credit the family keeps stays with the school for later fees. */
   requestCreditRefund: async (ctx, studentId, { amount, method, reason, reference }) => {
     if (!(await studentService.exists(ctx, studentId))) throw notFound("Student");
@@ -384,23 +397,15 @@ export const refundService = {
         },
         { dbc: tx }
       );
-      return (await withinApprovalLimit(ctx, tx, { studentId, amountMinor }))
-        ? execute(ctx, tx, { refund: requested, payment: null }, { autoApproved: true })
-        : requested;
+      return settleRequest(ctx, tx, { refund: requested, payment: null, amountMinor });
     });
     await afterCreate(refund);
     return refundService.getById(ctx, refund.id);
   },
 
-  /* Administrator: approve someone else's request, which executes it (exactly once, under
-     the payment's lock). Nobody approves their own. */
+  /* Administrator: approve a request, which executes it (exactly once, under the payment's lock) */
   approve: async (ctx, refundId) => {
-    const refund = await transaction(async tx => {
-      const request = await lockRequest(ctx, refundId, tx);
-      if (request.refund.requestedBy === ctx.userId)
-        throw forbidden("You asked for this refund, so another administrator must approve it");
-      return execute(ctx, tx, request);
-    });
+    const refund = await transaction(async tx => execute(ctx, tx, await lockRequest(ctx, refundId, tx)));
     await publish(REFUND_DECIDED, notice(refund));
     if (refund.status === "PROCESSED") await announce(refund);
     return refundService.getById(ctx, refundId);

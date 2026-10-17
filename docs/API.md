@@ -259,9 +259,10 @@ For many students (any spreadsheet layout, saved as CSV):
    - Razorpay also calls `POST /public/payments/razorpay/:tenantId/webhook` (the URL is shown in the payment settings).
    - Both paths are idempotent, so a payment is recorded once. Money beyond the balance (two payments in flight) becomes student credit, applied later with `POST /finance/invoices/:id/credit-application` or refunded with `POST /finance/students/:id/credit-refunds`.
 7. **Refunds (maker-checker):**
-   - `POST /finance/payments/:id/refunds` (ADMIN, ACCOUNTANT) → 201 creates a **request** (`REQUESTED`, no number yet). No money moves, and every administrator except the requester is notified in-app.
-   - **Nobody approves their own refund**, administrators included. An administrator's refund waits for another administrator.
-   - **Approval limit:** `PATCH /finance/settings { refundApprovalLimit }` (ADMIN). An accountant's refund up to this amount is approved at once (`autoApproved: true`). The limit counts what it already let through on the same payment, or the same student's credit, so a refund cannot be split to avoid approval. `0` (the default) means every refund needs an administrator.
+   - `POST /finance/payments/:id/refunds` (ADMIN, ACCOUNTANT) → 201.
+     - **An administrator's refund needs no approval:** it is executed at once, recorded as approved by them.
+     - **An accountant's refund is a request** (`REQUESTED`, no number yet). No money moves until an administrator approves it, and every administrator is notified in-app.
+   - **Approval limit:** `PATCH /finance/settings { refundApprovalLimit }` (ADMIN). An accountant's refund up to this amount is approved at once (`autoApproved: true`). The limit counts what it already let through on the same payment, or the same student's credit, so a refund cannot be split to avoid approval. `0` (the default) means every accountant's refund needs an administrator.
    - **Paying credit back:** `POST /finance/students/:id/credit-refunds { amount?, method, reason, reference? }` follows the same procedure: request, approval, number, receipt and ledger entry. Credit the family leaves with the school stays for later fees. `GET /finance/refunds?creditOnly=true` lists them.
    - **Numbers** (`RFND26-000001`) are given when a refund is executed, so rejected requests leave no gaps.
    - Requests waiting on a payment are set aside: together they never exceed what the payment can still refund. `GET /finance/refunds?status=REQUESTED` lists them.

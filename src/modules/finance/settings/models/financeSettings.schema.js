@@ -10,8 +10,8 @@ export const financeSettings = pgTable(
   {
     ...baseColumns(),
     /* Refunds by accountants up to this amount (per payment, or per student's credit) need
-       no administrator's approval. 0: every refund needs one. Administrators' own refunds
-       always need another administrator. */
+       no administrator's approval. 0: every accountant's refund needs one. Administrators
+       need no approval. */
     refundApprovalLimit: money("refund_approval_limit").notNull().default(0),
     updatedBy: uuid("updated_by").references(() => users.id)
   },

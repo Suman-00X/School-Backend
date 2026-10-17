@@ -1,0 +1,1 @@
+ALTER TABLE "payment_refunds" DROP CONSTRAINT "payment_refunds_four_eyes_chk";

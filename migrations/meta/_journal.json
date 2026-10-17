@@ -183,6 +183,13 @@
       "when": 1792254158486,
       "tag": "0025_gateway_settlements",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792254525695,
+      "tag": "0026_admin_refunds_without_approval",
+      "breakpoints": true
     }
   ]
 }

@@ -36,27 +36,11 @@ const payOnline = async (invoiceId, amount, gatewayPaymentId) => {
 
 const invoiceOf = async id => (await get(`${F}/invoices/${id}`)).data;
 
-/* Nobody approves their own refund, administrators included (D-63): a second administrator */
-const secondAdmin = async () => {
-  if (!h.tokens.admin2) {
-    const { db } = await import("../../src/common/database/postgres.js");
-    [h.admin2] = await h.inSchool(() =>
-      db
-        .insert(h.schema.users)
-        .values({ tenantId: h.tenant.id, firstName: "Bea", lastName: "Boss", email: "bea@test.school", role: "ADMIN" })
-        .returning()
-    );
-    h.tokens.admin2 = tokenFor(h.admin2.id, "ADMIN");
-  }
-  return { as: h.tokens.admin2 };
-};
-
-/* An administrator's refund: requested, then approved by the second administrator */
+/* An administrator's refund is executed at once, approved by them (D-63) */
 const refundNow = async (paymentId, body, options = {}) => {
-  const requested = await post(`${F}/payments/${paymentId}/refunds`, body, options);
-  assert.equal(requested.data.status, "REQUESTED");
-  assert.equal(requested.data.refundNumber, null, "numbered only when approved");
-  return post(`${F}/refunds/${requested.data.id}/approval`, {}, await secondAdmin(), 200);
+  const refund = await post(`${F}/payments/${paymentId}/refunds`, body, options);
+  assert.ok(["PROCESSED", "PENDING"].includes(refund.data.status), "no approval needed");
+  return refund;
 };
 
 const lockWaiters = async () =>
@@ -103,15 +87,15 @@ describe("finance: refunds", () => {
     assert.equal(tooMuch.body.message, `At most 1000.00 of payment ${r.online.receiptNumber} can still be refunded`);
 
     const refund = await refundNow(r.online.id, { amount: 400, reason: "Overcharged transport" });
-    assert.match(refund.message, /^Refund RFND26-\d{6} of 400\.00 approved and processed for receipt RCPT26-\d{6}$/);
+    assert.match(refund.message, /^Refund RFND26-\d{6} of 400\.00 processed for receipt RCPT26-\d{6}$/);
     assert.equal(refund.data.method, "ORIGINAL");
     assert.equal(refund.data.status, "PROCESSED");
     assert.match(refund.data.gatewayRefundId, /^rfnd_mock_/);
     assert.deepEqual([refund.data.fromInvoice, refund.data.fromCredit, refund.data.unallocated], [400, 0, 0]);
-    /* An administrator's own request waits for another administrator */
-    assert.deepEqual([refund.data.requestedBy, refund.data.approvedBy], [h.admin.id, h.admin2.id]);
+    /* An administrator needs no approval: recorded as approved by them */
+    assert.deepEqual([refund.data.requestedBy, refund.data.approvedBy], [h.admin.id, h.admin.id]);
     assert.ok(refund.data.approvedAt);
-    assert.deepEqual([refund.data.approver.firstName, refund.data.autoApproved], ["Bea", false]);
+    assert.deepEqual([refund.data.approver.firstName, refund.data.autoApproved], ["Ada", false]);
     r.onlineRefund = refund.data;
 
     const invoice = await invoiceOf(r.invoice.id);
@@ -257,11 +241,7 @@ describe("finance: refunds", () => {
     } finally {
       holder.release(true);
     }
-    /* One request; the other finds the rest already waiting */
     assert.deepEqual(results.map(res => res.status).sort(), [201, 409]);
-    assert.match(results.find(res => res.status === 409).body.message, /is already waiting for approval$/);
-    const winner = results.find(res => res.status === 201).body.data;
-    await post(`${F}/refunds/${winner.id}/approval`, {}, await secondAdmin(), 200);
     assert.equal((await get(`${F}/payments/${payment.id}`)).data.refundedAmount, 1000);
   });
 
@@ -640,36 +620,23 @@ describe("finance: refund rules (D-63)", () => {
     ).data;
   });
 
-  it("never lets an administrator approve their own refund", async () => {
-    const requested = await post(`${F}/payments/${q.cash.id}/refunds`, {
+  it("lets an administrator refund at once, without approval", async () => {
+    const refund = await post(`${F}/payments/${q.cash.id}/refunds`, {
       amount: 100,
       method: "CASH",
       reason: "Bus fee charged twice"
     });
-    assert.equal(
-      requested.message,
-      `Refund of 100.00 requested for receipt ${q.cash.receiptNumber}. Another administrator must approve it before any money is paid back`
+    assert.match(
+      refund.message,
+      new RegExp(`^Refund RFND26-\\d{6} of 100\\.00 processed for receipt ${q.cash.receiptNumber}$`)
     );
-    const own = await request("POST", `${F}/refunds/${requested.data.id}/approval`, { body: {} });
-    assert.equal(own.status, 403);
-    assert.equal(own.body.message, "You asked for this refund, so another administrator must approve it");
-
-    await settleJobs();
-    const asked = async token =>
-      (await inboxOf(token, "REFUND_REQUESTED")).filter(n => n.data.refundId === requested.data.id).length;
-    assert.deepEqual([await asked(h.tokens.admin), await asked((await secondAdmin()).as)], [0, 1]);
-
-    const approved = await post(`${F}/refunds/${requested.data.id}/approval`, {}, await secondAdmin(), 200);
     assert.deepEqual(
-      [approved.data.status, approved.data.requestedBy, approved.data.approvedBy, approved.data.autoApproved],
-      ["PROCESSED", h.admin.id, h.admin2.id, false]
+      [refund.data.status, refund.data.requestedBy, refund.data.approvedBy, refund.data.autoApproved],
+      ["PROCESSED", h.admin.id, h.admin.id, false]
     );
-
-    /* The database refuses a forged self-approval too */
-    const forged = await h.pool
-      .query("UPDATE payment_refunds SET approved_by = requested_by WHERE id = $1", [approved.data.id])
-      .catch(error => error);
-    assert.equal(forged.code, "23514");
+    await settleJobs();
+    const asked = (await inboxOf(h.tokens.admin, "REFUND_REQUESTED")).filter(n => n.data.refundId === refund.data.id);
+    assert.equal(asked.length, 0, "nobody is asked to approve");
   });
 
   it("numbers a refund only when it is approved, so rejected requests leave no gaps", async () => {
@@ -728,11 +695,10 @@ describe("finance: refund rules (D-63)", () => {
       asAccountant()
     );
     assert.equal(split.data.status, "REQUESTED");
-    /* Administrators always need another administrator */
+    await post(`${F}/refunds/${split.data.id}/rejection`, { reason: "Test" }, {}, 200);
+    /* The limit counts only what it let through, not administrators' refunds */
     const admins = await post(`${F}/payments/${q.cash.id}/refunds`, { amount: 10, method: "CASH", reason: "Tiny" });
-    assert.equal(admins.data.status, "REQUESTED");
-    for (const id of [split.data.id, admins.data.id])
-      await post(`${F}/refunds/${id}/rejection`, { reason: "Test" }, await secondAdmin(), 200);
+    assert.deepEqual([admins.data.status, admins.data.autoApproved], ["PROCESSED", false]);
   });
 
   it("pays a student's credit back through the same procedure", async () => {
@@ -787,6 +753,11 @@ describe("finance: refund rules (D-63)", () => {
       ["2100", 300, 0]
     ]);
     assert.match(entry.narration, /of student credit$/);
+
+    /* An administrator pays credit back at once */
+    const byAdmin = await post(url, { amount: 50, method: "CASH", reason: "Family asked" });
+    assert.match(byAdmin.message, /^Refund RFND26-\d{6} of 50\.00 processed from the student's credit$/);
+    assert.equal(await creditOf(), credit - 350);
 
     const receipt = pdfText((await request("GET", `${F}/refunds/${requested.data.id}/receipt`)).buffer);
     for (const expected of [

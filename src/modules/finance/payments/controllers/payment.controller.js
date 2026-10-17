@@ -18,7 +18,7 @@ const source = refund => (refund.payment ? `for receipt ${refund.payment.receipt
    a request has no number yet: "Refund of 300.00 requested for receipt RCPT26-000004…" */
 const refundMessage = (refund, { approved = false } = {}) =>
   refund.status === "REQUESTED"
-    ? `Refund of ${Number(refund.amount).toFixed(2)} requested ${source(refund)}. ${refund.requester?.role === "ADMIN" ? "Another administrator" : "An administrator"} must approve it before any money is paid back`
+    ? `Refund of ${Number(refund.amount).toFixed(2)} requested ${source(refund)}. An administrator must approve it before any money is paid back`
     : `Refund ${refund.refundNumber} of ${Number(refund.amount).toFixed(2)} ${approved ? "approved and " : refund.autoApproved ? "(within the approval limit) " : ""}${outcome(refund)} ${source(refund)}`;
 
 /* "Payment confirmed. Receipt RCPT26-000004. 200.00 more than the balance is kept as credit" */
