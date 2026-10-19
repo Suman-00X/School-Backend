@@ -28,6 +28,28 @@ describe("calendar", () => {
     const events = await get(`${A}/calendar/events?from=2026-07-01&to=2026-07-31`, { as: h.tokens.student1 });
     assert.equal(events.meta.total, 2);
   });
+
+  it("closes the chosen Saturdays of each month", async () => {
+    assert.deepEqual(world.y1.offSaturdays, []);
+    await patch(`${A}/academic-years/${world.y1.id}`, { offSaturdays: [6] }, {}, 400);
+    await patch(`${A}/academic-years/${world.y1.id}`, { offSaturdays: [2, 2] }, {}, 400);
+    const year = await patch(`${A}/academic-years/${world.y1.id}`, { offSaturdays: [2, 4] });
+    assert.deepEqual(year.data.offSaturdays, [2, 4]);
+
+    /* July 2026 Saturdays: 4, 11 (2nd), 18, 25 (4th) */
+    const days = await get(`${A}/calendar/working-days?from=2026-07-01&to=2026-07-31`);
+    const saturdays = ["2026-07-04", "2026-07-11", "2026-07-18", "2026-07-25"];
+    assert.deepEqual(
+      saturdays.filter(day => days.data.workingDays.includes(day)),
+      ["2026-07-04", "2026-07-18"]
+    );
+    assert.deepEqual(
+      days.data.closedDays.filter(d => saturdays.includes(d.date)).map(d => d.reason),
+      ["WEEKLY_OFF", "WEEKLY_OFF"]
+    );
+
+    await patch(`${A}/academic-years/${world.y1.id}`, { offSaturdays: [] });
+  });
 });
 
 describe("attendance", () => {

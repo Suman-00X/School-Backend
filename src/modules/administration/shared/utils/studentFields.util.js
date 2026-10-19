@@ -1,5 +1,7 @@
 /* The fields a student import fills, with the column names schools commonly use for them.
-   Matching ignores case, spaces and punctuation: "Adm. No" = "admno". */
+   Matching ignores case, spaces and punctuation: "Date of Birth" = "dateofbirth".
+   There is no admission number: it is generated on admission, so a column with one is
+   left unmapped and ignored. */
 export const STUDENT_FIELDS = [
   {
     field: "firstName",
@@ -31,21 +33,6 @@ export const STUDENT_FIELDS = [
     label: "Date of birth",
     required: false,
     synonyms: ["dob", "date of birth", "birth date", "birthday"]
-  },
-  {
-    field: "admissionNumber",
-    label: "Admission number",
-    required: true,
-    synonyms: [
-      "admission number",
-      "admission no",
-      "adm no",
-      "admission id",
-      "enrollment number",
-      "registration number",
-      "reg no",
-      "sr no"
-    ]
   },
   {
     field: "admissionDate",

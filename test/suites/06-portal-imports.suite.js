@@ -93,14 +93,15 @@ describe("CSV student import", () => {
       "Kabir,Rao,kabir@test.school,ADM-101,Class 1,A,Meera,Rao,mother@test.school,MOTHER",
       "Bad,Email,not-an-email,ADM-102,Class 1,A,,,,",
       "No,Section,nosection@test.school,ADM-103,Class 9,Z,,,,",
-      "Dup,Admission,dup@test.school,ADM-1,Class 1,A,,,,"
+      /* Ira's email, admitted two rows up */
+      "Dup,Email,ira@test.school,ADM-104,Class 1,A,,,,"
     ].join("\n");
 
     const uploaded = await upload(csv);
     assert.equal(uploaded.status, 201);
     assert.equal(
       uploaded.body.message,
-      "students.csv: 5 row(s), 10 column(s). 10 of 15 fields matched to columns; all required fields are mapped. Review the mapping, then start the import."
+      "students.csv: 5 row(s), 10 column(s). 9 of 14 fields matched to columns; all required fields are mapped. Review the mapping, then start the import."
     );
     assert.equal(uploaded.body.data.status, "MAPPING");
     /* The preview validates the first rows before anything is written */
@@ -150,7 +151,12 @@ describe("CSV student import", () => {
     assert.equal(columnOf("className"), "Grade");
     assert.equal(columnOf("sectionName"), "Div");
     assert.equal(columnOf("parentEmail"), "Father's Email");
-    assert.deepEqual(uploaded.missingRequired, ["admissionNumber"]);
+    /* Admission numbers are generated: a column with one stays unmapped */
+    assert.deepEqual(uploaded.missingRequired, []);
+    assert.equal(
+      uploaded.fields.find(f => f.field === "admissionNumber"),
+      undefined
+    );
     assert.deepEqual(
       uploaded.columns.find(c => c.header === "Pupil Code"),
       {
@@ -160,26 +166,30 @@ describe("CSV student import", () => {
       }
     );
 
+    const path = `/api/v1/administration/imports/${uploaded.id}`;
+    const unmapped = await patch(path, { mapping: { email: null } }, { as: h.tokens.office });
+    assert.deepEqual(unmapped.data.missingRequired, ["email"]);
     const blocked = await startImport(uploaded.id);
     assert.equal(blocked.status, 422);
-    assert.equal(blocked.body.message, "Map these required fields to a column first: Admission number");
+    assert.equal(blocked.body.message, "Map these required fields to a column first: Email");
 
-    const path = `/api/v1/administration/imports/${uploaded.id}`;
     const twice = await request("PATCH", path, {
       as: h.tokens.office,
-      body: { mapping: { admissionNumber: "Surname" } }
+      body: { mapping: { email: "Surname" } }
     });
     assert.equal(twice.status, 422);
-    assert.equal(twice.body.message, 'Column "Surname" is mapped to both lastName and admissionNumber');
-    const ghost = await request("PATCH", path, { as: h.tokens.office, body: { mapping: { admissionNumber: "Roll" } } });
+    assert.equal(twice.body.message, 'Column "Surname" is mapped to both lastName and email');
+    const ghost = await request("PATCH", path, { as: h.tokens.office, body: { mapping: { email: "Roll" } } });
     assert.equal(ghost.body.message, 'The file has no column named "Roll"');
+    /* admissionNumber is no longer a field */
+    const retired = await request("PATCH", path, {
+      as: h.tokens.office,
+      body: { mapping: { admissionNumber: "Pupil Code" } }
+    });
+    assert.equal(retired.status, 400);
 
-    const fixed = await patch(
-      path,
-      { mapping: { admissionNumber: "Pupil Code", parentEmail: null } },
-      { as: h.tokens.office }
-    );
-    assert.equal(fixed.message, "Mapping updated: 6 of 15 fields matched to columns; all required fields are mapped");
+    const fixed = await patch(path, { mapping: { email: "E-mail", parentEmail: null } }, { as: h.tokens.office });
+    assert.equal(fixed.message, "Mapping updated: 5 of 14 fields matched to columns; all required fields are mapped");
     assert.deepEqual(fixed.data.preview, [{ row: 2, ok: true }]);
 
     /* Not wanted after all */
@@ -201,7 +211,6 @@ describe("CSV student import", () => {
         firstName: "Given",
         lastName: "Family",
         email: "Mail",
-        admissionNumber: "Adm",
         className: "Std",
         sectionName: "Sec"
       })

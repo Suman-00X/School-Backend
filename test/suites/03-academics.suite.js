@@ -155,9 +155,8 @@ describe("academics: structure", () => {
 });
 
 describe("students: admission and parents", () => {
-  const admission = (key, parents, admissionNumber = `ADM-${key}`, sectionId = world.s1A.id) => ({
+  const admission = (key, parents, sectionId = world.s1A.id) => ({
     user: person(`student${key}`),
-    profile: { admissionNumber },
     parents,
     enrollment: { academicYearId: world.y1.id, sectionId }
   });
@@ -170,6 +169,8 @@ describe("students: admission and parents", () => {
     assert.equal(res.message, "Student admitted successfully");
     world.s1 = res.data;
     assert.match(world.s1.studentCode, /^STU26-1-0{5}1$/);
+    /* Generated: the admitting year's start year and a serial */
+    assert.equal(world.s1.admissionNumber, "ADM26-0001");
     assert.equal(world.s1.enrollment.rollNumber, "1A-001");
     assert.equal(world.s1.parents.length, 1);
     world.motherId = world.s1.parents[0].parentId;
@@ -179,10 +180,12 @@ describe("students: admission and parents", () => {
   it("admits a sibling with an existing parent, and rolls back failures", async () => {
     world.s2 = (await post(`${U}/students`, admission(2, [{ parentId: world.motherId, relation: "MOTHER" }]))).data;
     assert.equal(world.s2.enrollment.rollNumber, "1A-002");
+    assert.equal(world.s2.admissionNumber, "ADM26-0002");
     assert.equal(await count("parents"), 1);
 
+    /* A new parent whose email is taken fails after the student's account was made: all rolls back */
     const usersBefore = await count("users");
-    await post(`${U}/students`, admission(3, [{ user: person("father3"), relation: "FATHER" }], "ADM-1"), {}, 409);
+    await post(`${U}/students`, admission(3, [{ user: person("mother"), relation: "MOTHER" }]), {}, 409);
     assert.equal(await count("users"), usersBefore);
 
     const invalid = await request("POST", `${U}/students`, {
@@ -190,12 +193,14 @@ describe("students: admission and parents", () => {
     });
     assert.equal(invalid.status, 400);
     const fields = invalid.body.error.details.map(d => d.field);
-    assert.ok(fields.includes("profile.admissionNumber") && fields.includes("enrollment.sectionId"));
+    assert.ok(!fields.includes("profile.admissionNumber") && fields.includes("enrollment.sectionId"));
 
     await post(`${U}/students`, admission(4, [{ parentId: uuid(), relation: "FATHER" }]), {}, 422);
 
     /* A third student in Class 2-A for later suites */
-    world.s3 = (await post(`${U}/students`, admission(5, [], "ADM-5", world.s2A.id))).data;
+    world.s3 = (await post(`${U}/students`, admission(5, [], world.s2A.id))).data;
+    /* The failed admission took no number */
+    assert.equal(world.s3.admissionNumber, "ADM26-0003");
   });
 
   it("links and unlinks parents as a nested resource", async () => {

@@ -942,7 +942,6 @@ describe("hostel: year-end roll-over", () => {
     t.roller = (
       await post(`${U}/students`, {
         user: person("hostelRoller"),
-        profile: { admissionNumber: "ADM-HR-1" },
         parents: [],
         enrollment: { academicYearId: world.y1.id, sectionId: world.s2A.id }
       })
@@ -1014,7 +1013,6 @@ describe("hostel: students who leave", () => {
     const leaver = (
       await post(`${U}/students`, {
         user: person("hostelLeaver"),
-        profile: { admissionNumber: "ADM-HL-1" },
         parents: [],
         enrollment: { academicYearId: world.y1.id, sectionId: world.s2A.id }
       })

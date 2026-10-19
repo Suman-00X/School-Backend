@@ -1,7 +1,8 @@
 import { and, eq, gte, lte } from "drizzle-orm";
 import { createCrudService } from "../../../../common/crud/crudService.js";
 import { notFound, unprocessable } from "../../../../common/http/errors.js";
-import { dayOfWeek, eachDay, maxDate, minDate } from "../../../../common/utils/date.util.js";
+import { eachDay, maxDate, minDate } from "../../../../common/utils/date.util.js";
+import { isWeeklyOff } from "../../academic-years/utils/weeklyOff.util.js";
 import { NON_WORKING_EVENT_TYPES } from "../../shared/constants/academic.constants.js";
 import { calendarEvents } from "../models/calendarEvent.schema.js";
 import { calendarEventRepository } from "../repositories/calendarEvent.repository.js";
@@ -57,7 +58,7 @@ export const calendarService = {
 
   /* For other submodules.
      Every school day in [from, to] (clamped to the academic year): not a weekly
-     off day and not covered by a holiday/vacation event. */
+     off day or off Saturday, and not covered by a holiday/vacation event. */
   workingDays: async (ctx, academicYear, from, to) => {
     const start = maxDate(from, academicYear.startDate);
     const end = minDate(to, academicYear.endDate);
@@ -75,7 +76,7 @@ export const calendarService = {
     const closedDays = [];
     for (const day of eachDay(start, end)) {
       const closure = closures.find(event => event.startDate <= day && event.endDate >= day);
-      if (academicYear.weeklyOffDays.includes(dayOfWeek(day))) closedDays.push({ date: day, reason: "WEEKLY_OFF" });
+      if (isWeeklyOff(academicYear, day)) closedDays.push({ date: day, reason: "WEEKLY_OFF" });
       else if (closure) closedDays.push({ date: day, reason: closure.eventType, title: closure.title });
       else workingDays.push(day);
     }

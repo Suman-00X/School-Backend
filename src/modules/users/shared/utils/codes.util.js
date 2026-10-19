@@ -7,6 +7,12 @@ import { toYearYY } from "../../../../common/utils/date.util.js";
 export const nextStudentCode = (tenantId, { yearYY, classSequence }, options) =>
   nextCode(tenantId, `STUDENT-${yearYY}-${classSequence}`, n => `STU${yearYY}-${classSequence}-${pad(n, 6)}`, options);
 
+/* ADM26-0001: the admitting academic year (its start year), serial (grows past 9999) */
+export const admissionNumberScope = yearYY => `ADMISSION-${yearYY}`;
+export const formatAdmissionNumber = (yearYY, n) => `ADM${yearYY}-${pad(n, 4)}`;
+export const nextAdmissionNumber = (tenantId, yearYY, options) =>
+  nextCode(tenantId, admissionNumberScope(yearYY), n => formatAdmissionNumber(yearYY, n), options);
+
 /* TCHR24-000001: joining year, serial */
 export const nextTeacherCode = (tenantId, joiningDate, options) => {
   const yy = toYearYY(joiningDate ?? new Date());

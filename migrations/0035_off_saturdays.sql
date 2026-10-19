@@ -1,0 +1,1 @@
+ALTER TABLE "academic_years" ADD COLUMN "off_saturdays" integer[] DEFAULT '{}'::integer[] NOT NULL;

@@ -10,7 +10,7 @@ import { enrollmentService } from "../../../academics/enrollments/index.js";
 import { studentEnrollments } from "../../../academics/enrollments/models/enrollment.schema.js";
 import { teachingScope } from "../../../academics/teacher-assignments/index.js";
 import { USER_SUMMARY_COLUMNS, toUserSummary } from "../../shared/constants/user.constants.js";
-import { nextStudentCode } from "../../shared/utils/codes.util.js";
+import { nextAdmissionNumber, nextStudentCode } from "../../shared/utils/codes.util.js";
 import { students } from "../models/student.schema.js";
 import { studentRepository } from "../repositories/student.repository.js";
 import { studentParentRepository } from "../repositories/studentParent.repository.js";
@@ -19,6 +19,20 @@ const base = createCrudService(studentRepository, {
   entity: "Student",
   with: { user: { columns: USER_SUMMARY_COLUMNS } }
 });
+
+/* The next admission number of the admitting year. A number already held (data from
+   before numbers were generated, soft-deleted students included) is skipped. */
+const newAdmissionNumber = async (ctx, yearYY, dbc) => {
+  for (;;) {
+    const candidate = await nextAdmissionNumber(ctx.tenantId, yearYY, { dbc });
+    const [held] = await dbc
+      .select({ id: students.id })
+      .from(students)
+      .where(and(eq(students.tenantId, ctx.tenantId), eq(students.admissionNumber, candidate)))
+      .limit(1);
+    if (!held) return candidate;
+  }
+};
 
 /* Teachers only see students currently enrolled in sections they teach */
 const scopeCondition = async ctx => {
@@ -56,7 +70,9 @@ export const studentService = {
   update: base.update,
 
   /* Admission: student account + profile, parents (new or existing) and
-     their links, and the enrollment in a section, all in one transaction */
+     their links, and the enrollment in a section, all in one transaction.
+     The admission number (ADM26-0001, the admitting year's start year) and the student
+     code are generated; the roll number is the next one in the section. */
   admit: async (ctx, { user, profile, parents, enrollment }) => {
     const placement = await sectionService.getPlacement(ctx, enrollment.academicYearId, enrollment.sectionId);
 
@@ -69,9 +85,10 @@ export const studentService = {
     return transaction(async tx => {
       const account = await accountService.createAccount(ctx, user, ROLES.STUDENT, { dbc: tx });
       const studentCode = await nextStudentCode(ctx.tenantId, placement, { dbc: tx });
+      const admissionNumber = await newAdmissionNumber(ctx, placement.yearYY, tx);
       const student = await studentRepository.create(
         ctx.tenantId,
-        { ...profile, userId: account.id, studentCode },
+        { ...profile, userId: account.id, studentCode, admissionNumber },
         { dbc: tx }
       );
 

@@ -1,12 +1,13 @@
 import { z } from "../../../../common/validation/zod.js";
-import { date, id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { date, id, idParams, listQuery, optionalText, patchBody } from "../../../../common/validation/schemas.js";
 import { parentProfileSchema } from "../../parents/index.js";
 import { ADMISSION_TYPES } from "../../../academics/shared/constants/academic.constants.js";
 import { PARENT_RELATIONS } from "../../shared/constants/user.constants.js";
 import { personSchema } from "../../shared/validators/person.validator.js";
 
+/* The admission number is generated on admission (ADM26-0001) and never changes;
+   one sent by a client is ignored, like any unknown field */
 const profileSchema = z.object({
-  admissionNumber: text(50),
   admissionDate: date().optional(),
   bloodGroup: optionalText(10),
   category: optionalText(50),
@@ -31,7 +32,7 @@ export const studentValidators = {
   admit: {
     body: z.object({
       user: personSchema,
-      profile: profileSchema,
+      profile: profileSchema.default({}),
       parents: z.array(admissionParent).max(4).default([]),
       enrollment: z.object({
         academicYearId: id(),

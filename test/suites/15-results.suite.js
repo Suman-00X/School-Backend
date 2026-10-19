@@ -69,7 +69,6 @@ describe("results: setup for Class 10", () => {
       const student = (
         await post("/api/v1/users/students", {
           user: person(`r${key}`),
-          profile: { admissionNumber: `R-${key}` },
           parents: [],
           enrollment: { academicYearId: world.y1.id, sectionId: section.id }
         })

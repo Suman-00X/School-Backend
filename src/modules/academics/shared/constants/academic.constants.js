@@ -2,6 +2,8 @@
 export const SUBJECT_TYPES = ["THEORY", "PRACTICAL"];
 export const ADMISSION_TYPES = ["NEW", "PROMOTED", "REPEAT"];
 export const ENROLLMENT_STATUSES = ["ACTIVE", "LEFT"];
+/* How a section's roll numbers are ordered when they are assigned (enrollment policy) */
+export const ROLL_NUMBER_ORDERS = ["ALPHABETICAL", "RESULT_RANK"];
 export const EXAM_TYPES = ["INTERNAL", "FINAL"];
 
 /* The grade levels a school can have, in order. A class is one of them: its name and

@@ -239,6 +239,20 @@
       "when": 1792428603995,
       "tag": "0033_canonical_names",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792430369548,
+      "tag": "0034_enrollment_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792430593196,
+      "tag": "0035_off_saturdays",
+      "breakpoints": true
     }
   ]
 }

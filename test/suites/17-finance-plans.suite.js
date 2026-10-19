@@ -131,7 +131,6 @@ describe("finance: installment plans (D-17)", () => {
       (
         await post("/api/v1/users/students", {
           user: person(key),
-          profile: { admissionNumber: `ADM-${key}` },
           parents,
           enrollment: { academicYearId: world.y1.id, sectionId: t.s3A.id }
         })

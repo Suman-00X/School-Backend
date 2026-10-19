@@ -1,5 +1,5 @@
-import { addDays, dayOfWeek, daysBetween, eachDay } from "../../../../common/utils/date.util.js";
-import { academicYearService } from "../../../academics/academic-years/index.js";
+import { addDays, daysBetween, eachDay } from "../../../../common/utils/date.util.js";
+import { academicYearService, isWeeklyOff } from "../../../academics/academic-years/index.js";
 import { calendarService } from "../../../academics/calendar/index.js";
 import { libraryClosureService } from "../../closures/index.js";
 
@@ -9,7 +9,7 @@ const LOOKAHEAD_DAYS = 120;
 /* Days in [from, to] when the library is closed, days outside every academic year, and
    closures entered by hand (library/closures). Inside a year, closed days are the school
    calendar (weekly off days, holidays, vacations); between years only the current year's
-   weekly off days close the library, plus any manual closure. */
+   weekly off days (and off Saturdays) close the library, plus any manual closure. */
 const closedDaysBetween = async (ctx, from, to) => {
   const { rows: years } = await academicYearService.list(ctx, { page: 1, limit: 100 });
   const closed = new Set();
@@ -20,12 +20,12 @@ const closedDaysBetween = async (ctx, from, to) => {
     const { closedDays } = await calendarService.workingDays(ctx, year, from, to);
     for (const { date } of closedDays) closed.add(date);
   }
-  const weeklyOff = (years.find(y => y.isCurrent) ?? years[0])?.weeklyOffDays ?? [];
+  const pattern = years.find(y => y.isCurrent) ?? years[0];
   for (const day of eachDay(from, to)) {
     const inYear = years.some(y => y.startDate <= day && y.endDate >= day);
     if (inYear) continue;
     outsideYears.add(day);
-    if (weeklyOff.includes(dayOfWeek(day))) closed.add(day);
+    if (pattern && isWeeklyOff(pattern, day)) closed.add(day);
   }
   return { closed, outsideYears, manual };
 };

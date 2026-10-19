@@ -15,6 +15,12 @@ export const academicYears = pgTable(
       .array()
       .notNull()
       .default(sql`'{0}'::integer[]`),
+    /* Saturdays of the month with no school, by occurrence: 1 = first … 5 = fifth
+       ({2} = second Saturday off, {2,4} = second and fourth) */
+    offSaturdays: integer("off_saturdays")
+      .array()
+      .notNull()
+      .default(sql`'{}'::integer[]`),
     description: text("description"),
     /* When it stopped being the current year: its teachers keep it for a grace period */
     currentUntil: timestamp("current_until", { withTimezone: true }),

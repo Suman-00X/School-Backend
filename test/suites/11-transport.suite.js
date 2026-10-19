@@ -615,7 +615,6 @@ describe("transport: students who leave", () => {
     const student = (
       await post("/api/v1/users/students", {
         user: person("leaver"),
-        profile: { admissionNumber: "ADM-LEAVER" },
         parents: [],
         enrollment: { academicYearId: world.y1.id, sectionId: world.s2A.id }
       })

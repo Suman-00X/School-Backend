@@ -3,6 +3,7 @@ import { logger } from "../../../../common/logging/logger.js";
 import { reportError } from "../../../../common/observability/errorReporter.js";
 import { academicYearService } from "../../academic-years/index.js";
 import { enrollmentService } from "../../enrollments/index.js";
+import { examService } from "../../exams/index.js";
 import { sectionService } from "../../sections/index.js";
 import { teachingScope } from "../../teacher-assignments/index.js";
 import { reportSnapshotRepository } from "../repositories/reportSnapshot.repository.js";
@@ -75,6 +76,20 @@ const visibleSnapshots = async (ctx, studentId, { examId, schemeId, academicYear
   return (await withIntegrity(ctx, snapshots)).filter(snapshot => snapshot.integrity === "VERIFIED");
 };
 
+/* Which published results make a year's final result, best first: annual results
+   (assessment schemes), then FINAL exams; the most recently published first within each */
+const finalPublications = async (ctx, academicYearId) => {
+  const publications = await resultPublicationRepository.findCurrentInYear(ctx.tenantId, academicYearId);
+  const finalExams = new Set(
+    (await examService.findInYear(ctx, academicYearId)).filter(exam => exam.examType === "FINAL").map(exam => exam.id)
+  );
+  const newestFirst = (a, b) => new Date(b.publishedAt) - new Date(a.publishedAt);
+  return [
+    ...publications.filter(p => p.kind === "SCHEME").sort(newestFirst),
+    ...publications.filter(p => p.kind === "EXAM" && finalExams.has(p.examId)).sort(newestFirst)
+  ];
+};
+
 export const reportSnapshotService = {
   /* Staff: every version, filtered. Teachers: the sections they are class teacher of. */
   list: async (ctx, { page, limit, examId, schemeId, studentId, sectionId, version }) => {
@@ -140,6 +155,42 @@ export const reportSnapshotService = {
       academicYearId: yearId,
       reports: snapshots.map(familyReport)
     };
+  },
+
+  /* For other submodules (roll numbers by result): each student's published final result of
+     a year -> Map(studentId -> { percentage, result, kind, sourceId, sourceName, publishedAt }).
+     Per student, the first of finalPublications() with a report card for them; only current
+     (not withdrawn, not superseded) versions, and only snapshots that pass their seal. */
+  finalResults: async (ctx, academicYearId, studentIds) => {
+    const results = new Map();
+    if (!studentIds.length) return results;
+    const publications = await finalPublications(ctx, academicYearId);
+    if (!publications.length) return results;
+    const snapshots = await withIntegrity(
+      ctx,
+      await reportSnapshotRepository.findMany(ctx.tenantId, {
+        publicationId: { $in: publications.map(p => p.id) },
+        studentId: { $in: studentIds }
+      })
+    );
+    const byPublication = new Map(publications.map(p => [p.id, []]));
+    for (const snapshot of snapshots) {
+      if (snapshot.integrity === "VERIFIED") byPublication.get(snapshot.publicationId)?.push(snapshot);
+    }
+    for (const publication of publications) {
+      for (const snapshot of byPublication.get(publication.id)) {
+        if (results.has(snapshot.studentId)) continue;
+        results.set(snapshot.studentId, {
+          percentage: snapshot.report?.percentage ?? null,
+          result: snapshot.report?.result ?? null,
+          kind: snapshot.kind,
+          sourceId: snapshot.sourceId,
+          sourceName: snapshot.sourceName,
+          publishedAt: snapshot.publishedAt
+        });
+      }
+    }
+    return results;
   },
 
   /* Portal PDF: the snapshot of one exam or scheme */

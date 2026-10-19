@@ -144,7 +144,7 @@ export const studentImportService = {
     return studentImportService.getById(ctx, job.id);
   },
 
-  /* Step 2 (optional): correct the mapping, e.g. { admissionNumber: "Pupil Code" }.
+  /* Step 2 (optional): correct the mapping, e.g. { email: "Pupil Email" }.
      null unmaps a field. */
   updateMapping: async (ctx, importId, changes) => {
     const job = await loadMapping(ctx, importId);
@@ -228,7 +228,8 @@ export const studentImportService = {
               gender: row.gender,
               dob: row.dob
             },
-            profile: { admissionNumber: row.admissionNumber, admissionDate: row.admissionDate },
+            /* The admission number is generated (a column holding one is ignored) */
+            profile: { admissionDate: row.admissionDate },
             parents: await resolveParent(ctx, row),
             enrollment: { academicYearId: job.options.academicYearId, sectionId: section.id, admissionType: "NEW" }
           });
@@ -279,5 +280,5 @@ export const studentImportService = {
 
   template: () =>
     `${STUDENT_TEMPLATE_COLUMNS.join(",")}\r\n` +
-    "Asha,Rao,asha.rao@example.com,+91 98765 43210,FEMALE,2015-04-12,ADM-2026-001,2026-06-01,Class 1,A,Meera,Rao,meera.rao@example.com,+91 98765 43211,MOTHER\r\n"
+    "Asha,Rao,asha.rao@example.com,+91 98765 43210,FEMALE,2015-04-12,2026-06-01,Class 1,A,Meera,Rao,meera.rao@example.com,+91 98765 43211,MOTHER\r\n"
 };

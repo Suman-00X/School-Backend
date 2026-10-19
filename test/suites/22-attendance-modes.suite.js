@@ -105,7 +105,6 @@ describe("attendance modes and teacher scope: setup", () => {
       t[key] = (
         await post(`${U}/students`, {
           user: person(key),
-          profile: { admissionNumber: `AM-${key}` },
           parents,
           enrollment: { academicYearId: world.y1.id, sectionId: section.id }
         })

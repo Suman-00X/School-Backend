@@ -261,7 +261,7 @@ Sign-in events (`auth.login`, `auth.login.failed`) are recorded separately under
 ```json
 {
   "user": { "firstName": "Asha", "lastName": "Rao", "email": "asha@example.com" },
-  "profile": { "admissionNumber": "ADM-2026-001" },
+  "profile": { "admissionDate": "2026-06-01" },
   "parents": [
     { "user": { "firstName": "Meera", "lastName": "Rao", "email": "meera@example.com" }, "relation": "MOTHER", "isPrimaryContact": true },
     { "parentId": "7c1e…", "relation": "FATHER" }
@@ -270,14 +270,50 @@ Sign-in events (`auth.login`, `auth.login.failed`) are recorded separately under
 }
 ```
 
-The student code (`STU26-1-000001`) and roll number are generated.
+The **admission number** (`ADM26-0001`), the student code (`STU26-1-000001`) and the roll number are generated, and returned with the student (`admissionNumber`, `studentCode`, `enrollment.rollNumber`).
+- **Admission number:** `ADM<yy>-<serial>`, where yy is the start year of the academic year the student is admitted into and the serial counts that year's admissions in the school (4 digits, then 5 after 9999). A failed admission takes no number. Numbers held by students admitted before numbers were generated are kept, and skipped. The admission number never changes: `profile.admissionNumber` is not accepted on admission or on `PATCH /users/students/:id`, and is ignored like any unknown field (a `PATCH` with nothing else is refused with 400, as an empty update).
+- **Roll number:** the next number at the end of the section (`1A-008`). Sections are put in order with an [assignment](#roll-numbers).
 
 For many students (any spreadsheet layout, saved as CSV):
 1. `POST /administration/imports/students` (multipart `file`) → **201**. Nothing is imported yet; the status is `MAPPING`. The response lists the sheet's columns with sample values, the form fields with the column each was matched to, any required fields still unmatched, and a dry-run check of the first 20 rows.
-2. Optionally, `PATCH /administration/imports/:importId { "mapping": { "admissionNumber": "Pupil Code" } }` corrects the matching (`null` unmaps a field).
+2. Optionally, `PATCH /administration/imports/:importId { "mapping": { "email": "Pupil Email" } }` corrects the matching (`null` unmaps a field). There is no admission-number field: each imported student gets a generated one, and a column holding old numbers stays unmapped and is ignored.
 3. `POST /administration/imports/:importId/start` → **202**: the import runs in the background. `GET /administration/imports/:importId` shows progress and per-row errors. `DELETE` cancels before the start.
 
 `GET /administration/imports/students/template` downloads a CSV whose headers match the fields exactly.
+
+### Roll numbers
+
+Roll numbers keep their format (`<class><section>-<serial>`: `1A-001`, `LKGA-012`). The **order** follows the school's rule.
+
+1. **The rule:** `GET /academics/enrollments/policy` (every employee) → `{ rollNumberOrder, updatedAt }`. `PATCH /academics/enrollments/policy { rollNumberOrder }` (ADMIN, PRINCIPAL) → 200; it applies to the next assignment and promotion, never to numbers already given.
+
+   | `rollNumberOrder` | Order |
+   |---|---|
+   | `ALPHABETICAL` (default) | First name, then middle name, then last name, ignoring case and accents (`aarav` = `Aarav`, `Émile` = `emile`); namesakes by admission number |
+   | `RESULT_RANK` | The student's **published final result of the previous academic year** (the latest year starting before the selected one), best percentage first. The final result is the current published version of the year's assessment scheme (annual result) with a report card for the student, else of a `FINAL` exam (the most recently published first). Withdrawn or superseded versions, incomplete results and report cards failing their seal do not count. Students without a result (new admissions, gaps) follow the ranked ones, alphabetically. Ties alphabetically |
+
+2. **Assign:** `POST /academics/enrollments/roll-number-assignments` (ADMIN, PRINCIPAL; the year from `X-Academic-Year-Id`, default the current year) with exactly one of `{ "sectionId" }`, `{ "classId" }` or `{ "all": true }` → **200**. Each section is renumbered 1..n in one transaction: students in the section (`ACTIVE`) first, by the rule; rows of students who left (`LEFT`) keep their relative order after them, since a section's numbers are unique across both. One assignment runs at a time per school, and new enrollments into those sections wait for it.
+
+   ```json
+   {
+     "rule": "RESULT_RANK",
+     "academicYear": { "id": "…", "yearName": "2027-28" },
+     "previousAcademicYear": { "id": "…", "yearName": "2026-27" },
+     "dryRun": false,
+     "totals": { "sections": 1, "students": 9, "changed": 3 },
+     "sections": [
+       { "sectionId": "…", "sectionName": "Class 12-A", "classId": "…", "students": 9, "changed": 3,
+         "ranked": 6, "unranked": 3, "left": 0, "nextRollNumber": "12A-010" }
+     ]
+   }
+   ```
+
+   `previousAcademicYear`, `ranked` and `unranked` appear under `RESULT_RANK` only. `changed` counts students whose number changed.
+   - **Preview:** add `"dryRun": true` (as in the hostel roll-over). The same answer, nothing saved, and each section lists `order`: `[{ enrollmentId, studentId, name, admissionNumber, currentRollNumber, rollNumber, previousResult }]` (`previousResult: { percentage, result, source }` or null, under `RESULT_RANK`), for a confirmation dialog.
+   - **Refused:** not exactly one of the three (400); a section or class with no sections in the year (422); an archived year (409, previews too); other roles (403).
+3. **Later enrollments** (late admissions, transfers, single promotions) take the next number at the end of the section. Nobody is renumbered unless an assignment is run again.
+4. **Bulk promotion** (`POST /academics/enrollments/promotions/bulk`) enrols the section's students in the order of the rule for the target year, so a new year's empty section is numbered by the rule (under `RESULT_RANK`, by the year being left, if its final result is published by then). A section that already has students keeps their numbers, and the newcomers follow in rule order.
+5. **What refers to roll numbers:** nothing stores them except the enrollment. Attendance, marks, homework, report cards, transport rosters and exports refer to the enrollment's student and section and show the current number. A **published report card keeps the roll number it was published with** (snapshots are frozen); the next published version shows the new one.
 
 ### Setting up a year
 
@@ -372,7 +408,7 @@ For many students (any spreadsheet layout, saved as CSV):
 
 ### Year end
 
-1. `POST /academics/enrollments/promotions/bulk` promotes a section, with per-student overrides (`REPEAT`, `LEAVE`).
+1. `POST /academics/enrollments/promotions/bulk` promotes a section, with per-student overrides (`REPEAT`, `LEAVE`). The new sections are numbered by the school's [roll-number rule](#roll-numbers).
 2. `PATCH /academics/academic-years/:id { "isCurrent": true }` switches the current year to the new one.
 3. After the old year has ended and nobody is still active in it: `POST /academics/academic-years/:id/archival`. Its academic records become read-only; fees stay payable.
 

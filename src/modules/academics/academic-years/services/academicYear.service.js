@@ -1,4 +1,4 @@
-import { and, count, eq, gt, gte, lte, ne, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, gte, lt, lte, ne, sql } from "drizzle-orm";
 import { cache } from "../../../../common/cache/cache.js";
 import { createCrudService } from "../../../../common/crud/crudService.js";
 import { transaction } from "../../../../common/database/postgres.js";
@@ -181,6 +181,15 @@ export const academicYearService = {
     cache.wrap(currentKey(ctx.tenantId), CURRENT_TTL_SECONDS, async () =>
       academicYearRepository.findOne(ctx.tenantId, [eq(academicYears.isCurrent, true)])
     ),
+
+  /* The year just before a year (the latest one starting earlier), or null */
+  findPrevious: async (ctx, academicYear) =>
+    (
+      await academicYearRepository.findMany(ctx.tenantId, {
+        conditions: [lt(academicYears.startDate, academicYear.startDate)],
+        orderBy: desc(academicYears.startDate)
+      })
+    )[0] ?? null,
 
   /* The year that stopped being current less than PREVIOUS_YEAR_GRACE_MONTHS ago (or null):
      its teachers keep it for that long */

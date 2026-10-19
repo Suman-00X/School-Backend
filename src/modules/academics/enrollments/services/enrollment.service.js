@@ -9,6 +9,7 @@ import { teachingScope } from "../../teacher-assignments/index.js";
 import { nextRollNumber } from "../../shared/utils/codes.util.js";
 import { studentEnrollments as enrollments } from "../models/enrollment.schema.js";
 import { enrollmentRepository } from "../repositories/enrollment.repository.js";
+import { rollNumberService } from "./rollNumber.service.js";
 
 /* A student left the school (not a promotion): other modules release what they hold
    (transport seat, hostel bed). Payload: { tenantId, studentId, academicYearId, enrollmentId } */
@@ -136,7 +137,10 @@ export const enrollmentService = {
 
   /* Year-end promotion of a whole section. Every active student is promoted to
      toSectionId unless an override says REPEAT (into another section of the
-     target year) or LEAVE (enrollment closed, no new one). All in one transaction. */
+     target year) or LEAVE (enrollment closed, no new one). All in one transaction.
+     Students are enrolled in the order of the school's roll-number rule for the target
+     year, so a new section is numbered by the rule; one that already has students keeps
+     their numbers and the newcomers follow, in rule order. */
   promoteSection: async (ctx, { fromSectionId, toAcademicYearId, toSectionId, overrides = [] }) => {
     const fromSection = await sectionService.findById(ctx, fromSectionId);
     if (!fromSection) throw notFound("Section");
@@ -158,17 +162,18 @@ export const enrollmentService = {
         placements.set(sectionId, await sectionService.getPlacement(ctx, toAcademicYearId, sectionId));
       return placements.get(sectionId);
     };
-    await placementFor(toSectionId);
+    const { academicYear: toYear } = await placementFor(toSectionId);
     for (const override of overrides) {
       if (override.action === "REPEAT") await placementFor(override.toSectionId);
     }
+    const inRuleOrder = await rollNumberService.orderForYear(ctx, toYear, fromSectionId, roster);
 
     const summary = { promoted: 0, repeated: 0, left: 0, skipped: [] };
     const created = [];
     const leavers = [];
 
     await transaction(async tx => {
-      for (const enrollment of roster) {
+      for (const enrollment of inRuleOrder) {
         const override = actionOf.get(enrollment.studentId);
         const action = override?.action ?? "PROMOTE";
 

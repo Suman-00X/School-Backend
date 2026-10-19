@@ -13,6 +13,12 @@ const fields = z.object({
     .max(6)
     .refine(days => new Set(days).size === days.length, "must not repeat a day")
     .optional(),
+  /* Which Saturdays of the month are off: 1 = first … 5 = fifth, e.g. [2] or [2, 4] */
+  offSaturdays: z
+    .array(z.number().int().min(1).max(5))
+    .max(5)
+    .refine(weeks => new Set(weeks).size === weeks.length, "must not repeat a Saturday")
+    .optional(),
   description: optionalText()
 });
 

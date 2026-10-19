@@ -33,5 +33,6 @@ await import("./suites/23-owners-handover.suite.js");
 await import("./suites/24-activity-logs.suite.js");
 await import("./suites/25-login-directory.suite.js");
 await import("./suites/26-canonical-names.suite.js");
+await import("./suites/27-admission-roll-numbers.suite.js");
 /* keep last */
 await import("./suites/99-year-end.suite.js");

@@ -11,6 +11,20 @@ const router = createRouter();
 
 router.post("/", authorize(can.create), validate(rules.create), inYear, controller.create);
 router.get("/", authorize(can.read), validate(rules.list), inYear, controller.list);
+
+/* The school's roll-number rule (before /:enrollmentId) */
+router.get("/policy", authorize(can.readPolicy), controller.getPolicy);
+router.patch("/policy", authorize(can.managePolicy), validate(rules.updatePolicy), controller.updatePolicy);
+
+/* Renumber sections of the selected year by the rule (action, 200; dryRun previews) */
+router.post(
+  "/roll-number-assignments",
+  authorize(can.assignRollNumbers),
+  validate(rules.assignRollNumbers),
+  inYear,
+  controller.assignRollNumbers
+);
+
 router.patch("/:enrollmentId", authorize(can.update), validate(rules.update), controller.update);
 
 /* A promotion creates the next year's enrollment; both years are in the body */
