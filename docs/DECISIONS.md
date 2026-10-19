@@ -8,6 +8,7 @@ Only **open** items are here: things that need your decision, or that you may wa
 
 | | Item |
 |---|---|
+| 🟡 | D-74: generated admission numbers and roll-number rules are built; choices to confirm |
 | 🟡 | D-73: formats for academic years, classes and other names are built; choices to confirm |
 | 🟡 | D-72: sign-in without a school code is built; choices to confirm |
 | 🟡 | D-64 hostel; the fee and result choices to confirm (D-17 to D-21, D-09/D-10) |
@@ -39,6 +40,15 @@ Built: people sign in with email and password only. If the password is right in 
 - **Locked anywhere and no match:** the answer is "too many attempts" (429), so a lock is never hidden behind "wrong password".
 - **Forgot password without a code:** every school with that email sends its own link, each naming its school.
 - **Reworded message:** "The email or password is incorrect" (no school code).
+
+### 🟡 D-74: Admission numbers and roll numbers: choices to confirm
+Built: the server generates admission numbers, and roll numbers follow the school's rule. API.md › Roll numbers has the workflow.
+- **Admission number format:** `ADM26-0001` = the admitting academic year's start year + a counter per school and year (4 digits, grows past 9999). Nobody can type or change it, not even in a CSV import. Existing students keep their numbers. *Option:* let an import carry old numbers when moving from another system.
+- **Roll-number rule** (one per school, ADMIN and PRINCIPAL change it): **alphabetical** by first, middle, then last name; or **by last year's result**, best percentage first, students without a result after them alphabetically.
+- **"Last year's result"** is the student's published final result of the previous academic year (from the assessment scheme, else the FINAL exam). Failed students are still ranked; withdrawn or incomplete results count as none.
+- **When numbers change:** only when someone runs "Assign roll numbers" (a section, a class or the whole year; a preview shows the new order first). New admissions after that get the next number at the end; nothing is renumbered silently. Promotion into a new year numbers the new sections by the rule.
+- **Students who left** a section are numbered after the current ones (so their old numbers change). *Option:* keep their numbers and leave gaps.
+- **Published report cards** keep the roll number they were published with; the next version shows the new one.
 
 ### 🟡 D-73: Formats for academic years, classes and names: choices to confirm
 Built so the same thing can't be entered twice in two spellings. API.md › Names and codes has the rules.
