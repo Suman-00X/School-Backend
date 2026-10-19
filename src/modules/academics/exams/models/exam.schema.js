@@ -26,7 +26,7 @@ export const exams = pgTable(
     description: text("description")
   },
   t => [
-    uniqueIndex("exams_year_name_uq").on(t.academicYearId, t.examName),
+    uniqueIndex("exams_year_name_uq").on(t.academicYearId, sql`lower(${t.examName})`),
     check("exams_dates_chk", sql`${t.startDate} IS NULL OR ${t.endDate} IS NULL OR ${t.endDate} >= ${t.startDate}`)
   ]
 );

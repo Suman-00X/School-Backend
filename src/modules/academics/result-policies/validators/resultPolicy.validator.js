@@ -1,5 +1,5 @@
 import { z } from "../../../../common/validation/zod.js";
-import { id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { id, idParams, listQuery, name, optionalText, patchBody } from "../../../../common/validation/schemas.js";
 import {
   ABSENCE_TREATMENTS,
   GRADING_MODES,
@@ -63,7 +63,7 @@ const settings = z.object({
 });
 
 const fields = settings.extend({
-  name: text(100),
+  name: name(100),
   description: optionalText(),
   isDefault: z.boolean().optional()
 });
@@ -87,7 +87,7 @@ const consistent = schema =>
 
 const params = idParams("policyId");
 
-export const policySettings = consistent(settings.extend({ name: text(100).optional() }));
+export const policySettings = consistent(settings.extend({ name: name(100).optional() }));
 
 export const resultPolicyValidators = {
   create: { body: consistent(fields) },

@@ -77,7 +77,9 @@ export const resultPolicies = pgTable(
     roundingMode: roundingMode("rounding_mode").notNull().default("HALF_UP")
   },
   t => [
-    uniqueIndex("result_policies_tenant_name_uq").on(t.tenantId, t.name).where(activeRows(t)),
+    uniqueIndex("result_policies_tenant_name_uq")
+      .on(t.tenantId, sql`lower(${t.name})`)
+      .where(activeRows(t)),
     uniqueIndex("result_policies_one_default_uq")
       .on(t.tenantId)
       .where(sql`${t.isDefault} = true AND ${t.isActive} = true`),

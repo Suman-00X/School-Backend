@@ -17,7 +17,11 @@ export const installmentPlans = pgTable(
     name: text("name").notNull(),
     description: text("description")
   },
-  t => [uniqueIndex("installment_plans_year_name_uq").on(t.tenantId, t.academicYearId, t.name).where(activeRows(t))]
+  t => [
+    uniqueIndex("installment_plans_year_name_uq")
+      .on(t.tenantId, t.academicYearId, sql`lower(${t.name})`)
+      .where(activeRows(t))
+  ]
 );
 
 /* One due date of a plan: takes sharePercent of every fee item. Shares add up to 100;
@@ -36,7 +40,7 @@ export const planInstallments = pgTable(
   },
   t => [
     uniqueIndex("plan_installments_sequence_uq").on(t.installmentPlanId, t.sequence),
-    uniqueIndex("plan_installments_name_uq").on(t.installmentPlanId, t.name),
+    uniqueIndex("plan_installments_name_uq").on(t.installmentPlanId, sql`lower(${t.name})`),
     check("plan_installments_share_chk", sql`${t.sharePercent} > 0 AND ${t.sharePercent} <= 100 AND ${t.sequence} >= 1`)
   ]
 );

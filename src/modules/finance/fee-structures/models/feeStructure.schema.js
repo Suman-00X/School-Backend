@@ -27,7 +27,7 @@ export const feeStructures = pgTable(
   },
   t => [
     uniqueIndex("fee_structures_year_class_name_uq")
-      .on(t.academicYearId, t.classId, t.name)
+      .on(t.academicYearId, t.classId, sql`lower(${t.name})`)
       .where(sql`${t.isActive} = true`),
     check("fee_structures_late_fee_chk", sql`${t.chargesLateFee} OR ${t.lateFeeRuleId} IS NULL`)
   ]

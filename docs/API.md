@@ -27,17 +27,42 @@ Base URL: `/api/v1`. Every endpoint needs `Authorization: Bearer <access token>`
 
 | Step | Request | Notes |
 |---|---|---|
-| Sign in | `POST /auth/login { schoolCode, email, password }` → 201 | Returns `accessToken` (JWT, 15 min), `refreshToken` (30 days), `user` and `school` |
+| Sign in | `POST /auth/login { email, password }` → 201, or 200 "Choose a school to continue" | 201 returns `accessToken` (JWT, 15 min), `refreshToken` (30 days), `user` and `school`. See [Signing in without a school code](#signing-in-without-a-school-code) |
 | Call the API | `Authorization: Bearer <accessToken>` | |
 | Stay signed in | `POST /auth/refresh { refreshToken }` → 200 | Returns a **new** refresh token every time. Store it and discard the old one: re-using an old one ends the session |
 | Sign out | `POST /auth/logout` | This device. `GET /auth/sessions` lists devices; `DELETE /auth/sessions/:id` signs one out |
 | First password | `POST /auth/invitations { userIds }` (staff), then the person opens the emailed link → `POST /auth/password-resets { token, password }` | Links work once. Invitations last 7 days, resets 1 hour |
-| Forgot password | `POST /auth/password-reset-requests { schoolCode, email }` → always 202 | The same answer whether or not the account exists |
+| Forgot password | `POST /auth/password-reset-requests { email, schoolCode? }` → always 202 | The same answer whether or not the account exists. Without `schoolCode`, every school with an active account for the email sends its own link |
 | Change password | `PATCH /auth/password { currentPassword, newPassword }` | Signs out your other devices |
 
 **Passwords:** 8–128 characters, with at least one letter and one digit.
 
-**Wrong credentials:** every kind (school, email or password) gets the same 401: "The school code, email or password is incorrect".
+**Wrong credentials:** every kind (email, password, or a school without that account) gets the same 401: "The email or password is incorrect".
+
+### Signing in without a school code
+
+A person may have accounts in several schools with the same email. The platform keeps a **login directory** (which schools have an account for an email; it stores only a keyed digest of the email, never the address), so the client sends just the email and password:
+
+1. `POST /auth/login { email, password }`. The password is checked in every school that has the email (at most 20).
+2. Right in **one** school: `201`, signed in there (the same body as always).
+3. Right in **several**: `200` with no session yet. Only schools where the password was right are listed; a school is never named before its password is verified:
+
+   ```json
+   { "success": true, "message": "Choose a school to continue",
+     "data": { "chooseSchool": true,
+       "schools": [ { "id": "…", "name": "Green Valley School", "code": "GVS", "role": "TEACHER", "logoUrl": null },
+                    { "id": "…", "name": "Sunrise Public School", "code": "SPS", "role": "PARENT", "logoUrl": "https://…" } ] } }
+   ```
+
+   The client shows the list and calls `POST /auth/login { email, password, schoolId }` again with the chosen `id` → `201`. Keep the password in memory only until then. `logoUrl` is a short-lived link (1 hour) or `null`.
+4. Right **nowhere**:
+   - `403` "This account is disabled. Please contact the school office." when the password was right only for disabled accounts;
+   - `429` (the lockout message) when a school could not be checked because its account is locked;
+   - otherwise `401` "The email or password is incorrect" (also for an unknown email).
+
+A disabled or locked account in one school never blocks signing in to another. Wrong guesses without a school count against the account in every school that has the email.
+
+`schoolId` (or, for older clients, `schoolCode`) names the school and skips the search; send one of them, not both (`400`).
 
 **Lockout and limits:**
 - After 5 failures the account is locked for 15 minutes (429).
@@ -61,6 +86,7 @@ Base URL: `/api/v1`. Every endpoint needs `Authorization: Bearer <access token>`
 | **Bulk** | `POST /<resource>/bulk` with `{ "<resource>": [ … ] }`. All-or-nothing. |
 | **Academic year** | Year-scoped endpoints act on the school's current year. Send `X-Academic-Year-Id: <id>` to use another year. Archived years are read-only: writes return `409`. |
 | **Input** | JSON (`application/json`), except uploads (`multipart/form-data`, field `file`). Unknown fields are ignored. `id`, `tenantId`, timestamps, `role` and `passwordHash` can never be set through a profile endpoint. |
+| **Names and codes** | Names of master records (classes, subjects, fee heads, hostels, routes, leave types…) are trimmed and inner spaces collapsed ("Sports   Fee" → "Sports Fee"), and are unique **ignoring case**: "tuition" is refused when "Tuition" exists, with a 409 such as "A fee head named tuition already exists". Codes are upper-cased (`ma01` → `MA01`); subject codes are 2–10 letters, digits or `-`, starting with a letter. **Academic year names come from the dates**: `2026-27` for a year that runs into the next calendar year, `2026` for one within a calendar year. `yearName` may be left out; when sent it must equal that name (else 422). A year lasts at most 13 months, spans at most two calendar years, and may not share a day with another year of the school (409 naming it). **Classes are fixed levels**: send `{ "level": "GRADE_1" }` (NURSERY, LKG, UKG, GRADE_1 … GRADE_12; `GET /academics/classes/levels` lists them with the ones already created). `className` and `classOrder` are derived (Nursery 1, LKG 2, UKG 3, Class n = n + 3); older clients may send `{ "className": "Class 1" }` ("grade 1", "Std 1", "I" work too; anything else is a 400 "must be one of Nursery, LKG, UKG, Class 1 … Class 12"), and a sent `classOrder` is ignored. A class's level can change only while it has no sections. **Bulk** requests refuse items that repeat each other with a field-level 400 (`sections.1.sectionName repeats sections.0 in this request`). |
 | **Dates and money** | Dates are `"YYYY-MM-DD"`. "Today" means today in the school's time zone (settings). Money is a JSON number in the school's currency, with at most 2 decimals. |
 | **Files** | Uploads are checked for type, size and content signature. Downloads are never direct: endpoints return a **signed link valid for 15 minutes** (`…/download-url`). |
 | **Exports** | Report and list exports take `?format=xlsx` (default) or `?format=csv`. CSV is UTF-8 with a BOM, with spreadsheet-formula injection neutralised. Report cards, receipts and payslips are available as PDF (`…/pdf`). |

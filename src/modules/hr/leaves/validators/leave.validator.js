@@ -1,16 +1,19 @@
 import { z } from "../../../../common/validation/zod.js";
-import { date, id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import {
+  code,
+  date,
+  id,
+  idParams,
+  listQuery,
+  name,
+  optionalText,
+  patchBody,
+  text
+} from "../../../../common/validation/schemas.js";
 import { LEAVE_DECISIONS, LEAVE_REQUEST_STATUSES } from "../../shared/constants/hr.constants.js";
 
-const code = () =>
-  z
-    .string()
-    .trim()
-    .toUpperCase()
-    .regex(/^[A-Z0-9_-]{2,20}$/, "must be 2-20 letters, digits, - or _");
-
 const typeFields = z.object({
-  name: text(100),
+  name: name(100),
   code: code(),
   annualQuotaDays: z.number().min(0).max(366).multipleOf(0.5),
   isPaid: z.boolean(),

@@ -4,6 +4,22 @@ export const ADMISSION_TYPES = ["NEW", "PROMOTED", "REPEAT"];
 export const ENROLLMENT_STATUSES = ["ACTIVE", "LEFT"];
 export const EXAM_TYPES = ["INTERNAL", "FINAL"];
 
+/* The grade levels a school can have, in order. A class is one of them: its name and
+   order come from the level. `label` stands for the class in generated codes
+   (STU26-1-000001, MA01-1A, roll number LKGA-001). */
+export const CLASS_LEVELS = [
+  { level: "NURSERY", className: "Nursery", classOrder: 1, label: "NUR" },
+  { level: "LKG", className: "LKG", classOrder: 2, label: "LKG" },
+  { level: "UKG", className: "UKG", classOrder: 3, label: "UKG" },
+  ...Array.from({ length: 12 }, (_, i) => ({
+    level: `GRADE_${i + 1}`,
+    className: `Class ${i + 1}`,
+    classOrder: i + 4,
+    label: String(i + 1)
+  }))
+];
+export const CLASS_LEVEL_KEYS = CLASS_LEVELS.map(l => l.level);
+
 export const CALENDAR_EVENT_TYPES = ["HOLIDAY", "VACATION", "EXAM", "EVENT", "MEETING", "OTHER"];
 /* Event types that close the school for the day */
 export const NON_WORKING_EVENT_TYPES = ["HOLIDAY", "VACATION"];

@@ -15,7 +15,9 @@ export const transportRoutes = pgTable(
     description: text("description")
   },
   t => [
-    uniqueIndex("transport_routes_tenant_name_uq").on(t.tenantId, t.name).where(activeRows(t)),
+    uniqueIndex("transport_routes_tenant_name_uq")
+      .on(t.tenantId, sql`lower(${t.name})`)
+      .where(activeRows(t)),
     uniqueIndex("transport_routes_tenant_code_uq").on(t.tenantId, t.code).where(activeRows(t)),
     uniqueIndex("transport_routes_vehicle_uq")
       .on(t.vehicleId)
@@ -40,7 +42,9 @@ export const transportRouteStops = pgTable(
   },
   t => [
     uniqueIndex("transport_route_stops_route_sequence_uq").on(t.routeId, t.sequence).where(activeRows(t)),
-    uniqueIndex("transport_route_stops_route_name_uq").on(t.routeId, t.name).where(activeRows(t)),
+    uniqueIndex("transport_route_stops_route_name_uq")
+      .on(t.routeId, sql`lower(${t.name})`)
+      .where(activeRows(t)),
     check("transport_route_stops_sequence_chk", sql`${t.sequence} > 0`),
     check("transport_route_stops_fee_chk", sql`${t.monthlyFee} >= 0`)
   ]

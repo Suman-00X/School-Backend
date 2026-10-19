@@ -1,5 +1,14 @@
 import { z } from "../../../../common/validation/zod.js";
-import { date, id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import {
+  code,
+  date,
+  id,
+  idParams,
+  listQuery,
+  name,
+  optionalText,
+  patchBody
+} from "../../../../common/validation/schemas.js";
 import {
   PAYROLL_RUN_STATUSES,
   SALARY_CALCULATIONS,
@@ -12,8 +21,8 @@ const amount = () => z.number().min(0).max(100_000_000).multipleOf(0.01);
 const upper = (pattern, message) => z.string().trim().toUpperCase().regex(pattern, message);
 
 const componentFields = z.object({
-  code: upper(/^[A-Z0-9_-]{2,20}$/, "must be 2-20 letters, digits, - or _"),
-  name: text(100),
+  code: code(),
+  name: name(100),
   kind: z.enum(SALARY_COMPONENT_KINDS),
   calculation: z.enum(SALARY_CALCULATIONS),
   /* An amount (FIXED) or a percent of basic (PERCENT_OF_BASIC) */

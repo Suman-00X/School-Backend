@@ -104,6 +104,10 @@ export const startHarness = async () => {
       .returning()
   );
   h.tokens.otherAdmin = tokenFor(otherAdmin.id, "ADMIN", h.otherTenant.id);
+
+  /* Both admins were written directly: list them in the login directory, as the scripts do */
+  h.modules.accountDirectory = (await import("../../src/modules/users/accounts/index.js")).accountDirectory;
+  await h.modules.accountDirectory.rebuildAll();
 };
 
 export const stopHarness = async () => {

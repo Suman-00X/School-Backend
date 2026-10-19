@@ -3,7 +3,7 @@ import { cache } from "../cache/cache.js";
 import { db } from "../database/postgres.js";
 import { tenants } from "../database/platform.schema.js";
 import { todayIn } from "../utils/date.util.js";
-import { platformDb, refreshTenantRecord, tenantRecordByCode } from "./context.js";
+import { platformDb, refreshTenantRecord, tenantRecord, tenantRecordByCode } from "./context.js";
 import { platformTenants } from "./registry.schema.js";
 
 const TTL_SECONDS = 300;
@@ -16,12 +16,14 @@ export const getTenant = tenantId =>
     return tenant ?? null;
   });
 
-/* For sign-in (no school context yet): an active school by its code, from the platform
-   registry -> { id, code, name } or null */
-export const findTenantByCode = async code => {
-  const record = await tenantRecordByCode(code);
-  return record?.status === "ACTIVE" ? { id: record.id, code: record.code, name: record.name } : null;
-};
+/* For sign-in (no school context yet): an active school by its code or id, from the
+   platform registry -> { id, code, name } or null */
+const signInView = record =>
+  record?.status === "ACTIVE" ? { id: record.id, code: record.code, name: record.name } : null;
+
+export const findTenantByCode = async code => signInView(await tenantRecordByCode(code));
+
+export const findTenantById = async id => signInView(await tenantRecord(id));
 
 export const invalidateTenant = tenantId => cache.del(key(tenantId));
 

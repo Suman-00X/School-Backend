@@ -15,7 +15,7 @@ export const gradeScales = pgTable(
   },
   t => [
     uniqueIndex("grade_scales_tenant_name_uq")
-      .on(t.tenantId, t.name)
+      .on(t.tenantId, sql`lower(${t.name})`)
       .where(sql`${t.isActive} = true`),
     uniqueIndex("grade_scales_one_default_uq")
       .on(t.tenantId)
@@ -40,7 +40,7 @@ export const gradeBands = pgTable(
     sortOrder: integer("sort_order").notNull().default(0)
   },
   t => [
-    uniqueIndex("grade_bands_scale_grade_uq").on(t.gradeScaleId, t.grade),
+    uniqueIndex("grade_bands_scale_grade_uq").on(t.gradeScaleId, sql`lower(${t.grade})`),
     check(
       "grade_bands_range_chk",
       sql`${t.minPercent} >= 0 AND ${t.maxPercent} <= 100 AND ${t.maxPercent} > ${t.minPercent}`

@@ -30,3 +30,9 @@ export const sealMatches = (purpose, value, expected) => {
   const given = Buffer.from(String(expected ?? ""));
   return actual.length === given.length && timingSafeEqual(actual, given);
 };
+
+/* A keyed digest of a value that must be looked up but not stored readable (a sign-in
+   email in the platform database): HMAC-SHA256 with the key for the purpose. Without the
+   application's key, the digests cannot be matched against a list of known addresses. */
+export const keyedDigest = (purpose, value) =>
+  createHmac("sha256", deriveKey(purpose)).update(String(value)).digest("hex");

@@ -1,4 +1,4 @@
-import { and, count, eq, gt } from "drizzle-orm";
+import { and, count, eq, gt, gte, lte, ne, sql } from "drizzle-orm";
 import { cache } from "../../../../common/cache/cache.js";
 import { createCrudService } from "../../../../common/crud/crudService.js";
 import { transaction } from "../../../../common/database/postgres.js";
@@ -8,6 +8,7 @@ import { studentEnrollments as enrollments } from "../../enrollments/models/enro
 import { PREVIOUS_YEAR_GRACE_MONTHS } from "../../shared/constants/academic.constants.js";
 import { academicYears } from "../models/academicYear.schema.js";
 import { academicYearRepository } from "../repositories/academicYear.repository.js";
+import { yearDatesProblem, yearNameFor } from "../utils/yearName.util.js";
 
 const base = createCrudService(academicYearRepository, { entity: "Academic year" });
 
@@ -39,6 +40,41 @@ const lockYear = async (ctx, academicYearId, tx) => {
   return year;
 };
 
+/* A year's name comes from its dates, and no two years of a school share a day.
+   Serialised per school (advisory lock), so two requests cannot both pass the check.
+   -> the name to store */
+const settleDates = async (ctx, tx, { startDate, endDate, yearName }, exceptId) => {
+  const problem = yearDatesProblem(startDate, endDate);
+  if (problem) throw unprocessable(problem);
+  const derived = yearNameFor(startDate, endDate);
+  if (yearName !== undefined && yearName !== derived) {
+    throw unprocessable(
+      `yearName must be ${derived} for ${startDate} to ${endDate}: it is derived from the dates. Leave it out.`
+    );
+  }
+
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`academic-years:${ctx.tenantId}`}, 0))`);
+  const [other] = await tx
+    .select()
+    .from(academicYears)
+    .where(
+      and(
+        eq(academicYears.tenantId, ctx.tenantId),
+        eq(academicYears.isActive, true),
+        lte(academicYears.startDate, endDate),
+        gte(academicYears.endDate, startDate),
+        exceptId ? ne(academicYears.id, exceptId) : undefined
+      )
+    )
+    .limit(1);
+  if (other) {
+    throw conflict(
+      `${startDate} to ${endDate} overlaps academic year ${other.yearName} (${other.startDate} to ${other.endDate}). Academic years cannot overlap.`
+    );
+  }
+  return derived;
+};
+
 export const academicYearService = {
   list: base.list,
   getById: base.getById,
@@ -52,14 +88,36 @@ export const academicYearService = {
   /* Marking a year current un-marks the previous one in the same transaction */
   create: (ctx, data) =>
     changing(ctx, async tx => {
+      const yearName = await settleDates(ctx, tx, data);
       if (data.isCurrent) await academicYearRepository.clearCurrent(ctx.tenantId, null, { dbc: tx });
-      return academicYearRepository.create(ctx.tenantId, data, { dbc: tx });
+      return academicYearRepository.create(ctx.tenantId, { ...data, yearName }, { dbc: tx });
     }),
 
   update: (ctx, academicYearId, data) =>
     changing(ctx, async tx => {
       const existing = await academicYearRepository.findById(ctx.tenantId, academicYearId, { dbc: tx });
       if (!existing) throw notFound("Academic year");
+
+      /* New dates re-derive the name. Sending yearName alone renames a year named
+         before names were derived (it must be the name its dates give). */
+      const renaming = ["startDate", "endDate", "yearName"].some(field => data[field] !== undefined);
+      if (renaming && existing.archivedAt) {
+        throw conflict(`Academic year ${existing.yearName} is archived and read-only. Restore it first.`);
+      }
+      const named = renaming
+        ? {
+            yearName: await settleDates(
+              ctx,
+              tx,
+              {
+                startDate: data.startDate ?? existing.startDate,
+                endDate: data.endDate ?? existing.endDate,
+                yearName: data.yearName
+              },
+              academicYearId
+            )
+          }
+        : {};
 
       if (data.isCurrent) await academicYearRepository.clearCurrent(ctx.tenantId, academicYearId, { dbc: tx });
       /* Becoming current again ends any grace; stopping being current starts it */
@@ -69,7 +127,7 @@ export const academicYearService = {
           : data.isCurrent === false && existing.isCurrent
             ? { currentUntil: new Date() }
             : {};
-      return academicYearRepository.update(ctx.tenantId, academicYearId, { ...data, ...since }, { dbc: tx });
+      return academicYearRepository.update(ctx.tenantId, academicYearId, { ...data, ...named, ...since }, { dbc: tx });
     }),
 
   /* Freeze a finished year: its academic records become read-only.

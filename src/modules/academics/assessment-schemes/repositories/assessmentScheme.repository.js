@@ -1,3 +1,4 @@
+import { describeDuplicates } from "../../../../common/database/duplicates.js";
 import { and, asc, eq } from "drizzle-orm";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { db } from "../../../../common/database/postgres.js";
@@ -33,3 +34,8 @@ export const assessmentSchemeRepository = {
       .returning();
   }
 };
+
+describeDuplicates({
+  assessment_schemes_year_name_uq: ({ name }) =>
+    `An assessment scheme named ${name} already exists in this academic year`
+});

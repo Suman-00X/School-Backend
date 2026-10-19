@@ -3,15 +3,15 @@ import {
   email,
   idParams,
   listQuery,
+  name,
   optionalText,
   patchBody,
-  phone,
-  text
+  phone
 } from "../../../../common/validation/schemas.js";
 import { searchText } from "../../shared/utils/schemas.util.js";
 
 const fields = z.object({
-  name: text(150),
+  name: name(150),
   contactPerson: optionalText(100),
   phone: phone().optional(),
   email: email().optional(),

@@ -6,7 +6,8 @@
    The school gets its own PostgreSQL and MongoDB databases: school_<code> on the servers of
    DATABASE_URL / MONGO_URI, or --database-url / --mongo-url for databases of its own.
    Prints (and emails, with a configured email driver) a 7-day invitation link where the
-   admin sets their password, then signs in with the school code, email and password. */
+   admin sets their password, then signs in with their email and password (the school is
+   found through the login directory, which this script fills for the new school). */
 import { parseArgs } from "node:util";
 
 const { values: args } = parseArgs({
@@ -45,6 +46,7 @@ const { email } = await import("../src/common/messaging/email.js");
 const { authEmails } = await import("../src/modules/auth/shared/utils/authEmails.util.js");
 const { TOKEN_TTL_HOURS } = await import("../src/modules/auth/shared/constants/auth.constants.js");
 const { isTimeZone } = await import("../src/common/tenancy/tenant.service.js");
+const { accountDirectory } = await import("../src/modules/users/accounts/index.js");
 const schema = await import("../src/database.schema.js");
 
 if (!isTimeZone(args.timezone)) fail("--timezone must be an IANA time zone such as Asia/Kolkata");
@@ -88,6 +90,8 @@ try {
       return { admin, token };
     })
   );
+  /* The admin signs in by email: list the school's accounts in the login directory */
+  await accountDirectory.rebuild(record.id);
 
   const invitation = authEmails.invite({ user: admin, school: tenant, token, hours: TOKEN_TTL_HOURS.INVITE });
   await email.send(invitation);

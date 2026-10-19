@@ -1,3 +1,4 @@
+import { describeDuplicates } from "../../../../common/database/duplicates.js";
 import { asc, eq } from "drizzle-orm";
 import { db } from "../../../../common/database/postgres.js";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
@@ -15,3 +16,7 @@ export const categoryRepository = {
   countItems: (tenantId, categoryId, { dbc = db } = {}) =>
     dbc.$count(inventoryItems, scoped(inventoryItems, tenantId, eq(inventoryItems.categoryId, categoryId)))
 };
+
+describeDuplicates({
+  inventory_categories_tenant_name_uq: ({ name }) => `A category named ${name} already exists`
+});

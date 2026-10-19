@@ -1,5 +1,5 @@
 import { z } from "../../../../common/validation/zod.js";
-import { idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { idParams, listQuery, name, optionalText, patchBody } from "../../../../common/validation/schemas.js";
 import { GRADE_SCALE_TEMPLATE_KEYS } from "../../shared/constants/gradeScaleTemplates.constants.js";
 
 const percent = () => z.number().min(0).max(100);
@@ -19,10 +19,10 @@ const bands = z
   .array(band)
   .min(2)
   .max(20)
-  .refine(list => new Set(list.map(b => b.grade)).size === list.length, "must not repeat a grade");
+  .refine(list => new Set(list.map(b => b.grade.toLowerCase())).size === list.length, "must not repeat a grade");
 
 const fields = z.object({
-  name: text(100),
+  name: name(100),
   description: optionalText(),
   isDefault: z.boolean().optional(),
   bands
@@ -31,7 +31,7 @@ const fields = z.object({
 /* Explicit bands, or a copy of a template (name defaults to the template's) */
 const createBody = fields
   .extend({
-    name: text(100).optional(),
+    name: name(100).optional(),
     bands: bands.optional(),
     templateKey: z.enum(GRADE_SCALE_TEMPLATE_KEYS).optional()
   })

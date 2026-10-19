@@ -2,10 +2,10 @@ import { z } from "../../../../common/validation/zod.js";
 import {
   idParams,
   listQuery,
+  name,
   optionalText,
   patchBody,
-  positiveInt,
-  text
+  positiveInt
 } from "../../../../common/validation/schemas.js";
 import { LATE_FEE_CHARGE_TYPES } from "../../shared/constants/finance.constants.js";
 import { amount } from "../../shared/validators/finance.validators.js";
@@ -25,7 +25,7 @@ const slabs = z
   .max(20);
 
 const fields = z.object({
-  name: text(100),
+  name: name(100),
   description: optionalText(),
   graceDays: z.coerce.number().int().min(0).max(365).default(0),
   maxAmount: amount(1_000_000).optional(),
@@ -43,7 +43,7 @@ export const lateFeeRuleValidators = {
     params,
     body: patchBody(
       z.object({
-        name: text(100),
+        name: name(100),
         description: optionalText(),
         graceDays: z.coerce.number().int().min(0).max(365),
         maxAmount: amount(1_000_000).nullable(),

@@ -1,9 +1,10 @@
 import { z } from "../../../../common/validation/zod.js";
-import { id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { id, idParams, listQuery, name, optionalText, patchBody } from "../../../../common/validation/schemas.js";
 import { MAX_ROOM_CAPACITY, ROOM_STATUSES } from "../../shared/constants/hostel.constants.js";
 
 const fields = z.object({
-  roomNumber: text(20),
+  /* Stored upper-case, spaces collapsed: "g 12" -> "G 12" */
+  roomNumber: name(20).toUpperCase(),
   /* 0 = ground floor; negative for basements */
   floor: z.number().int().min(-5).max(200).optional(),
   capacity: z.number().int().min(1).max(MAX_ROOM_CAPACITY),

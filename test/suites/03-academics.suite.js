@@ -15,16 +15,19 @@ describe("academics: structure", () => {
         isCurrent: true
       })
     ).data;
-    world.y2 = (
-      await post(`${A}/academic-years`, { yearName: "2027-28", startDate: "2027-06-01", endDate: "2028-03-31" })
-    ).data;
+    world.y2 = (await post(`${A}/academic-years`, { startDate: "2027-06-01", endDate: "2028-03-31" })).data;
     assert.equal(world.y1.isCurrent, true);
+    /* The name comes from the dates */
+    assert.equal(world.y2.yearName, "2027-28");
 
     const duplicate = await request("POST", `${A}/academic-years`, {
       body: { yearName: "2026-27", startDate: "2026-06-01", endDate: "2027-03-31" }
     });
     assert.equal(duplicate.status, 409);
-    assert.match(duplicate.body.message, /yearName already exists/);
+    assert.equal(
+      duplicate.body.message,
+      "2026-06-01 to 2027-03-31 overlaps academic year 2026-27 (2026-06-01 to 2027-03-31). Academic years cannot overlap."
+    );
 
     const backwards = await request("POST", `${A}/academic-years`, {
       body: { yearName: "x", startDate: "2026-06-01", endDate: "2026-01-01" }

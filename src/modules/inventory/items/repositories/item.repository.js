@@ -1,3 +1,4 @@
+import { describeDuplicates } from "../../../../common/database/duplicates.js";
 import { asc, eq } from "drizzle-orm";
 import { db } from "../../../../common/database/postgres.js";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
@@ -31,3 +32,7 @@ export const itemRepository = {
     return Boolean(row);
   }
 };
+
+describeDuplicates({
+  inventory_items_tenant_sku_uq: ({ sku }) => `An item with SKU ${sku} already exists`
+});

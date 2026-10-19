@@ -7,14 +7,14 @@ import { forbidden, unprocessable } from "../../../../common/http/errors.js";
 import { email } from "../../../../common/messaging/email.js";
 import { runInTenant } from "../../../../common/tenancy/context.js";
 import { findTenantByCode, getTenant } from "../../../../common/tenancy/tenant.service.js";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 import { accountService } from "../../../users/accounts/index.js";
 import { sessionService } from "../../sessions/index.js";
 import { TOKEN_TTL_HOURS } from "../../shared/constants/auth.constants.js";
 import { authEmails } from "../../shared/utils/authEmails.util.js";
 import { signInThrottle } from "../../shared/utils/signInThrottle.util.js";
 import { authTokenRepository } from "../repositories/authToken.repository.js";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const LINK_INVALID = "This link is invalid or has expired. Ask for a new one.";
 
@@ -37,6 +37,15 @@ const issueToken = (ctx, userId, purpose, createdBy) =>
     );
     return token;
   });
+
+/* Email a reset link to the account with this address in the current school, if it is active */
+const sendResetIn = async (school, address) => {
+  const ctx = { tenantId: school.id, role: "SYSTEM" };
+  const user = await accountService.credentials.find(ctx, address);
+  if (!user || user.status !== "ACTIVE") return;
+  const token = await issueToken(ctx, user.id, "RESET", null);
+  await email.send(authEmails.reset({ user, school, token, hours: TOKEN_TTL_HOURS.RESET }));
+};
 
 /* Spend a link, inside its school's databases */
 const spendLink = async ({ token, password }) => {
@@ -93,18 +102,17 @@ export const credentialService = {
   },
 
   /* Job body for a reset request. The HTTP request only queues it, so the answer and its
-     timing are the same whether or not the account exists. */
-  sendResetLink: async ({ schoolCode, email: address }) => {
+     timing are the same whether or not the account exists.
+     { schoolCode, email }: that school; { tenantId, email }: the current school (a request
+     without a school code is split into one job per school, see credential.job.js) */
+  sendResetLink: async ({ schoolCode, tenantId, email: address }) => {
+    if (tenantId) return sendResetIn(await getTenant(tenantId), address);
     const school = await findTenantByCode(schoolCode);
-    if (!school) return;
-    await runInTenant(school.id, async () => {
-      const ctx = { tenantId: school.id, role: "SYSTEM" };
-      const user = await accountService.credentials.find(ctx, address);
-      if (!user || user.status !== "ACTIVE") return;
-      const token = await issueToken(ctx, user.id, "RESET", null);
-      await email.send(authEmails.reset({ user, school, token, hours: TOKEN_TTL_HOURS.RESET }));
-    });
+    if (school) await runInTenant(school.id, async () => sendResetIn(await getTenant(school.id), address));
   },
+
+  /* The schools a reset request without a school code goes to */
+  resetSchools: address => accountService.credentials.schoolsFor(address),
 
   /* Spend an invitation or reset link: set the password and end every session */
   resetPassword: async ({ token, password }) => {

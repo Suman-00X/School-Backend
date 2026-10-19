@@ -1,13 +1,9 @@
 import { z } from "../../../../common/validation/zod.js";
-import { idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { code, idParams, listQuery, name, optionalText, patchBody } from "../../../../common/validation/schemas.js";
 
 const fields = z.object({
-  name: text(100),
-  code: z
-    .string()
-    .trim()
-    .toUpperCase()
-    .regex(/^[A-Z0-9_-]{2,20}$/, "must be 2-20 letters, digits, - or _"),
+  name: name(100),
+  code: code(),
   description: optionalText()
 });
 

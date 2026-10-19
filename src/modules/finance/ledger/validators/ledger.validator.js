@@ -1,5 +1,14 @@
 import { z } from "../../../../common/validation/zod.js";
-import { date, id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import {
+  date,
+  id,
+  idParams,
+  listQuery,
+  name,
+  optionalText,
+  patchBody,
+  text
+} from "../../../../common/validation/schemas.js";
 import { toMinor } from "../../../../common/money/money.js";
 import { LEDGER_ACCOUNT_TYPES } from "../../shared/constants/finance.constants.js";
 
@@ -11,7 +20,7 @@ const accountFields = z.object({
     .trim()
     .toUpperCase()
     .regex(/^[0-9A-Z][0-9A-Z.-]{1,19}$/, "must be 2-20 letters, digits, . or -"),
-  name: text(120),
+  name: name(120),
   accountType: z.enum(LEDGER_ACCOUNT_TYPES),
   isContra: z.boolean().optional(),
   description: optionalText(500)

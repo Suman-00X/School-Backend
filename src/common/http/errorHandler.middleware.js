@@ -1,19 +1,60 @@
 import { logger } from "../logging/logger.js";
 import { reportError } from "../observability/errorReporter.js";
+import { duplicateMessage } from "../database/duplicates.js";
 import { AppError, ERROR_CODES } from "./errors.js";
 
 /* PostgreSQL column -> API field name (class_order -> classOrder) */
 const toField = column => column.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 
-/* Fields named in a PostgreSQL error detail, e.g. "Key (tenant_id, email)=(...)" */
-const keyFields = detail => {
-  const match = /Key \(([^)]+)\)=/.exec(detail ?? "");
-  if (!match) return [];
-  return match[1]
-    .split(",")
-    .map(column => column.trim())
-    .filter(column => column !== "tenant_id")
-    .map(toField);
+/* An index column or expression -> its column: "lower(class_name)" -> "class_name" */
+const columnOf = key => key.replace(/^.*\(/, "").replace(/\).*$/, "").trim();
+
+/* The key in a PostgreSQL error detail, by API field, tenant_id left out:
+   "Key (tenant_id, lower(name))=(9f…, tuition) already exists." -> { name: "tuition" }.
+   Values are undefined when they cannot be told apart (a value containing ", "
+   is only recovered when it belongs to the last column). */
+const keyOf = detail => {
+  const match = /^Key \((.+?)\)=\((.*)\)[^)]*$/s.exec(detail ?? "");
+  if (!match) return null;
+  const columns = match[1].split(", ").map(columnOf);
+  const parts = match[2].split(", ");
+  const values =
+    parts.length >= columns.length
+      ? [...parts.slice(0, columns.length - 1), parts.slice(columns.length - 1).join(", ")]
+      : [];
+  return Object.fromEntries(
+    columns
+      .map((column, index) => [column, values[index]])
+      .filter(([column]) => column !== "tenant_id")
+      .map(([column, value]) => [toField(column), value])
+  );
+};
+
+const comparable = value => String(value).trim().replace(/\s+/g, " ").toLowerCase();
+
+/* The value as the client sent it: a string under the same field anywhere in the body
+   (bulk items and nested lists included) that matches ignoring case and spacing */
+const asSent = (input, field, value, depth = 0) => {
+  if (!input || typeof input !== "object" || depth > 3) return undefined;
+  if (!Array.isArray(input) && typeof input[field] === "string" && comparable(input[field]) === comparable(value)) {
+    return input[field].trim().replace(/\s+/g, " ");
+  }
+  for (const nested of Object.values(input)) {
+    const found = asSent(nested, field, value, depth + 1);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+};
+
+const duplicate = (pg, input) => {
+  const key = keyOf(pg.detail);
+  const fields = Object.keys(key ?? {});
+  if (key && pg.constraint && fields.every(field => key[field] !== undefined)) {
+    const values = Object.fromEntries(fields.map(field => [field, asSent(input, field, key[field]) ?? key[field]]));
+    const message = duplicateMessage(pg.constraint, values);
+    if (message) return message;
+  }
+  return fields.length ? `A record with this ${fields.join(" and ")} already exists` : "This record already exists";
 };
 
 /* Rules enforced inside the database (triggers) raise SQLSTATE "ZA" + HTTP status,
@@ -23,7 +64,7 @@ const RULE_CODES = { 403: ERROR_CODES.FORBIDDEN, 409: ERROR_CODES.CONFLICT, 422:
 
 /* Translate a PostgreSQL error (drizzle wraps it in `cause`) into an AppError.
    Raw driver messages are never sent: they can contain SQL. */
-const fromPostgres = error => {
+const fromPostgres = (error, input) => {
   const pg = error?.cause?.code ? error.cause : error;
   const code = pg?.code;
   if (typeof code !== "string" || !/^[0-9A-Z]{5}$/.test(code)) return null;
@@ -34,14 +75,10 @@ const fromPostgres = error => {
     return new AppError(status, RULE_CODES[status] ?? ERROR_CODES.BAD_REQUEST, pg.message);
   }
 
-  const fields = keyFields(pg.detail);
+  const fields = Object.keys(keyOf(pg.detail) ?? {});
   switch (code) {
     case "23505":
-      return new AppError(
-        409,
-        ERROR_CODES.CONFLICT,
-        fields.length ? `A record with this ${fields.join(" and ")} already exists` : "This record already exists"
-      );
+      return new AppError(409, ERROR_CODES.CONFLICT, duplicate(pg, input));
     case "23503":
       return new AppError(
         422,
@@ -74,11 +111,12 @@ const fromPostgres = error => {
 };
 
 /* Any error -> AppError (safe to show), or null when it is unexpected.
-   Also used outside HTTP, e.g. to report per-row errors from background jobs. */
-export const toAppError = error => {
+   Also used outside HTTP, e.g. to report per-row errors from background jobs.
+   `input` (the request body) lets duplicate messages quote values as they were sent. */
+export const toAppError = (error, { input } = {}) => {
   if (error instanceof AppError) return error;
 
-  const fromDb = fromPostgres(error);
+  const fromDb = fromPostgres(error, input);
   if (fromDb) return fromDb;
 
   /* Errors raised by express/body-parser (e.g. malformed JSON) */
@@ -104,7 +142,7 @@ export const safeErrorMessage = (error, fallback = "Unexpected error") => toAppE
 export const errorHandler = (err, req, res, next) => {
   if (res.headersSent) return next(err);
 
-  const appError = toAppError(err);
+  const appError = toAppError(err, { input: req.body });
 
   const requestId = req.id;
 

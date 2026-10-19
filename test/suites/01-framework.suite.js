@@ -75,9 +75,10 @@ describe("framework", () => {
     /* Created in the other school; invisible to this one */
     const year = await post(
       "/api/v1/academics/academic-years",
-      { yearName: "isolation-check", startDate: "2020-06-01", endDate: "2021-03-31" },
+      { startDate: "2020-06-01", endDate: "2021-03-31" },
       { as: h.tokens.otherAdmin }
     );
+    assert.equal(year.data.yearName, "2020-21");
     await get(`/api/v1/academics/academic-years/${year.data.id}`, {}, 404);
   });
 

@@ -1,5 +1,5 @@
 import { z } from "../../../../common/validation/zod.js";
-import { id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { id, idParams, listQuery, name, optionalText, patchBody } from "../../../../common/validation/schemas.js";
 import { CONCESSION_CATEGORIES, CONCESSION_TYPES } from "../../shared/constants/finance.constants.js";
 import { amount } from "../../shared/validators/finance.validators.js";
 
@@ -11,7 +11,7 @@ const feeHeadIds = z
 
 const fields = z
   .object({
-    name: text(100),
+    name: name(100),
     category: z.enum(CONCESSION_CATEGORIES).default("OTHER"),
     concessionType: z.enum(CONCESSION_TYPES),
     /* PERCENT: 0-100. FIXED: an amount per academic year */
@@ -34,7 +34,7 @@ export const concessionValidators = {
     params,
     body: patchBody(
       z.object({
-        name: text(100),
+        name: name(100),
         category: z.enum(CONCESSION_CATEGORIES),
         description: optionalText(),
         concessionType: z.enum(CONCESSION_TYPES),

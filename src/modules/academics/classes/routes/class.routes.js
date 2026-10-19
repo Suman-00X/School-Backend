@@ -11,6 +11,8 @@ const router = createRouter();
 router.post("/", authorize(can.create), validate(rules.create), controller.create);
 router.post("/bulk", authorize(can.create), validate(rules.createMany), controller.createMany);
 router.get("/", authorize(can.read), validate(rules.list), controller.list);
+/* The fixed levels and which of them the school has created */
+router.get("/levels", authorize(can.read), controller.levels);
 router.get("/:classId", authorize(can.read), validate(rules.getById), controller.getById);
 router.patch("/:classId", authorize(can.update), validate(rules.update), controller.update);
 

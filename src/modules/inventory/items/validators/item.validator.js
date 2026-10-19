@@ -1,5 +1,5 @@
 import { z } from "../../../../common/validation/zod.js";
-import { id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { id, idParams, listQuery, name, optionalText, patchBody } from "../../../../common/validation/schemas.js";
 import { UNITS } from "../../shared/constants/inventory.constants.js";
 import { booleanQuery, quantityValue, readOnly, searchText } from "../../shared/utils/schemas.util.js";
 
@@ -12,7 +12,7 @@ const fields = z.object({
     .trim()
     .toUpperCase()
     .regex(/^[A-Z0-9][A-Z0-9._/-]{0,39}$/, "must be 1-40 letters, digits, ., _, / or -"),
-  name: text(150),
+  name: name(150),
   categoryId: id(),
   unit: z.enum(UNITS),
   reorderLevel: quantityValue().min(0).default(0),

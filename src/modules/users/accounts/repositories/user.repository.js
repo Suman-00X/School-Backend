@@ -43,6 +43,10 @@ export const userRepository = {
       .set({ passwordHash, passwordChangedAt: new Date() })
       .where(scoped(users, tenantId, eq(users.id, userId))),
 
+  /* Every account that can still sign in, whatever its status (the login directory) */
+  listSignInEmails: tenantId =>
+    db.select({ userId: users.id, email: users.email }).from(users).where(scoped(users, tenantId)),
+
   /* Accounts by id, deactivated ones included (never the password hash) */
   findAnyByIds: (tenantId, userIds, { dbc = db } = {}) =>
     dbc.query.users.findMany({

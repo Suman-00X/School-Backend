@@ -1,3 +1,4 @@
+import { describeDuplicates } from "../../../../common/database/duplicates.js";
 import { and, asc, eq } from "drizzle-orm";
 import { createRepository } from "../../../../common/database/repository.js";
 import { transportVehicles as vehicles } from "../models/vehicle.schema.js";
@@ -15,3 +16,8 @@ export const vehicleRepository = {
     return row ?? null;
   }
 };
+
+describeDuplicates({
+  transport_vehicles_tenant_registration_uq: ({ registrationNumber }) =>
+    `A vehicle with registration number ${registrationNumber} already exists`
+});

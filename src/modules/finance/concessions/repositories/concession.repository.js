@@ -1,3 +1,4 @@
+import { describeDuplicates } from "../../../../common/database/duplicates.js";
 import { and, asc, eq } from "drizzle-orm";
 import { createRepository } from "../../../../common/database/repository.js";
 import { db } from "../../../../common/database/postgres.js";
@@ -21,4 +22,8 @@ export const studentConcessionRepository = createRepository({
   table: studentConcessions,
   queryKey: "studentConcessions",
   orderBy: asc(studentConcessions.createdAt)
+});
+
+describeDuplicates({
+  concessions_tenant_name_uq: ({ name }) => `A concession named ${name} already exists`
 });

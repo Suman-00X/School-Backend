@@ -36,6 +36,15 @@ export const eachDay = (from, to) => {
   return days;
 };
 
+/* The same day `months` later, clamped to the month's end: addMonths("2026-01-31", 1) -> "2026-02-28" */
+export const addMonths = (dateString, months) => {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const target = new Date(Date.UTC(year, month - 1 + months, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(day, lastDay));
+  return format(target);
+};
+
 export const daysBetween = (from, to) => Math.round((parse(to) - parse(from)) / 86_400_000);
 
 export const maxDate = (a, b) => (a > b ? a : b);

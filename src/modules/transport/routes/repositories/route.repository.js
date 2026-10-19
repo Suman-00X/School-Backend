@@ -1,3 +1,4 @@
+import { describeDuplicates } from "../../../../common/database/duplicates.js";
 import { asc, eq } from "drizzle-orm";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { transportRoutes as routes } from "../models/route.schema.js";
@@ -25,3 +26,9 @@ export const routeRepository = {
     return row ?? null;
   }
 };
+
+describeDuplicates({
+  transport_routes_tenant_name_uq: ({ name }) => `A route named ${name} already exists`,
+  transport_routes_tenant_code_uq: ({ code }) => `A route with code ${code} already exists`,
+  transport_route_stops_route_name_uq: ({ name }) => `The route already has a stop named ${name}`
+});

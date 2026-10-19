@@ -7,6 +7,7 @@ import { accountService } from "../../../users/accounts/index.js";
 import { parentService } from "../../../users/parents/index.js";
 import { studentService } from "../../../users/students/index.js";
 import { academicYearService } from "../../../academics/academic-years/index.js";
+import { levelFromName } from "../../../academics/classes/index.js";
 import { sectionService } from "../../../academics/sections/index.js";
 import {
   STUDENT_FIELDS,
@@ -22,6 +23,12 @@ export const IMPORT_COMPLETED = "administration.import.completed";
 
 const MAX_ROWS = 5000;
 const PROGRESS_EVERY = 25;
+
+/* A section by class and name. Classes match by level, so "Grade 1", "class-1" and
+   "Class 1" in a file all find Class 1; a class without a level matches by name. */
+const classKey = className => levelFromName(className) ?? className.trim().replace(/\s+/g, " ").toLowerCase();
+const sectionKey = section => `${section.class.level ?? classKey(section.class.className)}|${section.sectionName}`;
+const rowKey = ({ className, sectionName }) => `${classKey(className)}|${sectionName}`;
 
 const describeIssues = error => error.issues.map(i => `${i.path.join(".") || "row"} ${i.message}`).join("; ");
 
@@ -72,7 +79,7 @@ const checkMapping = (headers, mapping) => {
    first rows would import (validation only; nothing is written) */
 const mappingView = async (ctx, job) => {
   const sections = await sectionService.findAllInYear(ctx, job.options.academicYearId);
-  const sectionNames = new Set(sections.map(s => `${s.class.className.toLowerCase()}|${s.sectionName}`));
+  const sectionNames = new Set(sections.map(sectionKey));
   const mappedHeaders = new Set(Object.values(job.mapping));
   return {
     fields: STUDENT_FIELDS.map(({ field, label, required }) => ({
@@ -97,7 +104,7 @@ const mappingView = async (ctx, job) => {
       );
       if (!parsed.success) return { row: index + 2, ok: false, message: describeIssues(parsed.error) };
       const { className, sectionName } = parsed.data;
-      return sectionNames.has(`${className.toLowerCase()}|${sectionName}`)
+      return sectionNames.has(rowKey(parsed.data))
         ? { row: index + 2, ok: true }
         : { row: index + 2, ok: false, message: `No section ${className}-${sectionName} in the academic year` };
     })
@@ -197,7 +204,7 @@ export const studentImportService = {
       const { headers, rows } = parseCsvTable(Buffer.concat(chunks), { maxRows: MAX_ROWS });
 
       const sections = await sectionService.findAllInYear(ctx, job.options.academicYearId);
-      const sectionByName = new Map(sections.map(s => [`${s.class.className.toLowerCase()}|${s.sectionName}`, s]));
+      const sectionByName = new Map(sections.map(s => [sectionKey(s), s]));
 
       const progress = { processedRows: 0, succeeded: 0, failed: 0 };
       const rowErrors = [];
@@ -209,7 +216,7 @@ export const studentImportService = {
           if (!parsed.success) throw unprocessable(describeIssues(parsed.error));
           const row = parsed.data;
 
-          const section = sectionByName.get(`${row.className.toLowerCase()}|${row.sectionName}`);
+          const section = sectionByName.get(rowKey(row));
           if (!section) throw unprocessable(`No section ${row.className}-${row.sectionName} in the academic year`);
 
           await studentService.admit(ctx, {

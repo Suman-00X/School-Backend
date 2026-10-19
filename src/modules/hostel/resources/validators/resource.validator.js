@@ -1,5 +1,5 @@
 import { z } from "../../../../common/validation/zod.js";
-import { id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { id, idParams, listQuery, name, optionalText, patchBody } from "../../../../common/validation/schemas.js";
 import {
   DEFAULT_RESOURCE_CAPACITY,
   MAX_RESOURCE_CAPACITY,
@@ -8,13 +8,13 @@ import {
 } from "../../shared/constants/hostel.constants.js";
 
 const fields = z.object({
-  name: text(100),
+  name: name(100),
   /* How many students may hold it on one day. Defaults to 1 for lockers, cupboards and study tables. */
   capacity: z.number().int().min(1).max(MAX_RESOURCE_CAPACITY),
   monthlyFee: z.number().min(0).max(10_000_000).multipleOf(0.01).optional(),
   status: z.enum(RESOURCE_STATUSES).optional(),
   /* What a CUSTOM resource is ("Bicycle stand") */
-  customType: text(50),
+  customType: name(50),
   description: optionalText()
 });
 

@@ -1,5 +1,5 @@
 import { z } from "../../../../common/validation/zod.js";
-import { id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { id, idParams, listQuery, name, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
 import { ITEM_TYPES } from "../../shared/constants/library.constants.js";
 import { booleanQuery, isbn } from "../../shared/utils/schemas.util.js";
 
@@ -18,7 +18,7 @@ const fields = z.object({
     .optional(),
   edition: optionalText(50),
   language: optionalText(50),
-  category: optionalText(100),
+  category: name(100).optional(),
   itemType: z.enum(ITEM_TYPES).optional(),
   subjectId: id().nullable().optional(),
   shelfLocation: optionalText(50),

@@ -5,8 +5,10 @@ import { hashPassword, needsRehash, verifyPassword } from "../../../../common/cr
 import { digest, randomToken } from "../../../../common/crypto/tokens.js";
 import { transaction } from "../../../../common/database/postgres.js";
 import { forbidden, notFound, unauthorized } from "../../../../common/http/errors.js";
+import { logger } from "../../../../common/logging/logger.js";
 import { runInTenant } from "../../../../common/tenancy/context.js";
-import { findTenantByCode } from "../../../../common/tenancy/tenant.service.js";
+import { findTenantByCode, findTenantById } from "../../../../common/tenancy/tenant.service.js";
+import { settingsService } from "../../../administration/settings/index.js";
 import { accountService } from "../../../users/accounts/index.js";
 import { BAD_CREDENTIALS } from "../../shared/constants/auth.constants.js";
 import { auditAuth } from "../../shared/utils/authAudit.util.js";
@@ -37,47 +39,123 @@ const tokens = (user, session, secret) => ({
    Within this window that is refused without ending the session. */
 const ROTATION_GRACE_MS = 30_000;
 
-/* The sign-in itself, inside the school's databases */
-const signIn = async (tenant, { email, password }, client, attempt) => {
-  const ctx = { tenantId: tenant.id, role: "SYSTEM" };
-  const user = await accountService.credentials.find(ctx, email);
+const DISABLED = "This account is disabled. Please contact the school office.";
 
-  /* Always one hash check, so timing does not reveal unknown accounts */
-  const valid = await verifyPassword(password, user?.passwordHash);
-  if (!user || !valid) {
-    if (user) {
-      auditAuth({
-        tenantId: tenant.id,
-        userId: user.id,
-        role: user.role,
-        event: "login.failed",
-        statusCode: 401,
-        ...client
-      });
+/* One school's answer to an email and password, inside the school's databases.
+   The attempt is claimed first (lockout), and there is always one hash check, so timing
+   does not reveal unknown accounts -> { outcome: MATCH | WRONG | DISABLED | LOCKED, user? } */
+const checkPassword = async (tenant, { email, password }, client) => {
+  const attempt = { tenantKey: tenant.id, email, ip: client.ipAddress ?? "unknown" };
+  try {
+    await signInThrottle.claim(attempt);
+  } catch (error) {
+    if (error.status === 429) return { outcome: "LOCKED", error };
+    throw error;
+  }
+  return runInTenant(tenant.id, async () => {
+    const ctx = { tenantId: tenant.id, role: "SYSTEM" };
+    const user = await accountService.credentials.find(ctx, email);
+    const valid = await verifyPassword(password, user?.passwordHash);
+    if (!user || !valid) {
+      if (user) {
+        auditAuth({
+          tenantId: tenant.id,
+          userId: user.id,
+          role: user.role,
+          event: "login.failed",
+          statusCode: 401,
+          ...client
+        });
+      }
+      return { outcome: "WRONG" };
     }
+    if (user.status !== "ACTIVE") return { outcome: "DISABLED" };
+    await signInThrottle.clear(attempt);
+    return { outcome: "MATCH", tenant, user };
+  });
+};
+
+/* A new session for a checked account, inside its school's databases */
+const startSession = (tenant, user, password, client) =>
+  runInTenant(tenant.id, async () => {
+    const ctx = { tenantId: tenant.id, role: "SYSTEM" };
+    const rehash = needsRehash(user.passwordHash) ? { passwordHash: await hashPassword(password) } : {};
+    await accountService.credentials.recordLogin(ctx, user.id, rehash);
+
+    const secret = randomToken();
+    const session = await authSessionRepository.create(tenant.id, {
+      userId: user.id,
+      refreshHash: digest(secret),
+      expiresAt: new Date(Date.now() + env.auth.refreshTokenTtlDays * 86_400_000),
+      userAgent: client.userAgent,
+      ipAddress: client.ipAddress
+    });
+    auditAuth({ tenantId: tenant.id, userId: user.id, role: user.role, event: "login", statusCode: 201, ...client });
+
+    return {
+      ...tokens(user, session, secret),
+      user: summary(user),
+      school: { id: tenant.id, name: tenant.name, code: tenant.code }
+    };
+  });
+
+/* Signed in to a named school (code or id): the same answer as before schools were found
+   by email. Unknown school: the same claim, hash check and answer as a wrong password. */
+const signInToSchool = async (tenant, unknownKey, credentials, client) => {
+  if (!tenant) {
+    await signInThrottle.claim({ tenantKey: unknownKey, email: credentials.email, ip: client.ipAddress ?? "unknown" });
+    await verifyPassword(credentials.password, null);
     throw unauthorized(BAD_CREDENTIALS);
   }
-  if (user.status !== "ACTIVE") throw forbidden("This account is disabled. Please contact the school office.");
-  await signInThrottle.clear(attempt);
+  const result = await checkPassword(tenant, credentials, client);
+  if (result.outcome === "LOCKED") throw result.error;
+  if (result.outcome === "WRONG") throw unauthorized(BAD_CREDENTIALS);
+  if (result.outcome === "DISABLED") throw forbidden(DISABLED);
+  const session = await startSession(tenant, result.user, credentials.password, client);
+  /* Self-healing: an account the login directory missed is listed from now on */
+  await accountService.credentials.signedIn({ tenantId: tenant.id, role: "SYSTEM" }, result.user);
+  return session;
+};
 
-  const rehash = needsRehash(user.passwordHash) ? { passwordHash: await hashPassword(password) } : {};
-  await accountService.credentials.recordLogin(ctx, user.id, rehash);
-
-  const secret = randomToken();
-  const session = await authSessionRepository.create(tenant.id, {
-    userId: user.id,
-    refreshHash: digest(secret),
-    expiresAt: new Date(Date.now() + env.auth.refreshTokenTtlDays * 86_400_000),
-    userAgent: client.userAgent,
-    ipAddress: client.ipAddress
+/* One school's check when the email may be in several: a school that cannot answer
+   (suspended since the look-up, database down) never blocks the others */
+const checkSafely = (tenant, credentials, client) =>
+  checkPassword(tenant, credentials, client).catch(error => {
+    if (error.status === 403 || error.status === 404) return { outcome: "WRONG" };
+    logger.error({ err: error, tenantId: tenant.id }, "Sign-in check failed in one school");
+    return { outcome: "ERROR", error };
   });
-  auditAuth({ tenantId: tenant.id, userId: user.id, role: user.role, event: "login", statusCode: 201, ...client });
 
-  return {
-    ...tokens(user, session, secret),
-    user: summary(user),
-    school: { id: tenant.id, name: tenant.name, code: tenant.code }
-  };
+/* What the person picks from when the password is right in several schools */
+const schoolChoice = ({ tenant, user }) =>
+  runInTenant(tenant.id, async () => ({
+    id: tenant.id,
+    name: tenant.name,
+    code: tenant.code,
+    role: user.role,
+    logoUrl: await settingsService.logoUrl({ tenantId: tenant.id, role: "SYSTEM" }).catch(() => null)
+  }));
+
+/* Signed in by email alone: the password is checked in every school that has the email
+   (at most 20, side by side), and only schools where it is right are ever named.
+   - right in one school: signed in there
+   - right in several: { chooseSchool, schools }; the client signs in again with schoolId
+   - right nowhere: 403 when it was right for disabled accounts only; 429 when a school
+     could not be checked because of a lockout (500 when it could not answer); else 401.
+   Disabled or locked accounts in one school never block the others. */
+const signInByEmail = async (credentials, client) => {
+  const schools = await accountService.credentials.schoolsFor(credentials.email);
+  if (!schools.length) return signInToSchool(null, "directory", credentials, client);
+
+  const results = await Promise.all(schools.map(tenant => checkSafely(tenant, credentials, client)));
+  const matches = results.filter(r => r.outcome === "MATCH");
+  if (matches.length === 1) return startSession(matches[0].tenant, matches[0].user, credentials.password, client);
+  if (matches.length > 1) return { chooseSchool: true, schools: await Promise.all(matches.map(schoolChoice)) };
+
+  if (results.some(r => r.outcome === "DISABLED")) throw forbidden(DISABLED);
+  const unchecked = results.find(r => r.outcome === "LOCKED") ?? results.find(r => r.outcome === "ERROR");
+  if (unchecked) throw unchecked.error;
+  throw unauthorized(BAD_CREDENTIALS);
 };
 
 /* Rotate a refresh token, inside the school's databases */
@@ -136,23 +214,17 @@ const rotate = async (sessionId, secret, client) => {
 };
 
 export const sessionService = {
-  /* Sign in with the school code, email and password -> tokens */
-  login: async ({ schoolCode, email, password }, client) => {
-    const tenant = await findTenantByCode(schoolCode);
-    /* Counted before the password check, also for unknown schools and emails */
-    const attempt = {
-      tenantKey: tenant?.id ?? `code:${String(schoolCode).trim().toUpperCase()}`,
-      email,
-      ip: client.ipAddress ?? "unknown"
-    };
-    await signInThrottle.claim(attempt);
-
-    /* Unknown school: the same hash check and the same answer as a wrong password */
-    if (!tenant) {
-      await verifyPassword(password, null);
-      throw unauthorized(BAD_CREDENTIALS);
+  /* Sign in with email and password -> tokens, or the schools to choose from when the
+     password is right in more than one. schoolId (after choosing) or schoolCode (older
+     clients) names the school and skips the search. */
+  login: async ({ email, password, schoolId, schoolCode }, client) => {
+    const credentials = { email, password };
+    if (schoolId) return signInToSchool(await findTenantById(schoolId), `id:${schoolId}`, credentials, client);
+    if (schoolCode) {
+      const unknownKey = `code:${String(schoolCode).trim().toUpperCase()}`;
+      return signInToSchool(await findTenantByCode(schoolCode), unknownKey, credentials, client);
     }
-    return runInTenant(tenant.id, () => signIn(tenant, { email, password }, client, attempt));
+    return signInByEmail(credentials, client);
   },
 
   /* Exchange a refresh token for new tokens. The refresh token rotates: the old one

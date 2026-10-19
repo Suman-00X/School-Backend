@@ -232,6 +232,13 @@
       "when": 1792260134912,
       "tag": "0032_attendance_school_mode_free_periods",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792428603995,
+      "tag": "0033_canonical_names",
+      "breakpoints": true
     }
   ]
 }

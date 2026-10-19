@@ -1,6 +1,6 @@
 import { listModules } from "../../../../common/auth/catalogue.js";
 import { z } from "../../../../common/validation/zod.js";
-import { date, id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { date, id, idParams, listQuery, name, optionalText, patchBody } from "../../../../common/validation/schemas.js";
 import {
   ACCESS_MODULE_KEYS,
   ASSIGNMENT_KINDS,
@@ -27,7 +27,7 @@ const permissionKey = () =>
 
 const roleFields = z.object({
   module: accessModule(),
-  name: text(100),
+  name: name(100),
   description: optionalText(500),
   permissions: z.array(permissionKey()).min(1).max(MAX_ROLE_PERMISSIONS)
 });

@@ -24,7 +24,9 @@ export const leaveTypes = pgTable(
   },
   t => [
     uniqueIndex("leave_types_tenant_code_uq").on(t.tenantId, t.code).where(activeRows(t)),
-    uniqueIndex("leave_types_tenant_name_uq").on(t.tenantId, t.name).where(activeRows(t)),
+    uniqueIndex("leave_types_tenant_name_uq")
+      .on(t.tenantId, sql`lower(${t.name})`)
+      .where(activeRows(t)),
     check("leave_types_quota_chk", sql`${t.annualQuotaDays} >= 0 AND ${t.annualQuotaDays} <= 366`)
   ]
 );

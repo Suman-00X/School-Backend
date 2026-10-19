@@ -1,4 +1,5 @@
 import { eq, ne } from "drizzle-orm";
+import { sameText } from "../../../../common/database/duplicates.js";
 import { transaction } from "../../../../common/database/postgres.js";
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { allocationService } from "../../allocations/index.js";
@@ -27,7 +28,7 @@ const withOccupancy = async (ctx, rooms) => {
 const assertNumberFree = async (ctx, hostelId, roomNumber, exceptId) => {
   const taken = await hostelRoomRepository.exists(ctx.tenantId, [
     eq(hostelRooms.hostelId, hostelId),
-    eq(hostelRooms.roomNumber, roomNumber),
+    sameText(hostelRooms.roomNumber, roomNumber),
     ...(exceptId ? [ne(hostelRooms.id, exceptId)] : [])
   ]);
   if (taken) throw conflict(`Room ${roomNumber} already exists in this hostel`);

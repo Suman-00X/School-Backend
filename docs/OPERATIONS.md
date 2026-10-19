@@ -35,7 +35,7 @@ Configuration is environment variables only; see `.env.example`. Production must
 
 Every school's data is in **its own PostgreSQL database and its own MongoDB database**. No table or collection holds two schools' rows, so a missed filter cannot show one school another's data. A school can be backed up, restored, moved or deleted on its own.
 
-**One connection string per server.** `DATABASE_URL` and `MONGO_URI` point at the **platform registry**: a small database whose only table, `platform_tenants`, lists the schools. Each school's database is the same string with the database name swapped for `school_<code>`. For example, `GVS` becomes `school_gvs`.
+**One connection string per server.** `DATABASE_URL` and `MONGO_URI` point at the **platform registry**: a small database with two tables. `platform_tenants` lists the schools; `platform_account_directory` is the login directory (see below). Each school's database is the same string with the database name swapped for `school_<code>`. For example, `GVS` becomes `school_gvs`.
 
 | | PostgreSQL on Neon | MongoDB Atlas |
 |---|---|---|
@@ -51,7 +51,12 @@ Every school's data is in **its own PostgreSQL database and its own MongoDB data
 3. The request then runs inside that school. Repositories, transactions and MongoDB models all use the school's own databases without any code change (`db`, `tenantModel`).
 4. A suspended school gets `403 This school's account is suspended`. Its users cannot sign in.
 
-Sign-in uses the school code. Refresh tokens and password links carry the school id, so they work without a school code.
+**Sign-in by email (the login directory).** People sign in with email and password; no school code. `platform_account_directory` has one row per account: `HMAC-SHA256(key, lower-cased trimmed email)`, the school id and the user id. The plain email is never stored on the platform. The key is derived (HKDF) from `DATA_ENCRYPTION_KEY`, so there is nothing extra to configure. Without the key, the digests cannot be matched against a list of addresses.
+- **Kept in step** by the users module: an account's creation (every path: staff, teachers, parents, admissions, CSV imports) writes its row inside the creating transaction; an email change moves it; a deactivation removes it. Accounts with another status (e.g. `BLOCKED`) stay listed, so sign-in can answer "This account is disabled".
+- **A copy, always rebuildable.** The schools' `users` tables are the truth. A creation that rolls back can leave a harmless row (sign-in finds no account there). A failed write after an email change or deactivation is logged as `Login directory not updated`. Signing in with a school code or `schoolId` re-adds a missing row.
+- **`npm run directory:rebuild`** (every active school) or `npm run directory:rebuild -- --code GVS` recomputes the rows from the schools' accounts. It is idempotent and safe while the API runs. Run it after restoring or moving a school, after changing `DATA_ENCRYPTION_KEY`, and when the log line above appears. `school:create`, `school:seed-demo` and `dev:memory` run it for the accounts they write directly.
+
+Refresh tokens and password links carry the school id, so they never need the directory.
 
 **Jobs:** every job runs in the school it was queued for. Daily schedules (late fees, reminders, library sweeps) fan out: one run per active school, each in that school's databases.
 
@@ -70,7 +75,7 @@ One image, three commands:
 |---|---|---|
 | API | `node src/server.js` (default) | Horizontally; stateless when `REDIS_URL` is set |
 | Worker | `node src/worker.js` | 1+; BullMQ shares the work. Runs schedules (late fees, fee reminders) |
-| One-off | `node scripts/migrate.js` and `node scripts/sync-mongo-indexes.js` (platform and every school), `node scripts/mongo-app-role.js …`, `node scripts/create-school.js …` | Run before rolling out a release |
+| One-off | `node scripts/migrate.js` and `node scripts/sync-mongo-indexes.js` (platform and every school), `node scripts/mongo-app-role.js …`, `node scripts/create-school.js …`, `node scripts/rebuild-directory.js` (login directory) | Run before rolling out a release |
 
 Health: `GET /health` (liveness, no dependencies) and `GET /ready` (the platform PostgreSQL database and MongoDB answer; use for load-balancer readiness). The API drains connections for up to 15 s on `SIGTERM`.
 
@@ -115,7 +120,7 @@ npm run school:create -- --name "Green Valley School" --code GVS \
 # docker compose run --rm api node scripts/create-school.js …   (same flags)
 ```
 
-It emails the admin, and prints, a 7-day set-password link: `WEB_APP_URL/set-password?token=…`. The web app posts the token to `POST /api/v1/auth/password-resets`. The admin then signs in with the school code, email and password, and invites everyone else (`POST /api/v1/auth/invitations`).
+It emails the admin, and prints, a 7-day set-password link: `WEB_APP_URL/set-password?token=…`. The web app posts the token to `POST /api/v1/auth/password-resets`. The admin then signs in with their email and password (the script lists the admin in the login directory), and invites everyone else (`POST /api/v1/auth/invitations`).
 
 ## Observability
 
@@ -184,6 +189,7 @@ Every process (API and worker) writes **one JSON object per line to stdout**: no
 npm run restore -- ./backups/20261016T020000Z       # everything; verifies checksums, asks you to type "restore"
 npm run restore -- ./backups/20261016T020000Z GVS   # one school only, the others are untouched
 npm run db:migrate                              # bring an older backup up to the current schema
+npm run directory:rebuild                       # the login directory follows the restored accounts
 ```
 
 **Restore drill, monthly, on staging:**

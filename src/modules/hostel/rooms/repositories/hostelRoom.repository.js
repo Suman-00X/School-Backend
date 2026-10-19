@@ -1,3 +1,4 @@
+import { describeDuplicates } from "../../../../common/database/duplicates.js";
 import { asc, eq, inArray } from "drizzle-orm";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { hostelRooms } from "../models/hostelRoom.schema.js";
@@ -28,3 +29,7 @@ export const hostelRoomRepository = {
       .set({ isActive: false })
       .where(scoped(hostelRooms, tenantId, eq(hostelRooms.hostelId, hostelId)))
 };
+
+describeDuplicates({
+  hostel_rooms_hostel_number_uq: ({ roomNumber }) => `Room ${roomNumber} already exists in this hostel`
+});

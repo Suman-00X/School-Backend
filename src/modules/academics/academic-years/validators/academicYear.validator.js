@@ -2,7 +2,9 @@ import { z } from "../../../../common/validation/zod.js";
 import { date, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
 
 const fields = z.object({
-  yearName: text(20),
+  /* Derived from the dates: "2026-27", or "2026" within one calendar year. Optional;
+     when sent it must equal the derived name (else 422) */
+  yearName: text(20).optional(),
   startDate: date(),
   endDate: date(),
   isCurrent: z.boolean().default(false),

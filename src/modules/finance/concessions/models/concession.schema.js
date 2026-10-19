@@ -25,7 +25,9 @@ export const concessions = pgTable(
     description: text("description")
   },
   t => [
-    uniqueIndex("concessions_tenant_name_uq").on(t.tenantId, t.name).where(activeRows(t)),
+    uniqueIndex("concessions_tenant_name_uq")
+      .on(t.tenantId, sql`lower(${t.name})`)
+      .where(activeRows(t)),
     check("concessions_value_chk", sql`${t.value} > 0 AND (${t.concessionType} <> 'PERCENT' OR ${t.value} <= 100)`)
   ]
 );

@@ -39,6 +39,11 @@ The backend uses two kinds of database, each for the kind of data it handles bes
 - **Concurrency:** rows whose invariants span requests are locked with `SELECT … FOR UPDATE`. Examples: invoices when paying, academic years when archiving.
 - **Generated codes** (`STU26-000001`, `INV26-000001`, `RCPT26-000001`) come from `serial_counters`. They are gapless, because the counter increment rolls back with the transaction.
 - **Naming:** `snake_case` in SQL, `camelCase` in the API (`class_order` ↔ `classOrder`).
+- **Names and codes of master records** (so the same thing cannot be entered twice under two spellings):
+  - **Names** (`name()` in `common/validation/schemas.js`) are trimmed, with inner runs of spaces collapsed to one, and are **unique ignoring case**: the unique index is on `lower(column)`. This covers class, subject, grade scale (and band grade), result policy, assessment scheme, exam, fee head, installment plan (and installment), fee structure, late-fee rule, concession, leave type, hostel, hostel room number, hostel resource, transport route and stop, inventory category and operator role names. Vendor, item, ledger account, salary component, period and book category names are tidied the same way but are not unique.
+  - **Codes** (`code()`) are trimmed and upper-cased, then checked against the code's format: subject codes `^[A-Z][A-Z0-9-]{1,9}$` (MA01, PHY-PR); fee head, leave type, salary component and hostel codes 2–20 letters, digits, `-` or `_`, starting with a letter or digit. Stored upper-case, so their plain unique indexes are case-insensitive in effect. Vehicle registrations drop spaces and hyphens (`KA01AB1234`).
+  - **Academic year names** are derived from the dates, never typed (below). **Classes** are one of 15 fixed levels (below). **Section names** are 1–5 letters or digits, upper-cased.
+  - A unique index hit returns a readable 409 ("A fee head named Tuition already exists"): each repository registers its indexes' messages with `describeDuplicates` (`common/database/duplicates.js`), and the error handler quotes the value as the client sent it.
 
 ---
 
@@ -76,9 +81,9 @@ In every school's database.
 
 | Submodule | Table | Purpose | Key constraints |
 |---|---|---|---|
-| academic-years | `academic_years` | School years (2026-27): weekly off days, current flag, `current_until` (when it stopped being current: its teachers keep it one more month), `archived_at` | Unique name. **At most one current year** (partial unique). CHECK end > start. CHECK not both current and archived. **Archived years are read-only** (trigger) |
-| classes | `classes` | Grade levels, shared across years | Unique name and order |
-| subjects | `subjects` | Subjects offered | Unique code and name |
+| academic-years | `academic_years` | School years: weekly off days, current flag, `current_until` (when it stopped being current: its teachers keep it one more month), `archived_at`. **`year_name` is derived from the dates**: `2026-27` when the year runs into the next calendar year, `2026` when it starts and ends in one. A year lasts at most 13 months (ends by start + 13 months − 1 day) and spans at most two calendar years | Unique name. **No two years of a school share a day** (API, under a per-school advisory lock; archived years count). **At most one current year** (partial unique). CHECK end > start. CHECK not both current and archived. **Archived years are read-only** (trigger) |
+| classes | `classes` | Grade levels, shared across years. `level` is one of NURSERY, LKG, UKG, GRADE_1 … GRADE_12 (enum `class_level`); `class_name` and `class_order` come from it (Nursery 1, LKG 2, UKG 3, Class n = n + 3). Generated codes use the level's label: `1` for Class 1, `NUR`, `LKG`, `UKG` (STU26-1-000001, MA01-1A, LKGA-001). A class created before levels whose name matched none has a null level and keeps its own name and order (and its order in codes) | Partial unique (tenant, level). Unique `lower(class_name)` |
+| subjects | `subjects` | Subjects offered | Unique code (upper-case) and `lower(subject_name)` |
 | sections | `sections` | A class's division in one year (1-A, 2026-27), with class teacher, optional deputy class teacher (`deputy_class_teacher_id`: daily and half-day registers and the section's scope, not report cards) and capacity | Unique (year, class, section name). CHECK capacity > 0. CHECK the deputy is not the class teacher |
 | section-subjects | `section_subjects` | Subjects taught in a section | Partial unique (section, subject) and (section, display code) |
 | teacher-assignments | `teacher_assignments` | Who teaches a subject in a section. With the class and deputy class teachers of `sections`, drives teacher record-level scope (current academic year only) | Partial unique (section, subject) |

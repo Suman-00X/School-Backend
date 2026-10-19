@@ -46,6 +46,12 @@ export const settingsService = {
     return view(ctx, tenant);
   },
 
+  /* For other modules (choosing a school at sign-in): a short-lived logo link, or null */
+  logoUrl: async ctx => {
+    const tenant = await getTenant(ctx.tenantId);
+    return tenant?.logoKey ? (await view(ctx, tenant)).logoUrl : null;
+  },
+
   /* Replace the school logo (used on report cards and receipts) */
   setLogo: async (ctx, file) => {
     const stored = await fileService.store(ctx, file, { ownerType: "TENANT", ownerId: ctx.tenantId, category: "LOGO" });

@@ -1,9 +1,9 @@
 import { z } from "../../../../common/validation/zod.js";
-import { idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { idParams, listQuery, name, optionalText, patchBody } from "../../../../common/validation/schemas.js";
 import { searchText } from "../../shared/utils/schemas.util.js";
 
 const fields = z.object({
-  name: text(100),
+  name: name(100),
   description: optionalText(500)
 });
 

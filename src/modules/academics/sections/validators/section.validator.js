@@ -32,7 +32,12 @@ const params = idParams("sectionId");
 
 export const sectionValidators = {
   create: { body: fields.refine(...deputyIsSomeoneElse) },
-  createMany: { body: bulkBody("sections", fields.refine(...deputyIsSomeoneElse)) },
+  /* A class's section name once per request: [1-A, 1-a] is refused on the second item */
+  createMany: {
+    body: bulkBody("sections", fields.refine(...deputyIsSomeoneElse), {
+      unique: [{ field: "sectionName", key: s => `${s.classId}|${s.sectionName}` }]
+    })
+  },
   list: { query: listQuery({ classId: id().optional() }) },
   getById: { params },
   update: { params, body: patchBody(fields).refine(...deputyIsSomeoneElse) }

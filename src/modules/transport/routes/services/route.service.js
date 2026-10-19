@@ -1,4 +1,5 @@
 import { asc, eq } from "drizzle-orm";
+import { sameText } from "../../../../common/database/duplicates.js";
 import { transaction } from "../../../../common/database/postgres.js";
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { nextCode, pad } from "../../../../common/sequences/sequence.service.js";
@@ -53,7 +54,7 @@ const normaliseStops = list =>
 
 const assertUnique = async (ctx, { name, code }, exceptId) => {
   if (name) {
-    const existing = await routeRepository.findOne(ctx.tenantId, [eq(routes.name, name)]);
+    const existing = await routeRepository.findOne(ctx.tenantId, [sameText(routes.name, name)]);
     if (existing && existing.id !== exceptId) throw conflict(`A route named ${name} already exists`);
   }
   if (code) {

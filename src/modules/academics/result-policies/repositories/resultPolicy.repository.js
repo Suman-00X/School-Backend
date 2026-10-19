@@ -1,3 +1,4 @@
+import { describeDuplicates } from "../../../../common/database/duplicates.js";
 import { and, asc, desc, eq, ne } from "drizzle-orm";
 import { createRepository } from "../../../../common/database/repository.js";
 import { db } from "../../../../common/database/postgres.js";
@@ -43,4 +44,8 @@ export const resultPolicySubjectRepository = {
 export const resultPolicyAssignmentRepository = createRepository({
   table: resultPolicyAssignments,
   queryKey: "resultPolicyAssignments"
+});
+
+describeDuplicates({
+  result_policies_tenant_name_uq: ({ name }) => `A result policy named ${name} already exists`
 });

@@ -1,4 +1,5 @@
 import { createRouter } from "../../../../common/http/router.js";
+import { documented } from "../../../../common/openapi/openapi.js";
 import { authorize } from "../../../../common/auth/authorize.middleware.js";
 import { linkRateLimit, resetRequestRateLimit } from "../../shared/middlewares/authRateLimit.middleware.js";
 import { validate } from "../../../../common/validation/validate.middleware.js";
@@ -10,6 +11,13 @@ import { credentialValidators as rules } from "../validators/credential.validato
 export const publicCredentialRoutes = createRouter();
 publicCredentialRoutes.post(
   "/password-reset-requests",
+  documented({
+    summary: "Request a password reset link",
+    description:
+      "Always 202, whether or not an account matches. Without schoolCode, every school with an active account " +
+      "for the email sends its own link.",
+    responses: { 202: { description: "Accepted (the same answer either way)" } }
+  }),
   ...resetRequestRateLimit,
   validate(rules.requestReset),
   controller.requestReset

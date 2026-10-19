@@ -27,8 +27,11 @@ export const authEmails = {
     text: [
       `Hello ${user.firstName},`,
       "",
-      "We received a request to reset your password. Choose a new one here:",
+      `We received a request to reset your ${school.name} password. Choose a new one here:`,
       link("reset-password", token, school.code),
+      "",
+      `School: ${school.name} (${school.code})`,
+      `Email: ${user.email}`,
       "",
       `This link works once and expires in ${hours} hour(s). If you did not ask for this, ignore this email; your password stays the same.`
     ].join("\n")

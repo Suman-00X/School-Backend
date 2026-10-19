@@ -20,7 +20,9 @@ export const lateFeeRules = pgTable(
     isDefault: boolean("is_default").notNull().default(false)
   },
   t => [
-    uniqueIndex("late_fee_rules_name_uq").on(t.tenantId, t.name).where(activeRows(t)),
+    uniqueIndex("late_fee_rules_name_uq")
+      .on(t.tenantId, sql`lower(${t.name})`)
+      .where(activeRows(t)),
     uniqueIndex("late_fee_rules_default_uq")
       .on(t.tenantId)
       .where(sql`${t.isDefault} = true AND ${t.isActive} = true`),

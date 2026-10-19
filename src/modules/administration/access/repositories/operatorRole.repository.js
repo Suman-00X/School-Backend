@@ -1,3 +1,4 @@
+import { describeDuplicates } from "../../../../common/database/duplicates.js";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { createRepository } from "../../../../common/database/repository.js";
 import { operatorRoles } from "../models/operatorRole.schema.js";
@@ -27,3 +28,7 @@ export const operatorRoleRepository = {
       { dbc }
     )
 };
+
+describeDuplicates({
+  operator_roles_tenant_module_name_uq: ({ module, name }) => `A ${module} operator role named ${name} already exists`
+});

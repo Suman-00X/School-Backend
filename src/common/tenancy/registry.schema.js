@@ -1,8 +1,8 @@
-import { pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { index, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
-/* The PLATFORM database (DATABASE_URL) holds only this: which schools exist and where
-   their data lives. Every school's records are in the school's own PostgreSQL and
-   MongoDB databases (one per school). */
+/* The PLATFORM database (DATABASE_URL) holds only this: which schools exist, where their
+   data lives, and which schools a sign-in email has an account in. Every school's records
+   are in the school's own PostgreSQL and MongoDB databases (one per school). */
 export const platformTenantStatus = pgEnum("platform_tenant_status", ["ACTIVE", "SUSPENDED"]);
 
 export const platformTenants = pgTable(
@@ -27,5 +27,27 @@ export const platformTenants = pgTable(
   t => [
     uniqueIndex("platform_tenants_code_uq").on(t.code),
     uniqueIndex("platform_tenants_database_uq").on(t.databaseName)
+  ]
+);
+
+/* The login directory: one row per account, so sign-in can find a person's schools from
+   their email alone. Only a keyed digest of the email is stored (HMAC-SHA256, see
+   tenancy/directory.js), never the address. A copy of what the schools' own databases say:
+   it can always be rebuilt from them (npm run directory:rebuild). */
+export const platformAccountDirectory = pgTable(
+  "platform_account_directory",
+  {
+    emailDigest: text("email_digest").notNull(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => platformTenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  t => [
+    /* A school has one account per email (users_tenant_email_uq in the school database) */
+    primaryKey({ columns: [t.emailDigest, t.tenantId] }),
+    index("platform_account_directory_user_idx").on(t.tenantId, t.userId)
   ]
 );

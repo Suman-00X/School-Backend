@@ -1,3 +1,4 @@
+import { describeDuplicates } from "../../../../common/database/duplicates.js";
 import { and, asc, desc, eq, notInArray, sql } from "drizzle-orm";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { db } from "../../../../common/database/postgres.js";
@@ -136,3 +137,7 @@ export const payslipRepository = {
       .where(scoped(payslips, tenantId, eq(payslips.runId, runId)))
       .orderBy(asc(payslips.employeeName), asc(payslips.userId))
 };
+
+describeDuplicates({
+  salary_components_tenant_code_uq: ({ code }) => `A salary component with code ${code} already exists`
+});

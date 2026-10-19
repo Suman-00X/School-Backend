@@ -1,19 +1,14 @@
 import { z } from "../../../../common/validation/zod.js";
-import { id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { code, id, idParams, listQuery, name, optionalText, patchBody } from "../../../../common/validation/schemas.js";
 
 const time = () => z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "must be a time like 07:30");
 
-const code = () =>
-  z
-    .string()
-    .trim()
-    .toUpperCase()
-    .regex(/^[A-Z0-9_-]{1,20}$/, "must be 1-20 letters, digits, - or _");
+const routeCode = () => code(/^[A-Z0-9_-]{1,20}$/, "must be 1-20 letters, digits, - or _");
 
 /* `id` keeps an existing stop (and its assignments); stops without one are new */
 const stop = z.object({
   id: id().optional(),
-  name: text(100),
+  name: name(100),
   /* Omit on every stop to number them in the order sent */
   sequence: z.number().int().positive().max(500).optional(),
   pickupTime: time().optional(),
@@ -40,8 +35,8 @@ const stops = z
   .refine(list => unique(list, s => s.id), { message: "must not repeat a stop id" });
 
 const fields = {
-  name: text(100),
-  code: code(),
+  name: name(100),
+  code: routeCode(),
   vehicleId: id().nullable(),
   description: optionalText(),
   stops
@@ -54,7 +49,7 @@ export const routeValidators = {
     body: z.object({
       ...fields,
       /* Generated (RT-001) when omitted */
-      code: code().optional(),
+      code: routeCode().optional(),
       vehicleId: id().nullable().optional(),
       stops: stops.refine(list => list.every(s => !s.id), { message: "must not include ids when creating a route" })
     })

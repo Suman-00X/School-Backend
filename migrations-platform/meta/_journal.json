@@ -8,6 +8,13 @@
       "when": 1792184318311,
       "tag": "0000_platform_registry",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792428033609,
+      "tag": "0001_account_directory",
+      "breakpoints": true
     }
   ]
 }

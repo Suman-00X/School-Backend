@@ -5,6 +5,7 @@ import { publish } from "../../../../common/events/events.js";
 import { notFound, unprocessable } from "../../../../common/http/errors.js";
 import { users } from "../models/user.schema.js";
 import { userRepository } from "../repositories/user.repository.js";
+import { accountDirectory } from "./accountDirectory.service.js";
 
 export const USER_EMAIL_CHANGED = "users.account.emailChanged";
 
@@ -16,11 +17,13 @@ export const accountService = {
 
   getById: base.getById,
 
-  /* A changed sign-in email ends the account's sessions and tells the old address (auth module) */
+  /* A changed sign-in email ends the account's sessions and tells the old address (auth
+     module), and moves the account in the login directory */
   update: async (ctx, userId, data) => {
     const before = data.email ? await userRepository.findById(ctx.tenantId, userId) : null;
     const user = await base.update(ctx, userId, data);
     if (before && before.email !== user.email) {
+      await accountDirectory.emailChanged(ctx.tenantId, userId, { oldEmail: before.email, newEmail: user.email });
       await publish(USER_EMAIL_CHANGED, {
         tenantId: ctx.tenantId,
         userId,
@@ -38,6 +41,7 @@ export const accountService = {
     if (!user) throw notFound("User");
     /* Signed-in devices stop working now, not when their tokens expire */
     await revokeUserTokens(userId);
+    await accountDirectory.deactivated(ctx.tenantId, userId);
     return user;
   },
 
@@ -63,6 +67,9 @@ export const accountService = {
 
   /* For the auth module (sign-in, passwords) */
   credentials: {
+    /* No school context: the active schools with an account for this email -> [{ id, code, name }] */
+    schoolsFor: email => accountDirectory.schoolsFor(email),
+    signedIn: (ctx, user) => accountDirectory.signedIn(ctx.tenantId, user),
     find: (ctx, email) => userRepository.findCredentials(ctx.tenantId, String(email).trim().toLowerCase()),
     findById: (ctx, userId) => userRepository.findCredentialsById(ctx.tenantId, userId),
     recordLogin: (ctx, userId, extra) => userRepository.recordLogin(ctx.tenantId, userId, extra),
@@ -70,7 +77,11 @@ export const accountService = {
       userRepository.setPasswordHash(ctx.tenantId, userId, passwordHash, options)
   },
 
-  /* For other users/* submodules: create the account behind a new person.
-     Pass { dbc: tx } to join the caller's transaction. */
-  createAccount: (ctx, person, role, options) => userRepository.create(ctx.tenantId, { ...person, role }, options)
+  /* For other users/* submodules: create the account behind a new person (and list it in
+     the login directory). Pass { dbc: tx } to join the caller's transaction. */
+  createAccount: async (ctx, person, role, options) => {
+    const account = await userRepository.create(ctx.tenantId, { ...person, role }, options);
+    await accountDirectory.added(ctx.tenantId, account);
+    return account;
+  }
 };

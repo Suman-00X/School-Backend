@@ -1,12 +1,12 @@
 import { z } from "../../../../common/validation/zod.js";
-import { id, idParams, listQuery, patchBody, text } from "../../../../common/validation/schemas.js";
+import { id, idParams, listQuery, name, patchBody } from "../../../../common/validation/schemas.js";
 
 /* "08:30" or "08:30:00" */
 const time = () => z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "must be a time like 08:30");
 
 const periodFields = z.object({
   periodNumber: z.number().int().min(1).max(20),
-  name: text(50),
+  name: name(50),
   startTime: time(),
   endTime: time(),
   isBreak: z.boolean().optional()

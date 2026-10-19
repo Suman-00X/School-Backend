@@ -4,13 +4,13 @@ import { forbidden, notFound, unprocessable } from "../../../../common/http/erro
 import { toYearYY } from "../../../../common/utils/date.util.js";
 import { teacherService } from "../../../users/teachers/index.js";
 import { academicYearService } from "../../academic-years/index.js";
-import { classService } from "../../classes/index.js";
+import { classCodeLabel, classService } from "../../classes/index.js";
 import { OUTSIDE_SCOPE, teachingScope } from "../../teacher-assignments/index.js";
 import { sections } from "../models/section.schema.js";
 import { sectionRepository } from "../repositories/section.repository.js";
 
 const withDetails = {
-  class: { columns: { id: true, className: true, classOrder: true } },
+  class: { columns: { id: true, level: true, className: true, classOrder: true } },
   classTeacher: { columns: { id: true, employeeCode: true } },
   deputyClassTeacher: { columns: { id: true, employeeCode: true } }
 };
@@ -112,7 +112,7 @@ export const sectionService = {
       academicYear,
       section,
       yearYY: toYearYY(academicYear.startDate),
-      classSequence: section.class.classOrder,
+      classSequence: classCodeLabel(section.class),
       sectionName: section.sectionName
     };
   },
@@ -127,7 +127,7 @@ export const sectionService = {
   findAllInYear: (ctx, academicYearId) =>
     sectionRepository.findMany(ctx.tenantId, {
       conditions: [eq(sections.academicYearId, academicYearId)],
-      with: { class: { columns: { id: true, className: true, classOrder: true } } }
+      with: { class: { columns: { id: true, level: true, className: true, classOrder: true } } }
     }),
 
   findManyByIds: (ctx, sectionIds) =>

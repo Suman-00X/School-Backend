@@ -28,7 +28,7 @@ const uniquePairs = body => {
 export const marksValidators = {
   record: { body: entry },
   recordMany: {
-    body: bulkBody("marks", entry, 500).refine(uniquePairs, {
+    body: bulkBody("marks", entry, { max: 500 }).refine(uniquePairs, {
       path: ["marks"],
       message: "must not contain the same student and paper twice"
     })

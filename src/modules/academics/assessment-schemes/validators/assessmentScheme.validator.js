@@ -1,5 +1,5 @@
 import { z } from "../../../../common/validation/zod.js";
-import { id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { id, idParams, listQuery, name, optionalText, patchBody } from "../../../../common/validation/schemas.js";
 import { onePolicy, previewPolicy } from "../../report-cards/index.js";
 
 const exams = z
@@ -12,7 +12,7 @@ const exams = z
   });
 
 const fields = z.object({
-  name: text(100),
+  name: name(100),
   description: optionalText(),
   /* Own result policy; else the class's, the school default or the built-in rules */
   policyId: id().nullable().optional(),

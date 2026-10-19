@@ -11,7 +11,8 @@ export const credentialController = {
   },
 
   requestReset: async (req, res) => {
-    await passwordResetJob.enqueue({ schoolCode: req.body.schoolCode, email: req.body.email });
+    const { schoolCode, email } = req.body;
+    await passwordResetJob.enqueue({ ...(schoolCode && { schoolCode }), email });
     return accepted(res, null, "If an account matches, we have emailed a link to reset the password.");
   },
 

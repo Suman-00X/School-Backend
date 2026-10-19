@@ -5,14 +5,14 @@ import {
   id,
   idParams,
   listQuery,
+  name,
   optionalText,
-  patchBody,
-  text
+  patchBody
 } from "../../../../common/validation/schemas.js";
 import { EXAM_TYPES, PAPER_COMPONENTS, PAPER_GRADING_TYPES } from "../../shared/constants/academic.constants.js";
 
 const examFields = z.object({
-  examName: text(100),
+  examName: name(100),
   examType: z.enum(EXAM_TYPES).optional(),
   startDate: date().optional(),
   endDate: date().optional(),
@@ -69,7 +69,11 @@ const paperParams = idParams("examId", "paperId");
 
 export const examValidators = {
   create: { body: examFields.refine(...datesInOrder) },
-  createMany: { body: bulkBody("exams", examFields.refine(...datesInOrder)) },
+  createMany: {
+    body: bulkBody("exams", examFields.refine(...datesInOrder), {
+      unique: [{ field: "examName", key: e => e.examName.toLowerCase() }]
+    })
+  },
   list: { query: listQuery() },
   getById: { params },
   update: { params, body: patchBody(examFields) },

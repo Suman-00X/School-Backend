@@ -114,7 +114,7 @@ describe("auth: sign-in and sessions", () => {
     ]) {
       const res = await attempt;
       assert.equal(res.status, 401);
-      assert.equal(res.body.message, "The school code, email or password is incorrect");
+      assert.equal(res.body.message, "The email or password is incorrect");
     }
     /* Not yet activated */
     assert.equal((await login(world.auth.student.email)).status, 401);

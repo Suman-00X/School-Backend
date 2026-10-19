@@ -19,13 +19,14 @@ describe("tenancy: a database per school", () => {
       [h.pool, h.otherPool].map(async pool => (await pool.query("SELECT current_database() AS db")).rows[0].db)
     );
     assert.deepEqual([mine, theirs], ["school_tst", "school_oth"]);
-    /* The platform database holds no school data at all */
+    /* The platform database holds no school data at all: the registry, and the login
+       directory (email digests only, never addresses) */
     const { rows: tables } = await h.platformPool.query(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name"
     );
     assert.deepEqual(
       tables.map(t => t.table_name),
-      ["platform_tenants"]
+      ["platform_account_directory", "platform_tenants"]
     );
   });
 

@@ -1,6 +1,7 @@
 import { nextCode, pad } from "../../../../common/sequences/sequence.service.js";
 
-/* Codes derived from a section's class and name (classSequence = class order) */
+/* Codes derived from a section's class and name. classSequence stands for the class:
+   its level's label ("1" for Class 1, "LKG"), see classCodeLabel */
 
 /* 1A-001: next roll number in a section */
 export const nextRollNumber = (tenantId, { yearYY, classSequence, sectionName }, options) =>

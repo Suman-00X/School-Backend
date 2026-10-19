@@ -3,9 +3,11 @@ import { clientInfo } from "../../shared/utils/request.util.js";
 import { sessionService } from "../services/session.service.js";
 
 export const sessionController = {
+  /* 201 with a session, or 200 with the schools to choose from (no session yet) */
   login: async (req, res) => {
-    const session = await sessionService.login(req.body, clientInfo(req));
-    return created(res, session, `Signed in as ${session.user.firstName} ${session.user.lastName}`);
+    const result = await sessionService.login(req.body, clientInfo(req));
+    if (result.chooseSchool) return ok(res, result, "Choose a school to continue");
+    return created(res, result, `Signed in as ${result.user.firstName} ${result.user.lastName}`);
   },
 
   refresh: async (req, res) =>

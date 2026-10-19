@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { pgEnum, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { activeRows, baseColumns } from "../../../../common/database/columns.js";
 import { users } from "../../../users/accounts/models/user.schema.js";
@@ -21,7 +21,9 @@ export const hostels = pgTable(
     description: text("description")
   },
   t => [
-    uniqueIndex("hostels_tenant_name_uq").on(t.tenantId, t.name).where(activeRows(t)),
+    uniqueIndex("hostels_tenant_name_uq")
+      .on(t.tenantId, sql`lower(${t.name})`)
+      .where(activeRows(t)),
     uniqueIndex("hostels_tenant_code_uq").on(t.tenantId, t.code).where(activeRows(t))
   ]
 );

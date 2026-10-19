@@ -1,3 +1,4 @@
+import { describeDuplicates } from "../../../../common/database/duplicates.js";
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import { createRepository } from "../../../../common/database/repository.js";
 import { db } from "../../../../common/database/postgres.js";
@@ -34,3 +35,7 @@ export const lateFeeRuleRepository = {
         })
       : []
 };
+
+describeDuplicates({
+  late_fee_rules_name_uq: ({ name }) => `A late-fee rule named ${name} already exists`
+});

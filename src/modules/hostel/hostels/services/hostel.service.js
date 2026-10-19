@@ -1,4 +1,5 @@
 import { eq, ne } from "drizzle-orm";
+import { sameText } from "../../../../common/database/duplicates.js";
 import { transaction } from "../../../../common/database/postgres.js";
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { nextCode, pad } from "../../../../common/sequences/sequence.service.js";
@@ -32,7 +33,7 @@ const assertWarden = async (ctx, wardenUserId) => {
 /* Readable duplicates before the unique indexes would reject them */
 const assertUnique = async (ctx, { name, code }, exceptId) => {
   const others = exceptId ? [ne(hostels.id, exceptId)] : [];
-  if (name && (await hostelRepository.exists(ctx.tenantId, [eq(hostels.name, name), ...others]))) {
+  if (name && (await hostelRepository.exists(ctx.tenantId, [sameText(hostels.name, name), ...others]))) {
     throw conflict(`A hostel named ${name} already exists`);
   }
   if (code && (await hostelRepository.exists(ctx.tenantId, [eq(hostels.code, code), ...others]))) {

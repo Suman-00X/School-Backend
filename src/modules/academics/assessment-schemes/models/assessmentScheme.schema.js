@@ -20,7 +20,11 @@ export const assessmentSchemes = pgTable(
     policyId: uuid("policy_id").references(() => resultPolicies.id),
     resultsPublishedAt: timestamp("results_published_at", { withTimezone: true })
   },
-  t => [uniqueIndex("assessment_schemes_year_name_uq").on(t.tenantId, t.academicYearId, t.name).where(activeRows(t))]
+  t => [
+    uniqueIndex("assessment_schemes_year_name_uq")
+      .on(t.tenantId, t.academicYearId, sql`lower(${t.name})`)
+      .where(activeRows(t))
+  ]
 );
 
 /* An exam in a scheme and its weight (a scheme's weights sum to 100) */

@@ -3,7 +3,8 @@ import { ERROR_CODES } from "../http/errors.js";
 
 /* Builds an OpenAPI 3.1 document from the live route table (createRouter),
    the zod schemas given to validate(), and the permissions given to authorize().
-   Middleware may add `__openapi` ({ parameters, requestBody }) to describe itself. */
+   Middleware may add `__openapi` ({ parameters, requestBody, summary, description,
+   responses }) to describe itself; documented() does that for a route. */
 
 const toJsonSchema = schema => {
   const json = z.toJSONSchema(schema, { io: "input", unrepresentable: "any" });
@@ -29,6 +30,11 @@ const errorResponse = description => ({
   content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } }
 });
 
+const successResponse = {
+  description: "Success",
+  content: { "application/json": { schema: { $ref: "#/components/schemas/Success" } } }
+};
+
 /* A router flagged `__public = true` (mounted before authentication) marks its routes public */
 const collectRoutes = (router, prefix, out, isPublic = false) => {
   const open = isPublic || Boolean(router.__public);
@@ -49,6 +55,14 @@ const parametersFrom = (location, schema) => {
   }));
 };
 
+/* A pass-through handler that only describes its route, for what the schemas cannot say:
+     router.post("/login", documented({ description, responses: { 200: {...} } }), …) */
+export const documented = openapi => {
+  const handler = (req, res, next) => next();
+  handler.__openapi = openapi;
+  return handler;
+};
+
 export const buildOpenApi = (rootRouter, { basePath, title, version, description, publicPaths = [] }) => {
   const paths = {};
 
@@ -66,6 +80,13 @@ export const buildOpenApi = (rootRouter, { basePath, title, version, description
       tags: [tag || "general"],
       summary: summaryFor(route.method, openApiPath, permission),
       ...(permission && { description: `Permission \`${permission.key}\`. Roles: ${permission.roles.join(", ")}.` }),
+      ...Object.assign(
+        {},
+        ...extras.map(({ summary, description }) => ({
+          ...(summary && { summary }),
+          ...(description && { description })
+        }))
+      ),
       ...(isPublic && { security: [] }),
       parameters: [
         ...parametersFrom("path", schemas.params),
@@ -73,10 +94,7 @@ export const buildOpenApi = (rootRouter, { basePath, title, version, description
         ...extras.flatMap(e => e.parameters ?? [])
       ],
       responses: {
-        [route.method === "post" ? "201" : "200"]: {
-          description: "Success",
-          content: { "application/json": { schema: { $ref: "#/components/schemas/Success" } } }
-        },
+        [route.method === "post" ? "201" : "200"]: successResponse,
         400: errorResponse("Invalid request"),
         401: errorResponse("Not signed in"),
         403: errorResponse("Not allowed for your role"),
@@ -85,6 +103,19 @@ export const buildOpenApi = (rootRouter, { basePath, title, version, description
         422: errorResponse("Business rule violated")
       }
     };
+    /* A route's own responses: each replaces the default description (2xx keep the Success
+       schema); a route that lists its own 2xx answers drops the default one */
+    const own = Object.assign({}, ...extras.map(e => e.responses ?? {}));
+    const ownSuccess = Object.keys(own).filter(code => code.startsWith("2"));
+    if (ownSuccess.length) {
+      for (const code of Object.keys(operation.responses)) if (code.startsWith("2")) delete operation.responses[code];
+    }
+    for (const [code, response] of Object.entries(own)) {
+      operation.responses[code] = {
+        ...(code.startsWith("2") ? successResponse : (operation.responses[code] ?? errorResponse(""))),
+        ...response
+      };
+    }
 
     const requestBody = extras.find(e => e.requestBody)?.requestBody;
     if (requestBody) operation.requestBody = requestBody;

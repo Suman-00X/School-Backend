@@ -1,4 +1,5 @@
 import { eq, inArray, ne } from "drizzle-orm";
+import { sameText } from "../../../../common/database/duplicates.js";
 import { db, transaction } from "../../../../common/database/postgres.js";
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { tenantToday } from "../../../../common/tenancy/tenant.service.js";
@@ -35,7 +36,7 @@ const withUsage = async (ctx, rows) => {
 const assertNameFree = async (ctx, hostelId, name, exceptId) => {
   const taken = await hostelResourceRepository.exists(ctx.tenantId, [
     eq(resources.hostelId, hostelId),
-    eq(resources.name, name),
+    sameText(resources.name, name),
     ...(exceptId ? [ne(resources.id, exceptId)] : [])
   ]);
   if (taken) throw conflict(`A resource named ${name} already exists in this hostel`);

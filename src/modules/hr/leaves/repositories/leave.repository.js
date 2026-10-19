@@ -1,3 +1,4 @@
+import { describeDuplicates } from "../../../../common/database/duplicates.js";
 import { and, asc, between, desc, eq, gte, inArray, lte, sum } from "drizzle-orm";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { db } from "../../../../common/database/postgres.js";
@@ -79,3 +80,8 @@ export const leaveRequestRepository = {
         )
       )
 };
+
+describeDuplicates({
+  leave_types_tenant_code_uq: ({ code }) => `A leave type with code ${code} already exists`,
+  leave_types_tenant_name_uq: ({ name }) => `A leave type named ${name} already exists`
+});

@@ -1,5 +1,5 @@
 import { z } from "../../../../common/validation/zod.js";
-import { id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { id, idParams, listQuery, name, optionalText, patchBody } from "../../../../common/validation/schemas.js";
 import { amount } from "../../shared/validators/finance.validators.js";
 
 /* Annual amounts per fee head */
@@ -17,7 +17,7 @@ const installmentPlanIds = z
 
 const fields = z
   .object({
-    name: text(100),
+    name: name(100),
     /* Omit to apply to every class */
     classId: id().optional(),
     description: optionalText(),
@@ -44,7 +44,7 @@ export const feeStructureValidators = {
     params,
     body: patchBody(
       z.object({
-        name: text(100),
+        name: name(100),
         description: optionalText(),
         items,
         installmentPlanIds,

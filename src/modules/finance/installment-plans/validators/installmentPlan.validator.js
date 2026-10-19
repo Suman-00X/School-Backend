@@ -1,15 +1,18 @@
 import { z } from "../../../../common/validation/zod.js";
-import { date, id, idParams, listQuery, optionalText, patchBody, text } from "../../../../common/validation/schemas.js";
+import { date, id, idParams, listQuery, name, optionalText, patchBody } from "../../../../common/validation/schemas.js";
 import { percent } from "../../shared/validators/finance.validators.js";
 
 /* In due-date order; the last one absorbs rounding */
 const installments = z
-  .array(z.object({ name: text(50), dueDate: date(), sharePercent: percent() }))
+  .array(z.object({ name: name(50), dueDate: date(), sharePercent: percent() }))
   .min(1)
   .max(24)
-  .refine(list => new Set(list.map(i => i.name)).size === list.length, "must not repeat an installment name");
+  .refine(
+    list => new Set(list.map(i => i.name.toLowerCase())).size === list.length,
+    "must not repeat an installment name"
+  );
 
-const fields = z.object({ name: text(100), description: optionalText(), installments });
+const fields = z.object({ name: name(100), description: optionalText(), installments });
 
 const params = idParams("installmentPlanId");
 

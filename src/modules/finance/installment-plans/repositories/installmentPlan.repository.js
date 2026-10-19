@@ -1,3 +1,4 @@
+import { describeDuplicates } from "../../../../common/database/duplicates.js";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { db } from "../../../../common/database/postgres.js";
@@ -56,3 +57,9 @@ export const planAssignmentRepository = {
       .for("update");
   }
 };
+
+describeDuplicates({
+  installment_plans_year_name_uq: ({ name }) =>
+    `An installment plan named ${name} already exists in this academic year`,
+  plan_installments_name_uq: ({ name }) => `The plan already has an installment named ${name}`
+});

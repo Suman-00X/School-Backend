@@ -38,7 +38,9 @@ export const hostelResources = pgTable(
     description: text("description")
   },
   t => [
-    uniqueIndex("hostel_resources_hostel_name_uq").on(t.hostelId, t.name).where(activeRows(t)),
+    uniqueIndex("hostel_resources_hostel_name_uq")
+      .on(t.hostelId, sql`lower(${t.name})`)
+      .where(activeRows(t)),
     index("hostel_resources_tenant_hostel_idx").on(t.tenantId, t.hostelId, t.resourceType),
     index("hostel_resources_room_idx").on(t.roomId),
     check("hostel_resources_capacity_chk", sql`${t.capacity} BETWEEN 1 AND ${sql.raw(String(MAX_RESOURCE_CAPACITY))}`),

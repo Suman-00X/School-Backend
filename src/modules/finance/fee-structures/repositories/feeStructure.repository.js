@@ -1,3 +1,4 @@
+import { describeDuplicates } from "../../../../common/database/duplicates.js";
 import { and, asc, eq } from "drizzle-orm";
 import { createRepository } from "../../../../common/database/repository.js";
 import { db } from "../../../../common/database/postgres.js";
@@ -37,3 +38,8 @@ export const feeStructureRepository = {
         )
       )
 };
+
+describeDuplicates({
+  fee_structures_year_class_name_uq: ({ name }) =>
+    `A fee structure named ${name} already exists for this class in this academic year`
+});

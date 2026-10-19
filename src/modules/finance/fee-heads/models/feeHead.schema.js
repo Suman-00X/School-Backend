@@ -16,7 +16,7 @@ export const feeHeads = pgTable(
       .on(t.tenantId, t.code)
       .where(sql`${t.isActive} = true`),
     uniqueIndex("fee_heads_tenant_name_uq")
-      .on(t.tenantId, t.name)
+      .on(t.tenantId, sql`lower(${t.name})`)
       .where(sql`${t.isActive} = true`)
   ]
 );

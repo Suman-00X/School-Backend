@@ -1,3 +1,4 @@
+import { describeDuplicates } from "../../../../common/database/duplicates.js";
 import { asc, eq, inArray } from "drizzle-orm";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { hostelResources } from "../models/hostelResource.schema.js";
@@ -36,3 +37,7 @@ export const hostelResourceRepository = {
         )
       )
 };
+
+describeDuplicates({
+  hostel_resources_hostel_name_uq: ({ name }) => `A resource named ${name} already exists in this hostel`
+});
