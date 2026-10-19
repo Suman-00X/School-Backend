@@ -8,6 +8,8 @@ Only **open** items are here: things that need your decision, or that you may wa
 
 | | Item |
 |---|---|
+| 🟡 | D-73: formats for academic years, classes and other names are built; choices to confirm |
+| 🟡 | D-72: sign-in without a school code is built; choices to confirm |
 | 🟡 | D-64 hostel; the fee and result choices to confirm (D-17 to D-21, D-09/D-10) |
 | 🟡 | D-71: free periods and the school-wide mode are built; small choices to confirm |
 | 🟡 | D-70: attendance as you answered D-66 is built; small choices to confirm |
@@ -27,6 +29,26 @@ Only **open** items are here: things that need your decision, or that you may wa
 ---
 
 ## Worth a look
+
+### 🟡 D-72: Sign-in without a school code: choices to confirm
+Built: people sign in with email and password only. If the password is right in more than one school, they pick the school from a list. API.md › Signing in without a school code has the details.
+- **The list comes after the password.** Only schools where the password was right are listed. Listing them for any typed email would tell a stranger which schools an email belongs to.
+- **Where the server looks:** a login directory in the platform database holds one row per account with a keyed hash of the email (not the email itself) and the school. Every account creation writes it; email changes and deactivations update it; `npm run directory:rebuild` rebuilds it.
+- **Deactivated accounts** are removed from the directory (they can't sign in, and there is no reactivation yet).
+- **Wrong passwords count in every school with that email.** A person with different passwords in two schools adds a failure in the other school each time; 5 within 15 minutes lock that school's account for 15 minutes. *Option:* count only where an account exists and the password failed everywhere.
+- **Locked anywhere and no match:** the answer is "too many attempts" (429), so a lock is never hidden behind "wrong password".
+- **Forgot password without a code:** every school with that email sends its own link, each naming its school.
+- **Reworded message:** "The email or password is incorrect" (no school code).
+
+### 🟡 D-73: Formats for academic years, classes and names: choices to confirm
+Built so the same thing can't be entered twice in two spellings. API.md › Names and codes has the rules.
+- **Academic year name** comes from the dates: 2026-06-01 to 2027-03-31 is "2026-27"; a year inside one calendar year is "2026". At most 13 months and two calendar years. Years can't overlap, archived ones included. Existing names stay as they are; the format applies to new years and edited dates.
+- **Classes are levels:** Nursery, LKG, UKG, Class 1 … Class 12. Typing "Grade 1", "Std 1", "I" or "class-1" finds Class 1. A class's level can change only while it has no sections. *Open:* do you need Pre-KG/Playgroup, or streams for Classes 11–12 (Science, Commerce)? Today streams would be sections.
+- **Sections** keep 1–5 letters or digits in capitals (A, B, SCI1).
+- **Subject codes** are 2–10 capitals, digits or "-", starting with a letter.
+- **Every other name** (subjects, fee heads, plans, concessions, leave types, hostels, rooms, routes, stops, exams, grade scales…) is trimmed and unique ignoring capitals; duplicates get a readable message such as "A fee head named Tuition already exists".
+- **Existing data:** migration 0033 renames classes it recognises ("Std 5" → "Class 5") and stops with a list if two existing names differ only by capitals or spaces. Nothing is merged silently.
+- **Not covered:** vendor and item names (no uniqueness before either), and fee structures without a class can still share a name.
 
 ### 🟡 D-66: Three attendance systems: choices to confirm
 Built: a school picks **once a day**, **forenoon and afternoon**, or **every period**, for the whole school or per class, starting from a date. How each counts is in API.md › Attendance.
