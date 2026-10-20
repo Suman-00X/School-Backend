@@ -1,5 +1,5 @@
 {
-  "id": "f2151529-902b-4c46-8610-8543cf40ca2f",
+  "id": "1f1220d4-535a-4f58-8c10-38dd2ef967dd",
   "prevId": "c7c9ac84-ee9f-422e-9efa-e10d3ffec0be",
   "version": "7",
   "dialect": "postgresql",
@@ -154,6 +154,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "student_count": {
+          "name": "student_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -208,8 +214,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.platform_operators": {
-      "name": "platform_operators",
+    "public.platform_admins": {
+      "name": "platform_admins",
       "schema": "",
       "columns": {
         "id": {
@@ -239,11 +245,17 @@
         },
         "status": {
           "name": "status",
-          "type": "platform_operator_status",
+          "type": "platform_admin_status",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
           "default": "'ACTIVE'"
+        },
+        "sessions_valid_after": {
+          "name": "sessions_valid_after",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "last_login_at": {
           "name": "last_login_at",
@@ -267,8 +279,8 @@
         }
       },
       "indexes": {
-        "platform_operators_email_uq": {
-          "name": "platform_operators_email_uq",
+        "platform_admins_email_uq": {
+          "name": "platform_admins_email_uq",
           "columns": [
             {
               "expression": "email",
@@ -300,8 +312,8 @@
         "SUSPENDED"
       ]
     },
-    "public.platform_operator_status": {
-      "name": "platform_operator_status",
+    "public.platform_admin_status": {
+      "name": "platform_admin_status",
       "schema": "public",
       "values": [
         "ACTIVE",

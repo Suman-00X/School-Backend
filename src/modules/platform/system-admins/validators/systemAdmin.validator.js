@@ -1,6 +1,6 @@
 import { z } from "../../../../common/validation/zod.js";
 
-export const operatorValidators = {
+export const systemAdminValidators = {
   login: {
     body: z.object({
       email: z.string().trim().toLowerCase().pipe(z.email().max(254)),

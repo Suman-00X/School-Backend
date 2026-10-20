@@ -54,6 +54,10 @@ app.get("/health", (req, res) => {
   res.json({ success: true, message: "Service is healthy", data: { timestamp: new Date().toISOString() } });
 });
 
+/* The admin console is a page of the web app: a browser that opens it on the API's host is
+   sent there (the page asks the system admin to sign in when there is no session cookie) */
+app.get("/adminConsole", (req, res) => res.redirect(302, `${env.webAppUrl.replace(/\/$/, "")}/adminConsole`));
+
 /* Readiness: the platform database and the MongoDB server answer (for load balancers / Kubernetes) */
 app.get("/ready", async (req, res) => {
   const checks = { postgres: false, mongo: mongoose.connection.readyState === 1 };

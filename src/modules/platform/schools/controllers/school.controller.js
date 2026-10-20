@@ -1,8 +1,8 @@
-import { created, ok } from "../../../../common/http/responses.js";
+import { created, ok, paginated } from "../../../../common/http/responses.js";
 import { schoolService } from "../services/school.service.js";
 
 export const schoolController = {
-  list: async (req, res) => ok(res, await schoolService.list(req.query), "Schools retrieved successfully"),
+  list: async (req, res) => paginated(res, await schoolService.list(req.query), "Schools retrieved successfully"),
 
   codeAvailability: async (req, res) => {
     const result = await schoolService.codeAvailable(req.query.code);
@@ -12,7 +12,7 @@ export const schoolController = {
   get: async (req, res) => ok(res, await schoolService.get(req.params.schoolId), "School retrieved successfully"),
 
   onboard: async (req, res) => {
-    const result = await schoolService.onboard(req.operator, req.body);
+    const result = await schoolService.onboard(req.systemAdmin, req.body);
     return created(
       res,
       result,
@@ -22,16 +22,19 @@ export const schoolController = {
     );
   },
 
+  update: async (req, res) =>
+    ok(res, await schoolService.update(req.systemAdmin, req.params.schoolId, req.body), "Number of students updated"),
+
   setModules: async (req, res) =>
-    ok(res, await schoolService.setModules(req.operator, req.params.schoolId, req.body), "Modules updated"),
+    ok(res, await schoolService.setModules(req.systemAdmin, req.params.schoolId, req.body), "Modules updated"),
 
   setStatus: async (req, res) => {
-    const school = await schoolService.setStatus(req.operator, req.params.schoolId, req.body);
+    const school = await schoolService.setStatus(req.systemAdmin, req.params.schoolId, req.body);
     return ok(res, school, school.status === "ACTIVE" ? `${school.name} is active` : `${school.name} is suspended`);
   },
 
   inviteAdmin: async (req, res) => {
-    const invitation = await schoolService.inviteAdmin(req.operator, req.params.schoolId, req.params.userId);
+    const invitation = await schoolService.inviteAdmin(req.systemAdmin, req.params.schoolId, req.params.userId);
     return created(
       res,
       invitation,

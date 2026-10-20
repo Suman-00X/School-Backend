@@ -20,13 +20,13 @@ describe("tenancy: a database per school", () => {
     );
     assert.deepEqual([mine, theirs], ["school_tst", "school_oth"]);
     /* The platform database holds no school data at all: the registry, the login
-       directory (email digests only, never addresses) and the onboarding portal's operators */
+       directory (email digests only, never addresses) and the admin console's system admins */
     const { rows: tables } = await h.platformPool.query(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name"
     );
     assert.deepEqual(
       tables.map(t => t.table_name),
-      ["platform_account_directory", "platform_operators", "platform_tenants"]
+      ["platform_account_directory", "platform_admins", "platform_tenants"]
     );
   });
 

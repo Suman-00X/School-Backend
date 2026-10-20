@@ -1,5 +1,5 @@
 import { z } from "../../../../common/validation/zod.js";
-import { email, idParams, name, optionalText, phone, text } from "../../../../common/validation/schemas.js";
+import { email, idParams, listQuery, name, optionalText, phone, text } from "../../../../common/validation/schemas.js";
 import { isTimeZone } from "../../../../common/tenancy/tenant.service.js";
 import { SWITCHABLE_MODULE_KEYS } from "../../shared/constants/schoolModules.constants.js";
 
@@ -17,8 +17,12 @@ const modules = () =>
     .max(SWITCHABLE_MODULE_KEYS.length)
     .refine(keys => new Set(keys).size === keys.length, "must not repeat a module");
 
+/* The number of students the school is onboarded (and charged) for */
+const studentCount = () => z.coerce.number().int().min(1).max(1_000_000);
+
 const schoolFields = z.object({
   name: text(150),
+  studentCount: studentCount(),
   code: schoolCode(),
   address: text(500),
   contactEmail: email(),
@@ -55,9 +59,12 @@ const schoolParams = idParams("schoolId");
 
 export const schoolValidators = {
   list: {
-    query: z.object({
+    query: listQuery({
       status: z.enum(["ACTIVE", "SUSPENDED"]).optional(),
-      search: z.string().trim().min(1).max(100).optional()
+      search: z.string().trim().min(1).max(100).optional(),
+      /* Schools with this module switched on */
+      module: z.enum(SWITCHABLE_MODULE_KEYS).optional(),
+      sort: z.enum(["newest", "oldest", "name", "students"]).default("newest")
     })
   },
   codeAvailability: { query: z.object({ code: schoolCode() }) },
@@ -69,6 +76,7 @@ export const schoolValidators = {
     })
   },
   get: { params: schoolParams },
+  update: { params: schoolParams, body: z.object({ studentCount: studentCount() }) },
   setModules: { params: schoolParams, body: z.object({ modules: modules() }) },
   setStatus: { params: schoolParams, body: z.object({ status: z.enum(["ACTIVE", "SUSPENDED"]) }) },
   invite: { params: idParams("schoolId", "userId") }

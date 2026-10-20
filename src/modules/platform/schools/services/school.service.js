@@ -5,10 +5,11 @@ import { provisionTenant } from "../../../../common/tenancy/provisioning.js";
 import { getTenant } from "../../../../common/tenancy/tenant.service.js";
 import { credentialService } from "../../../auth/credentials/index.js";
 import { accountService } from "../../../users/accounts/index.js";
+import { studentService } from "../../../users/students/index.js";
 import { SCHOOL_MODULES, normaliseModules } from "../../shared/constants/schoolModules.constants.js";
 import { schoolRepository } from "../repositories/school.repository.js";
 
-/* The platform acts as the school's administrator while it sets the school up */
+/* The platform acts as the school's administrator while it sets the school up (or reads it) */
 const asSchool = tenantId => ({ tenantId, role: "ADMIN", userId: null });
 
 const PROFILE_FIELDS = ["address", "contactEmail", "contactPhone", "description", "timezone", "currency", "country"];
@@ -31,6 +32,8 @@ const listView = row => ({
   modules: moduleStates(row.enabledModules)
     .filter(module => module.enabled)
     .map(module => module.key),
+  /* Declared at onboarding; null for schools onboarded before it was asked */
+  studentCount: row.studentCount ?? null,
   createdAt: row.createdAt
 });
 
@@ -47,16 +50,22 @@ const adminView = user => ({
   lastLoginAt: user.lastLoginAt ?? null
 });
 
-/* What the school's own databases say: its profile and administrators (a suspended school's
-   databases are closed to everyone, so only the registry is shown) */
+/* What the school's own databases say: its profile, administrators and the students on its
+   roll now (a suspended school's databases are closed to everyone, so only the registry is
+   shown) */
 const schoolDetails = async row => {
-  if (row.status !== "ACTIVE") return { profile: null, admins: [] };
+  if (row.status !== "ACTIVE") return { profile: null, admins: [], enrolledStudents: null };
   return runInTenant(row.id, async () => {
     const ctx = asSchool(row.id);
-    const [profile, admins] = await Promise.all([getTenant(row.id), accountService.findByRoles(ctx, ["ADMIN"])]);
+    const [profile, admins, enrolledStudents] = await Promise.all([
+      getTenant(row.id),
+      accountService.findByRoles(ctx, ["ADMIN"]),
+      studentService.countActive(ctx)
+    ]);
     return {
       profile: profile && Object.fromEntries(PROFILE_FIELDS.map(field => [field, profile[field] ?? null])),
-      admins: admins.map(adminView)
+      admins: admins.map(adminView),
+      enrolledStudents
     };
   });
 };
@@ -74,7 +83,10 @@ const findOrFail = async schoolId => {
 };
 
 export const schoolService = {
-  list: async filters => (await schoolRepository.list(filters)).map(listView),
+  list: async filters => {
+    const { rows, meta } = await schoolRepository.list(filters);
+    return { rows: rows.map(listView), meta };
+  },
 
   codeAvailable: async code => ({ code, available: !(await schoolRepository.codeTaken(code)) }),
 
@@ -82,7 +94,7 @@ export const schoolService = {
 
   /* A new school: its own databases with its profile, the chosen modules, and its first
      administrator, who is emailed a link to set a password (also returned, to pass on) */
-  onboard: async (operator, { school, admin, modules }) => {
+  onboard: async (systemAdmin, { school, admin, modules }) => {
     if (await schoolRepository.codeTaken(school.code)) {
       throw conflict(`A school with code ${school.code} already exists`);
     }
@@ -101,6 +113,7 @@ export const schoolService = {
       },
       enabledModules
     });
+    await schoolRepository.update(record.id, { studentCount: school.studentCount });
 
     const invitation = await runInTenant(record.id, async () => {
       const ctx = asSchool(record.id);
@@ -118,33 +131,44 @@ export const schoolService = {
       return { userId: account.id, ...(await credentialService.inviteWithLink(ctx, account.id)) };
     });
 
-    logger.info({ operatorId: operator.id, tenant: record.code, modules: enabledModules }, "School onboarded");
+    logger.info({ systemAdminId: systemAdmin.id, tenant: record.code, modules: enabledModules }, "School onboarded");
     return { school: await detailView(await findOrFail(record.id)), invitation };
   },
 
+  /* The number of students the school is charged for */
+  update: async (systemAdmin, schoolId, { studentCount }) => {
+    await findOrFail(schoolId);
+    const row = await schoolRepository.update(schoolId, { studentCount });
+    logger.info({ systemAdminId: systemAdmin.id, tenantId: schoolId, studentCount }, "School student count changed");
+    return detailView(row);
+  },
+
   /* Switch modules on or off. Records of a module switched off are kept. */
-  setModules: async (operator, schoolId, { modules }) => {
+  setModules: async (systemAdmin, schoolId, { modules }) => {
     await findOrFail(schoolId);
     const enabledModules = normaliseModules(modules);
     const row = await schoolRepository.update(schoolId, { enabledModules });
     await refreshTenantRecord(schoolId);
-    logger.info({ operatorId: operator.id, tenantId: schoolId, modules: enabledModules }, "School modules changed");
+    logger.info(
+      { systemAdminId: systemAdmin.id, tenantId: schoolId, modules: enabledModules },
+      "School modules changed"
+    );
     return detailView(row);
   },
 
   /* Suspend (nobody in the school can sign in or use the API) or reactivate */
-  setStatus: async (operator, schoolId, { status }) => {
+  setStatus: async (systemAdmin, schoolId, { status }) => {
     const current = await findOrFail(schoolId);
     if (current.status === status) return detailView(current);
     const row = await schoolRepository.update(schoolId, { status });
     if (status === "SUSPENDED") await forgetTenantRecord(schoolId);
     else await refreshTenantRecord(schoolId);
-    logger.info({ operatorId: operator.id, tenantId: schoolId, status }, "School status changed");
+    logger.info({ systemAdminId: systemAdmin.id, tenantId: schoolId, status }, "School status changed");
     return detailView(row);
   },
 
   /* A new set-password link for an administrator who has not set one yet */
-  inviteAdmin: async (operator, schoolId, userId) => {
+  inviteAdmin: async (systemAdmin, schoolId, userId) => {
     const row = await findOrFail(schoolId);
     if (row.status !== "ACTIVE") throw unprocessable("The school is suspended. Reactivate it first.");
     return runInTenant(schoolId, async () => {
@@ -152,7 +176,7 @@ export const schoolService = {
       const [user] = await accountService.findManyByIds(ctx, [userId]);
       if (!user || user.role !== "ADMIN") throw notFound("Administrator");
       const invitation = await credentialService.inviteWithLink(ctx, user.id);
-      logger.info({ operatorId: operator.id, tenantId: schoolId, userId }, "Administrator invited again");
+      logger.info({ systemAdminId: systemAdmin.id, tenantId: schoolId, userId }, "Administrator invited again");
       return { userId, ...invitation };
     });
   }

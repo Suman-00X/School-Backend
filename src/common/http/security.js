@@ -33,6 +33,8 @@ export const securityMiddlewares = () => [
 
   cors({
     origin: env.allowedOrigins.length ? env.allowedOrigins : !env.isProduction,
+    /* Cookies (the admin console's session) only from the origins listed in ALLOWED_ORIGINS */
+    credentials: env.allowedOrigins.length > 0,
     exposedHeaders: ["RateLimit", "RateLimit-Policy", "Retry-After"]
   }),
 

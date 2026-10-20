@@ -1,4 +1,4 @@
-import { index, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { index, integer, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 /* The PLATFORM database (DATABASE_URL) holds only this: which schools exist, where their
    data lives, and which schools a sign-in email has an account in. Every school's records
@@ -20,6 +20,9 @@ export const platformTenants = pgTable(
     mongoUrl: text("mongo_url"),
     /* Modules switched on for the school (see tenancy/moduleSwitches.js); null: every module */
     enabledModules: text("enabled_modules").array(),
+    /* Number of students the school declared when it was onboarded (what it is charged
+       for); the students actually enrolled are counted in the school's own database */
+    studentCount: integer("student_count"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()

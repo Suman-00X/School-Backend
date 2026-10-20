@@ -117,6 +117,9 @@ export const studentService = {
   /* For other modules */
   exists: (ctx, studentId) => studentRepository.exists(ctx.tenantId, [eq(students.id, studentId)]),
 
+  /* For other modules (the admin console): students on the school's roll (not removed) */
+  countActive: ctx => studentRepository.count(ctx.tenantId),
+
   findByUserId: (ctx, userId) =>
     studentRepository.findOne(ctx.tenantId, [eq(students.userId, userId)], {
       with: { user: { columns: USER_SUMMARY_COLUMNS } }
