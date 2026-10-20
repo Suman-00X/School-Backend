@@ -4,6 +4,7 @@ import { hashPassword, verifyPassword } from "../../../../common/crypto/password
 import { digest, randomToken } from "../../../../common/crypto/tokens.js";
 import { transaction } from "../../../../common/database/postgres.js";
 import { forbidden, unprocessable } from "../../../../common/http/errors.js";
+import { logger } from "../../../../common/logging/logger.js";
 import { email } from "../../../../common/messaging/email.js";
 import { runInTenant } from "../../../../common/tenancy/context.js";
 import { findTenantByCode, getTenant } from "../../../../common/tenancy/tenant.service.js";
@@ -94,8 +95,15 @@ export const credentialService = {
         skipped.push({ userId: user.id, reason: "The account already has a password; use password reset" });
       } else {
         const token = await issueToken(ctx, user.id, "INVITE", ctx.userId);
-        await email.send(authEmails.invite({ user, school, token, hours: TOKEN_TTL_HOURS.INVITE }));
-        invited.push(user.id);
+        /* One address the provider refuses (or an outage) skips that person, with its reason,
+           instead of failing the batch after the earlier ones were already sent */
+        try {
+          await email.send(authEmails.invite({ user, school, token, hours: TOKEN_TTL_HOURS.INVITE }));
+          invited.push(user.id);
+        } catch (err) {
+          logger.warn({ err, userId: user.id, tenantId: ctx.tenantId }, "Invitation email not sent");
+          skipped.push({ userId: user.id, email: user.email, reason: `The email couldn't be sent: ${err.response ?? err.message}` });
+        }
       }
     }
     return { invited, skipped };

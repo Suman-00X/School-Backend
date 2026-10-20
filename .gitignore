@@ -6,6 +6,7 @@ node_modules/
 .env.local
 .env.*
 !.env.example
+*-credentials.env
 # OS / editor
 .DS_Store
 .vscode/
