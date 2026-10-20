@@ -24,6 +24,8 @@ import { schedulingRoutes } from "./scheduling/index.js";
 import { examEligibilityExamRoutes, examEligibilityRoutes } from "./exam-eligibility/index.js";
 import { admitCardExamRoutes } from "./admit-cards/index.js";
 import { substitutionRoutes } from "./substitutions/index.js";
+import { nepPolicyRoutes } from "./nep-policy/index.js";
+import { holisticProgressRoutes } from "./holistic-progress/index.js";
 
 /* Academics module, mounted at /api/v1/academics */
 const router = createRouter();
@@ -61,5 +63,7 @@ router.use("/homework", homeworkRoutes);
 router.use("/assessments", assessmentRoutes);
 router.use("/scheduling", schedulingRoutes);
 router.use("/substitutions", substitutionRoutes);
+router.use("/nep-policy", nepPolicyRoutes);
+router.use("/holistic-progress", holisticProgressRoutes);
 
 export default router;

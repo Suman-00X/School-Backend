@@ -12,6 +12,11 @@ const profileSchema = z.object({
   bloodGroup: optionalText(10),
   category: optionalText(50),
   religion: optionalText(50),
+  /* null clears an id entered by mistake */
+  pen: z.string().trim().regex(/^\d{11}$/, "must be the 11-digit PEN from UDISE+").nullable().optional(),
+  apaarId: z.string().trim().regex(/^\d{12}$/, "must be the 12-digit APAAR id").nullable().optional(),
+  apaarConsentOn: date().nullable().optional(),
+  motherTongue: optionalText(50),
   description: optionalText()
 });
 

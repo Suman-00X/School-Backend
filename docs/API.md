@@ -278,7 +278,7 @@ Access tokens are short-lived (see Authentication), so this suits trying it out.
 | Administration | `/administration` | School settings and logo, CSV imports, the central audit log, access (permission catalogue, module owners, operator roles, handovers) |
 | Finance | `/finance` | Fee heads, installment plans and per-student assignment, structures, late-fee rules and waivers, concessions, invoices, payments (counter and online, partial), student credit, refunds with administrator approval, receipts and refund receipts, statements, the school's own Razorpay keys, double-entry general ledger |
 | Communication | `/communication` | Notifications (in-app, email, SMS) and announcements to audiences |
-| Reports | `/reports` | Dashboards (overview, attendance, fees, academics) and exports |
+| Reports | `/reports` | Dashboards (overview, attendance, fees, academics), exports, and the UDISE+ / APAAR files |
 | Files | `/files` | Student, staff and general documents |
 | Library | `/library` | Policy and circulation rules, catalogue (ISBN) and public catalogue, copies, loans (back-dated, blocks, lost and found), fines (part-payments, partial waivers, credit), holds, stock-taking, reports, reminders |
 | Transport | `/transport` | Vehicles (compliance dates), routes and stops, seat assignments, rosters |
