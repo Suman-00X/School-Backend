@@ -2,6 +2,9 @@ import { forbidden, unauthorized } from "../http/errors.js";
 import { defaultLabel, registerPermission } from "./catalogue.js";
 import { hasPermission } from "./grants.js";
 import { ALL_ROLES } from "./roles.js";
+import { permissionOn } from "../tenancy/moduleSwitches.js";
+
+const MODULE_SWITCHED_OFF = "This module is not switched on for your school";
 
 /* Modules declare their permissions in one place:
      export const CLASS_PERMISSIONS = definePermissions("academics.classes", {
@@ -57,6 +60,7 @@ export const authorize = (permission, { refusal } = {}) => {
     res.locals.params = req.params;
 
     if (!req.context) throw unauthorized();
+    if (!(await permissionOn(req.context, permission))) throw forbidden(MODULE_SWITCHED_OFF);
     if (!(await hasPermission(req.context, permission))) throw forbidden(refusal);
 
     next();

@@ -14,6 +14,7 @@
     "mongo:sync-indexes": "node scripts/sync-mongo-indexes.js",
     "mongo:app-role": "node scripts/mongo-app-role.js",
     "school:create": "node scripts/create-school.js",
+    "platform:operator": "node scripts/create-operator.js",
     "directory:rebuild": "node scripts/rebuild-directory.js",
     "backup": "sh scripts/backup.sh",
     "restore": "sh scripts/restore.sh",

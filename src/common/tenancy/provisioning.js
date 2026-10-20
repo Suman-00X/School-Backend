@@ -64,8 +64,20 @@ const createDatabase = async name => {
 
 /* A new school: its own databases, migrated, with its profile, registered on the platform.
    databaseUrl / mongoUrl: the school's own connection strings ("bring your own database");
-   without them, databases named school_<code> are created on the shared servers. */
-export const provisionTenant = async ({ code, name, timezone, currency, country, databaseUrl, mongoUrl }) => {
+   without them, databases named school_<code> are created on the shared servers.
+   details: more of the profile (address, contactEmail, contactPhone, description).
+   enabledModules: the modules switched on (see moduleSwitches.js); omitted: every module. */
+export const provisionTenant = async ({
+  code,
+  name,
+  timezone,
+  currency,
+  country,
+  details = {},
+  enabledModules,
+  databaseUrl,
+  mongoUrl
+}) => {
   const normalised = String(code).trim().toUpperCase();
   if (!CODE.test(normalised)) throw unprocessable("code must be 2-20 letters, digits or dashes");
   if (await tenantRecordByCode(normalised)) throw conflict(`A school with code ${normalised} already exists`);
@@ -90,7 +102,11 @@ export const provisionTenant = async ({ code, name, timezone, currency, country,
           code: normalised,
           ...(timezone && { timezone }),
           ...(currency && { currency: currency.toUpperCase() }),
-          ...(country && { country: country.toUpperCase() })
+          ...(country && { country: country.toUpperCase() }),
+          address: details.address ?? null,
+          contactEmail: details.contactEmail ?? null,
+          contactPhone: details.contactPhone ?? null,
+          description: details.description ?? null
         })
         .returning();
     }
@@ -107,7 +123,8 @@ export const provisionTenant = async ({ code, name, timezone, currency, country,
       databaseName,
       mongoDatabaseName: databaseName,
       databaseUrl: databaseUrl ? encryptField(databaseUrl) : null,
-      mongoUrl: mongoUrl ? encryptField(mongoUrl) : null
+      mongoUrl: mongoUrl ? encryptField(mongoUrl) : null,
+      enabledModules: enabledModules ?? null
     })
     .returning();
   logger.info({ tenant: normalised, database: databaseName }, "School provisioned");

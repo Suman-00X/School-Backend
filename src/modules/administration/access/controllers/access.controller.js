@@ -18,7 +18,7 @@ const fileUnder = (res, record) => {
 
 export const catalogueController = {
   list: async (req, res) => {
-    const { total, modules } = catalogueService.list(req.context, req.query);
+    const { total, modules } = await catalogueService.list(req.context, req.query);
     const where = modules.length === 1 ? `the ${modules[0].label} module` : moduleCount(modules.length);
     return ok(res, modules, `${permissionCount(total)} in ${where}`);
   }

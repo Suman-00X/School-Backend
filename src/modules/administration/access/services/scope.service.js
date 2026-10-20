@@ -1,5 +1,6 @@
 import { hasPermission } from "../../../../common/auth/grants.js";
 import { forbidden } from "../../../../common/http/errors.js";
+import { moduleOn } from "../../../../common/tenancy/moduleSwitches.js";
 import { ACCESS_MODULE_KEYS } from "../../shared/constants/access.constants.js";
 import {
   ACCESS_PERMISSIONS,
@@ -9,10 +10,12 @@ import {
 import { moduleLabel } from "./catalogue.service.js";
 
 /* Which add-on modules the signed-in user administers: ADMIN all of them, an owner (built-in
-   role or by assignment) their own */
+   role or by assignment) their own; never a module switched off for the school */
 export const accessScope = {
   manages: async (ctx, module) =>
-    Boolean(MODULE_ACCESS_PERMISSIONS[module]) && hasPermission(ctx, MODULE_ACCESS_PERMISSIONS[module]),
+    Boolean(MODULE_ACCESS_PERMISSIONS[module]) &&
+    (await moduleOn(ctx.tenantId, module)) &&
+    hasPermission(ctx, MODULE_ACCESS_PERMISSIONS[module]),
 
   managedModules: async ctx => {
     const flags = await Promise.all(ACCESS_MODULE_KEYS.map(module => accessScope.manages(ctx, module)));

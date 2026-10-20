@@ -3,6 +3,7 @@ import { logger } from "../logging/logger.js";
 import { reportError } from "../observability/errorReporter.js";
 import { counter, histogram } from "../observability/metrics.js";
 import { currentTenantId, listTenantRecords, runInTenant } from "../tenancy/context.js";
+import { moduleOnFor, switchOf } from "../tenancy/moduleSwitches.js";
 import { createMemoryDriver } from "./memory.driver.js";
 
 /* Background jobs.
@@ -67,7 +68,10 @@ export const defineSchedule = (id, { job, everyMs, cron, data = {}, perTenant = 
     defineJob(
       fanOut,
       async () => {
+        /* Not in schools that have the job's module switched off */
+        const module = switchOf({ key: job.name, module: job.name.split(".")[0] });
         for (const school of await listTenantRecords({ status: "ACTIVE" })) {
+          if (!moduleOnFor(school, module)) continue;
           await enqueue(job.name, { ...data, tenantId: school.id });
         }
       },

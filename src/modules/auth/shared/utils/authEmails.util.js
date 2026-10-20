@@ -4,6 +4,9 @@ import env from "../../../../common/config/env.config.js";
 const link = (path, token, schoolCode) =>
   `${env.webAppUrl.replace(/\/$/, "")}/${path}?token=${encodeURIComponent(token)}&school=${encodeURIComponent(schoolCode)}`;
 
+/* The set-password link of an invitation (for an operator to pass on by hand) */
+export const invitationLink = (token, schoolCode) => link("set-password", token, schoolCode);
+
 export const authEmails = {
   invite: ({ user, school, token, hours }) => ({
     to: user.email,

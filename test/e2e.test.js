@@ -34,5 +34,6 @@ await import("./suites/24-activity-logs.suite.js");
 await import("./suites/25-login-directory.suite.js");
 await import("./suites/26-canonical-names.suite.js");
 await import("./suites/27-admission-roll-numbers.suite.js");
+await import("./suites/28-platform-onboarding.suite.js");
 /* keep last */
 await import("./suites/99-year-end.suite.js");

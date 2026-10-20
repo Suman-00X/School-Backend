@@ -2,6 +2,7 @@ import { listPermissions } from "../../../../common/auth/catalogue.js";
 import { hasPermission } from "../../../../common/auth/grants.js";
 import { ACCESS_PERMISSIONS } from "../permissions/access.permissions.js";
 import { notFound } from "../../../../common/http/errors.js";
+import { enabledModules, moduleFilter, permissionFilter } from "../../../../common/tenancy/moduleSwitches.js";
 import { tenantToday } from "../../../../common/tenancy/tenant.service.js";
 import { accountService } from "../../../users/accounts/index.js";
 import { ACCESS_MODULES, ASSIGNABLE_ROLES } from "../../shared/constants/access.constants.js";
@@ -36,7 +37,9 @@ const sourceOf = assignment => ({
    `modules`: the modules to show (null = all). */
 const effectiveAccess = async (ctx, user, modules) => {
   const today = await tenantToday(ctx.tenantId);
-  const shown = module => !modules || modules.includes(module);
+  /* A module switched off for the school is never shown (and grants nothing, see grants.js) */
+  const [on, moduleIsOn] = await Promise.all([permissionFilter(ctx.tenantId), moduleFilter(ctx.tenantId)]);
+  const shown = module => (!modules || modules.includes(module)) && moduleIsOn(module);
   const current = ASSIGNABLE_ROLES.includes(user.role)
     ? await accessAssignmentRepository.findCurrentForUser(ctx.tenantId, user.id, today)
     : [];
@@ -55,7 +58,7 @@ const effectiveAccess = async (ctx, user, modules) => {
     for (const key of keysOf(assignment)) add(key, sourceOf(assignment));
   }
 
-  const entries = listPermissions().filter(entry => sources.has(entry.key) && shown(entry.module));
+  const entries = listPermissions().filter(entry => sources.has(entry.key) && shown(entry.module) && on(entry));
   const ownerOf = new Set(
     Object.keys(ACCESS_MODULES).filter(
       module =>
@@ -98,11 +101,16 @@ export const userAccessService = {
     return effectiveAccess(ctx, user, modules || null);
   },
 
-  /* The signed-in user's own access, every module */
+  /* The signed-in user's own access, every module; enabledModules: the modules switched on
+     for the school (null: every module) */
   mine: async (ctx, { module } = {}) => {
     const [user] = await accountService.findManyByIds(ctx, [ctx.userId]);
     if (!user) throw notFound("User");
-    return effectiveAccess(ctx, user, module ? [module] : null);
+    const [access, enabled] = await Promise.all([
+      effectiveAccess(ctx, user, module ? [module] : null),
+      enabledModules(ctx.tenantId)
+    ]);
+    return { ...access, enabledModules: enabled };
   }
 };
 

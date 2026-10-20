@@ -3,6 +3,7 @@ import { authenticate } from "./common/auth/authenticate.middleware.js";
 import { auditTrail, registerAuditActor } from "./common/audit/audit.middleware.js";
 import { tenantContext } from "./common/tenancy/tenantContext.middleware.js";
 import { registerGrantsResolver } from "./common/auth/grants.js";
+import { registerModuleResolver } from "./common/tenancy/moduleSwitches.js";
 import { registerHandover } from "./common/handover/handovers.js";
 import usersModule from "./modules/users/index.js";
 import academicsModule from "./modules/academics/index.js";
@@ -17,6 +18,7 @@ import libraryModule from "./modules/library/index.js";
 import hrModule from "./modules/hr/index.js";
 import transportModule from "./modules/transport/index.js";
 import inventoryModule from "./modules/inventory/index.js";
+import platformModule, { moduleOfPermission } from "./modules/platform/index.js";
 import { authRoutes, publicAuthRoutes } from "./modules/auth/index.js";
 import { paymentWebhookRoutes } from "./modules/finance/payments/index.js";
 import { accessGrants } from "./modules/administration/access/index.js";
@@ -25,6 +27,9 @@ import { wardenHandover } from "./modules/hostel/hostels/index.js";
 
 /* authorize() also honours operator roles and module ownership (administration/access) */
 registerGrantsResolver(accessGrants.resolve);
+
+/* A school uses only the modules switched on for it (platform onboarding) */
+registerModuleResolver(moduleOfPermission);
 
 /* Handovers (administration/access) also pass on the records a person is responsible for */
 registerHandover("hostel", wardenHandover);
@@ -39,6 +44,8 @@ const v1 = createRouter();
 /* Public endpoints (no token): verified by other means, e.g. webhook signatures */
 v1.use("/public/payments", paymentWebhookRoutes);
 v1.use("/auth", publicAuthRoutes);
+/* The onboarding portal: operator tokens, not school tokens (see modules/platform) */
+v1.use("/platform", platformModule);
 
 v1.use(authenticate);
 /* Database per school: everything below runs in the signed-in user's school databases */

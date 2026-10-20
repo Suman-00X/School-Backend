@@ -1,4 +1,5 @@
 import { listPermissions, titleOf } from "../../../../common/auth/catalogue.js";
+import { permissionFilter } from "../../../../common/tenancy/moduleSwitches.js";
 import { ACCESS_MODULES } from "../../shared/constants/access.constants.js";
 import { operatorGrantable } from "./grants.service.js";
 
@@ -41,9 +42,11 @@ export const groupByModule = (entries, describe = describePermission) => {
 
 export const catalogueService = {
   /* The permission catalogue for role editors: ?module=, ?grantable=true (what an operator role may hold) */
-  list: (ctx, { module, grantable } = {}) => {
+  list: async (ctx, { module, grantable } = {}) => {
+    const on = await permissionFilter(ctx.tenantId);
     const entries = listPermissions().filter(
       entry =>
+        on(entry) &&
         (!module || entry.module === module) &&
         (grantable === undefined || operatorGrantable(entry, entry.module) === grantable)
     );

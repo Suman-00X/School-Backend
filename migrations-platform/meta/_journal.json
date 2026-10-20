@@ -15,6 +15,13 @@
       "when": 1792428033609,
       "tag": "0001_account_directory",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792511856171,
+      "tag": "0002_school_onboarding",
+      "breakpoints": true
     }
   ]
 }

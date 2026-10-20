@@ -18,6 +18,8 @@ export const platformTenants = pgTable(
     /* ...or a school's own connection strings, encrypted (enc:v1:…), when given */
     databaseUrl: text("database_url"),
     mongoUrl: text("mongo_url"),
+    /* Modules switched on for the school (see tenancy/moduleSwitches.js); null: every module */
+    enabledModules: text("enabled_modules").array(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()

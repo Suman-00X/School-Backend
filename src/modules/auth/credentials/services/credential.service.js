@@ -4,13 +4,14 @@ import { hashPassword, verifyPassword } from "../../../../common/crypto/password
 import { digest, randomToken } from "../../../../common/crypto/tokens.js";
 import { transaction } from "../../../../common/database/postgres.js";
 import { forbidden, unprocessable } from "../../../../common/http/errors.js";
+import { logger } from "../../../../common/logging/logger.js";
 import { email } from "../../../../common/messaging/email.js";
 import { runInTenant } from "../../../../common/tenancy/context.js";
 import { findTenantByCode, getTenant } from "../../../../common/tenancy/tenant.service.js";
 import { accountService } from "../../../users/accounts/index.js";
 import { sessionService } from "../../sessions/index.js";
 import { TOKEN_TTL_HOURS } from "../../shared/constants/auth.constants.js";
-import { authEmails } from "../../shared/utils/authEmails.util.js";
+import { authEmails, invitationLink } from "../../shared/utils/authEmails.util.js";
 import { signInThrottle } from "../../shared/utils/signInThrottle.util.js";
 import { authTokenRepository } from "../repositories/authToken.repository.js";
 
@@ -99,6 +100,27 @@ export const credentialService = {
       }
     }
     return { invited, skipped };
+  },
+
+  /* For other modules (onboarding a school): invite one account that has no password yet and
+     return the link as well, so it can be passed on when the email does not arrive.
+     -> { link, expiresAt, emailed } */
+  inviteWithLink: async (ctx, userId) => {
+    const [user] = await accountService.findManyByIds(ctx, [userId]);
+    if (!user || user.status !== "ACTIVE") throw unprocessable("The account is not active");
+    if (user.passwordChangedAt) throw unprocessable("The account already has a password; use password reset");
+    const school = await getTenant(ctx.tenantId);
+    const token = await issueToken(ctx, user.id, "INVITE", ctx.userId ?? null);
+    const expiresAt = new Date(Date.now() + TOKEN_TTL_HOURS.INVITE * 3_600_000);
+    let emailed = true;
+    try {
+      await email.send(authEmails.invite({ user, school, token, hours: TOKEN_TTL_HOURS.INVITE }));
+    } catch (error) {
+      /* The link still works: the operator passes it on */
+      emailed = false;
+      logger.error({ err: error, tenantId: ctx.tenantId, userId: user.id }, "Invitation email failed");
+    }
+    return { link: invitationLink(token, school.code), expiresAt, emailed };
   },
 
   /* Job body for a reset request. The HTTP request only queues it, so the answer and its

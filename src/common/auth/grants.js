@@ -1,3 +1,4 @@
+import { permissionOn } from "../tenancy/moduleSwitches.js";
 import { findPermission } from "./catalogue.js";
 
 /* Permissions a user holds beyond their role (operator roles, module ownership).
@@ -27,11 +28,13 @@ export const grantsOf = ctx => {
   return grants;
 };
 
-/* Whether the user may do this: their role is in the permission's list, or a grant gives it.
-   Self-service permissions follow the role only. Takes a permission or its key. */
+/* Whether the user may do this: the permission's module is switched on in the school, and
+   their role is in the permission's list or a grant gives it. Self-service permissions follow
+   the role only. Takes a permission or its key. */
 export const hasPermission = async (ctx, permission) => {
   const entry = typeof permission === "string" ? findPermission(permission) : permission;
   if (!entry?.key) throw new Error(`hasPermission(): unknown permission ${permission}`);
+  if (!(await permissionOn(ctx, entry))) return false;
   if (entry.roles.includes(ctx?.role)) return true;
   if (entry.selfService) return false;
   return (await grantsOf(ctx)).has(entry.key);
