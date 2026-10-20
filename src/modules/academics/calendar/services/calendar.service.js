@@ -174,6 +174,8 @@ export const calendarService = {
       await examPaperService.setSchedule(ctx, exam.id, timetable, { dbc });
       return calendarEventRepository.create(ctx.tenantId, { ...row, academicYearId: year.id }, { dbc });
     });
+    await syncExamDates(ctx, exam, window);
+    return created;
   },
 
   update: async (ctx, eventId, { timetable, ...data }) => {
