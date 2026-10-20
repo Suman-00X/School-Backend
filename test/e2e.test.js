@@ -34,5 +34,16 @@ await import("./suites/24-activity-logs.suite.js");
 await import("./suites/25-login-directory.suite.js");
 await import("./suites/26-canonical-names.suite.js");
 await import("./suites/27-admission-roll-numbers.suite.js");
-/* keep last */
+await import("./suites/28-scheduling.suite.js");
+await import("./suites/29-subject-codes.suite.js");
+await import("./suites/32-substitutions.suite.js");
+await import("./suites/33-nep.suite.js");
+await import("./suites/34-behaviour.suite.js");
+await import("./suites/35-certificates.suite.js");
+await import("./suites/36-student-leaves.suite.js");
+await import("./suites/38-diary.suite.js");
+await import("./suites/39-low-attendance.suite.js");
+/* keep last of the feature suites */
 await import("./suites/99-year-end.suite.js");
+/* Every endpoint × every kind of user, on the data the suites above created */
+await import("./suites/30-api-matrix.suite.js");

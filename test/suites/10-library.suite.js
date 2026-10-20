@@ -577,6 +577,7 @@ describe("library: circulation", () => {
     const holiday = await post("/api/v1/academics/calendar/events", {
       title: "Library inventory day",
       eventType: "HOLIDAY",
+      category: "SCHOOL",
       startDate: usual
     });
     const shifted = await nextOpen(addDays(today(), 14));

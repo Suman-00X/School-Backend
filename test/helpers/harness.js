@@ -43,6 +43,9 @@ export const startHarness = async () => {
     STORAGE_LOCAL_DIR: storageDir,
     RATE_LIMIT_MAX: "100000",
     AUTH_RATE_LIMIT_MAX: "100000",
+    /* The lockout the auth suites expect, whatever a developer's .env says */
+    AUTH_MAX_FAILED_LOGINS: "5",
+    AUTH_LOCKOUT_MINUTES: "15",
     METRICS_TOKEN: "test-metrics-token"
   });
   delete process.env.REDIS_URL;
