@@ -1,4 +1,4 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { conflict, forbidden, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { teacherService } from "../../../users/teachers/index.js";
 import { academicYearService } from "../../academic-years/index.js";
@@ -209,5 +209,29 @@ export const timetableService = {
   lessonsOf: (ctx, sectionId) => lessonsWhere(ctx, eq(timetableSlots.sectionId, sectionId)),
 
   /* Every weekly class of an academic year, by weekday and bell order */
-  lessonsInYear: (ctx, academicYearId) => lessonsWhere(ctx, eq(timetableSlots.academicYearId, academicYearId))
+  lessonsInYear: (ctx, academicYearId) => lessonsWhere(ctx, eq(timetableSlots.academicYearId, academicYearId)),
+
+  /* For scheduling: a generated week written at once (its solver already checked every rule).
+     Removes the given slots, then adds the new ones; the unique indexes still refuse a clash.
+     -> the slots added */
+  replaceSlots: async (ctx, academicYearId, { removeSlotIds, slots }, { dbc }) => {
+    if (removeSlotIds.length) {
+      await timetableSlotRepository.softDeleteWhere(
+        ctx.tenantId,
+        [eq(timetableSlots.academicYearId, academicYearId), inArray(timetableSlots.id, removeSlotIds)],
+        { dbc }
+      );
+    }
+    return slots.length
+      ? timetableSlotRepository.createMany(
+          ctx.tenantId,
+          slots.map(slot => ({ ...slot, academicYearId, room: slot.room ?? null })),
+          { dbc }
+        )
+      : [];
+  },
+
+  /* The weekly grid shape of forSection/forTeacher, for slots that are not stored (previews):
+     slots carry period, subject, teacher ({ user }) and section ({ class }) like slotDetails */
+  grid: toGrid
 };

@@ -22,6 +22,10 @@ import { paymentWebhookRoutes } from "./modules/finance/payments/index.js";
 import { accessGrants } from "./modules/administration/access/index.js";
 import { accountService } from "./modules/users/accounts/index.js";
 import { wardenHandover } from "./modules/hostel/hostels/index.js";
+import agentToolRoutes from "./common/agent-tools/agentTools.routes.js";
+import mcpRoutes from "./common/agent-tools/mcp.routes.js";
+/* Registers every module's agent tools */
+import "./agentTools.js";
 
 /* authorize() also honours operator roles and module ownership (administration/access) */
 registerGrantsResolver(accessGrants.resolve);
@@ -59,5 +63,9 @@ v1.use("/library", libraryModule);
 v1.use("/hr", hrModule);
 v1.use("/transport", transportModule);
 v1.use("/inventory", inventoryModule);
+
+/* AI agents: the modules' tools over REST and MCP, as the signed-in user */
+v1.use("/agent-tools", agentToolRoutes);
+v1.use("/mcp", mcpRoutes);
 
 export default v1;

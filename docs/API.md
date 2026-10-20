@@ -18,6 +18,7 @@ Base URL: `/api/v1`. Every endpoint needs `Authorization: Bearer <access token>`
 - [Responses and errors](#responses-and-errors)
 - [Roles](#roles)
 - [Activity logs](#activity-logs)
+- [AI agent tools](#ai-agent-tools)
 - [Modules](#modules)
 - [Workflows](#workflows)
 
@@ -229,6 +230,41 @@ Filters: `userId`, `permission` (an exact key, or a prefix ending in a dot: `lib
 
 Sign-in events (`auth.login`, `auth.login.failed`) are recorded separately under module `auth`. They are in the central log, never in a module's tab.
 
+## AI agent tools
+
+Module features an AI agent can call, as **tools**: a name, a description written for the model, a JSON Schema input and a result shaped for a model to read (short, named, with `next` steps). An agent acts as the person who connected it: the same token, school, role and grants. A tool never does more than that person could do through the API.
+
+| Endpoint | What |
+|---|---|
+| `GET /agent-tools` | The tools the signed-in user may call (MCP tool shape: `name`, `title`, `description`, `inputSchema`, `annotations`). `?format=anthropic` gives `{ name, description, input_schema }` to pass straight to the Claude Messages API's `tools` |
+| `POST /agent-tools/:name` | Runs a tool with the body as its input; `data` is the tool's result. Bad input is 400 with the field named, as elsewhere |
+| `POST /mcp` | The same tools as a **Model Context Protocol** server (Streamable HTTP, stateless, JSON responses): `initialize`, `ping`, `tools/list`, `tools/call`. One JSON-RPC 2.0 message per request; no batches, no sessions, no event stream (a `GET` asking for one gets 405). A failing tool is a result with `isError: true` and the reason, so the agent can correct itself |
+
+**Who:** `administration.agentTools.use` (every employee role by default; a school can narrow it with operator roles). Each tool also needs its own permission. The timetable tools need `academics.scheduling.*` (ADMIN, PRINCIPAL), so a teacher's agent doesn't see them.
+
+**Audit:** a tool that writes is recorded like any write, under the tool's permission (`academics.scheduling.generate`…). Read-only tools leave no entry. Generated timetables also record `origin: AGENT_TOOL`.
+
+**Connecting an agent**, for example Claude Code:
+
+```sh
+claude mcp add --transport http school https://<host>/api/v1/mcp --header "Authorization: Bearer <access token>"
+```
+
+Access tokens are short-lived (see Authentication), so this suits trying it out. Long-lived agent keys are an open item (D-78).
+
+**Tools today** (academics/scheduling):
+
+| Tool | Does | Changes data |
+|---|---|---|
+| `get_timetable_inputs` | What a class timetable is made from: days, bell schedule, sections' subjects, classes a week and teachers, teacher loads, problems found before solving | No |
+| `generate_class_timetable` | Plans the week for the year or some sections; saves a draft | A draft only |
+| `generate_exam_timetable` | Gives every paper of an exam a date and sitting; saves a draft | A draft only |
+| `list_timetable_drafts`, `get_timetable_draft` | Drafts, and one draft as a section's or teacher's week (one line per day) or as exam sittings | No |
+| `apply_timetable_draft` | Writes a draft (annotated destructive: agents are told to ask first) | Yes |
+| `discard_timetable_draft` | Sets a draft aside | Yes |
+
+**Adding a module's tools:** `defineTool({ name, title, description, input, permission, readOnly, destructive, handler })` from `src/common/agent-tools/agentTools.js`, in the module's `tools/` folder, listed in `src/agentTools.js`. Reuse the module's services and zod validators. Field `.describe()` texts become the schema descriptions the agent reads.
+
 ---
 
 ## Modules
@@ -320,8 +356,38 @@ Roll numbers keep their format (`<class><section>-<serial>`: `1A-001`, `LKGA-012
 1. `POST /academics/academic-years` creates the year (`isCurrent: true` makes it current).
 2. Create classes, subjects and sections (`…/bulk`).
 3. Add section subjects and teacher assignments.
-4. Set periods and the timetable (`/academics/timetable/…`). Clashes of section, teacher or room are rejected.
+4. Set periods and the timetable (`/academics/timetable/…`). Clashes of section, teacher or room are rejected. Set each section subject's `weeklyNoOfClasses`, then the timetable can be generated (see Generating timetables).
 5. Add the calendar: holidays and events. These decide working days for attendance and leave.
+
+### Generating timetables
+
+Class and exam timetables can be generated (`/academics/scheduling`, ADMIN and PRINCIPAL). Generating only makes a **draft run**; nothing changes until it is applied.
+
+1. **Check:** `GET /academics/scheduling/class-timetable/inputs` (header year) lists the days, the bell schedule, each section's subjects with their classes a week and teacher, every teacher's weekly load, and problems: a subject with no teacher or no classes a week, a section or teacher with more classes than periods.
+2. **Generate:** `POST /academics/scheduling/class-timetable/runs`. Every field is optional:
+   - `sectionIds`: default every section.
+   - `mode`: `FILL` (default) keeps the lessons already there and places what is missing; `REPLACE` plans the week again.
+   - `subjects[]`: `doublePeriods`, `maxPerDay`, `preferredPeriods`, `avoidPeriods`, a shared `room` (a lab), narrowed with `classIds`/`sectionIds`.
+   - `teachers[]`: `unavailable` days or periods, `maxPerDay`, `maxConsecutive`.
+   - `closedPeriods[]`: a half-day Saturday, an assembly.
+   - `pinned[]`: classes that must be at a time.
+   - `teacherMaxPerDay`, `teacherMaxConsecutive`, `weights`, `seed`, `attempts`, `timeLimitMs`.
+
+   Hard rules are never broken: one class at a time for a section, a teacher and a room; availability and daily limits; doubles in two periods in a row with no break between. The draft's `report` gives `score` (placed of required periods, `complete`), `issues` (with messages), `unplaced` classes with the reason in most periods, and `changes` (what applying adds, removes and keeps).
+3. **Look:** `GET /academics/scheduling/runs/:runId/sections/:sectionId` and `…/teachers/:teacherId` return the timetable's usual week grid, each lesson marked `NEW`, `KEPT`, `PINNED` or `OTHER`. `GET /academics/scheduling/runs` lists drafts (without their timetables).
+4. **Apply:** `POST /academics/scheduling/runs/:runId/apply` writes it in one transaction. In REPLACE mode, the planned sections' lessons are removed first. It applies once (409 after). It is refused with 409, naming what changed, if the bell schedule, sections, subjects, teacher assignments or timetable changed since the draft was made. An incomplete draft needs `allowIncomplete: true`; the rest is added by hand. Or `POST …/discard`.
+
+The same seed and request give the same timetable; another seed gives an alternative.
+
+**Exams:** `POST /academics/scheduling/exam-timetable/runs` with `examId`. Options:
+- `startDate`/`endDate`: default the exam's dates.
+- `sessions`: one to three sittings a day; default 09:30–12:30.
+- `maxPapersPerDay` (1), `minGapDays` (0).
+- `align`: `CLASS` (default: a subject at the same time for every section of a class), `SCHOOL` or `NONE`.
+- `spread`: `EVEN` or `COMPACT`.
+- `durations`, `restDayBefore`, `avoidDates`, `keepScheduled`.
+
+Only school days are used (holidays, vacations, weekly off days and off Saturdays are skipped), and other exams' papers are avoided. A window too short is reported per section. Applying needs a complete draft and writes every paper's date and time through the exam's calendar event (created if it has none).
 
 ### Attendance
 

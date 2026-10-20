@@ -45,7 +45,8 @@ export const auditTrail = (req, res, next) => {
   if (!WRITE_METHODS.has(req.method)) return next();
 
   res.on("finish", () => {
-    if (!req.context || res.statusCode >= 400) return;
+    /* skipAudit: a POST that changed nothing (an agent tool that only reads) */
+    if (!req.context || res.statusCode >= 400 || res.locals.skipAudit) return;
 
     /* In the school's own database (the request's context may be gone by now) */
     runInTenant(req.context.tenantId, async () =>
