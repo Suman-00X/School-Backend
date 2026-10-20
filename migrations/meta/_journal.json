@@ -358,6 +358,13 @@
       "when": 1792528472373,
       "tag": "0050_report_card_format",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1792528519514,
+      "tag": "0051_daily_diary",
+      "breakpoints": true
     }
   ]
 }

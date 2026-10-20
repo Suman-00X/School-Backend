@@ -351,5 +351,12 @@ export const homeworkService = {
 
   findById: (ctx, homeworkId) => homeworkRepository.findById(ctx.tenantId, homeworkId, { with: withSubject }),
 
+  /* For the daily diary: homework set in a section on one day (callers check access) */
+  assignedOn: (ctx, sectionId, date) =>
+    homeworkRepository.findMany(ctx.tenantId, {
+      conditions: [eq(homeworkAssignments.sectionId, sectionId), eq(homeworkAssignments.assignedOn, date)],
+      with: withSubject
+    }),
+
   findSubmission: (ctx, submissionId) => submissionRepository.findById(ctx.tenantId, submissionId)
 };

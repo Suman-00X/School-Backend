@@ -7,6 +7,7 @@ import "./fees.subscriber.js";
 import "./imports.subscriber.js";
 import "./homework.subscriber.js";
 import "./behaviour.subscriber.js";
+import "./diary.subscriber.js";
 import "./studentLeaves.subscriber.js";
 import "./inventory.subscriber.js";
 import "./substitutions.subscriber.js";
