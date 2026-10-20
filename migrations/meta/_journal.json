@@ -351,6 +351,13 @@
       "when": 1792528402330,
       "tag": "0049_low_attendance_alerts",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1792528472373,
+      "tag": "0050_report_card_format",
+      "breakpoints": true
     }
   ]
 }
