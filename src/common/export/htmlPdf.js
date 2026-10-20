@@ -36,7 +36,9 @@ const launch = () => {
       "PDF printing is not set up on this server: install Chrome or Chromium, or set PDF_BROWSER_PATH"
     );
   }
-  browserPromise ??= puppeteer
+  if (browserPromise) return browserPromise;
+  /* An old browser closing must not forget a newer one */
+  const launched = puppeteer
     .launch({
       executablePath: path,
       headless: true,
@@ -49,28 +51,40 @@ const launch = () => {
     })
     .then(browser => {
       browser.on("disconnected", () => {
-        browserPromise = null;
+        if (browserPromise === launched) browserPromise = null;
       });
       return browser;
     })
     .catch(error => {
-      browserPromise = null;
+      if (browserPromise === launched) browserPromise = null;
       logger.error({ err: error }, "PDF browser failed to start");
       throw serviceUnavailable("PDF printing is unavailable: the browser could not start");
     });
+  browserPromise = launched;
   return browserPromise;
 };
 
-const acquire = async () => {
+const stopIdleTimer = () => {
   clearTimeout(idleTimer);
-  if (running >= env.pdf.maxPages) await new Promise(resolve => waiting.push(resolve));
-  running++;
+  idleTimer = null;
 };
 
+/* A slot to render in. A waiting request is handed the slot of the one that finishes, so
+   `running` never drops to 0 while anything is queued. */
+const acquire = async () => {
+  stopIdleTimer();
+  if (running >= env.pdf.maxPages) await new Promise(resolve => waiting.push(resolve));
+  else running++;
+  stopIdleTimer();
+};
+
+/* The idle close starts only when nothing renders and nothing waits */
 const release = () => {
+  const next = waiting.shift();
+  if (next) return next();
   running--;
-  waiting.shift()?.();
   if (!running && browserPromise) {
+    stopIdleTimer();
     idleTimer = setTimeout(closeHtmlPdf, IDLE_CLOSE_MS);
     idleTimer.unref();
   }
