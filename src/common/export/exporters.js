@@ -32,9 +32,10 @@ export const toXlsx = async (rows, columns, { sheetName = "Sheet1", title } = {}
   const header = sheet.addRow(columns.map(c => c.header));
   header.font = { bold: true };
   header.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8EEF7" } };
+  header.alignment = { wrapText: true, vertical: "top" };
   for (const row of rows) sheet.addRow(columns.map(c => cellValue(row, c)));
   columns.forEach((c, index) => {
-    sheet.getColumn(index + 1).width = c.width ?? Math.max(12, String(c.header).length + 4);
+    sheet.getColumn(index + 1).width = c.width ?? Math.min(30, Math.max(12, String(c.header).length + 4));
   });
   sheet.views = [{ state: "frozen", ySplit: title ? 3 : 1 }];
   return Buffer.from(await workbook.xlsx.writeBuffer());
