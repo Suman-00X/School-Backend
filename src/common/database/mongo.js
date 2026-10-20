@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import env from "../config/env.config.js";
 import { logger } from "../logging/logger.js";
+import { dbTimer } from "../observability/requestStats.js";
 import { tenantMongo } from "../tenancy/context.js";
 
 let watching = false;
@@ -13,6 +14,48 @@ const watchConnection = () => {
   mongoose.connection.on("reconnected", () => logger.info("MongoDB reconnected"));
   mongoose.connection.on("error", error => logger.error({ err: error }, "MongoDB connection error"));
 };
+
+/* Time queries, aggregations and saves into the request's access-log line. A global plugin
+   reaches every model, including those compiled later on each school's connection. */
+const QUERIES = [
+  "countDocuments",
+  "deleteMany",
+  "deleteOne",
+  "distinct",
+  "estimatedDocumentCount",
+  "find",
+  "findOne",
+  "findOneAndDelete",
+  "findOneAndReplace",
+  "findOneAndUpdate",
+  "replaceOne",
+  "updateMany",
+  "updateOne"
+];
+const TIMER = Symbol("dbTimer");
+const timeOperations = schema => {
+  const start = function () {
+    this[TIMER] = dbTimer("mongo");
+  };
+  const stop = function () {
+    this[TIMER]?.();
+    this[TIMER] = undefined;
+  };
+  const stopOnError = function (error, result, next) {
+    stop.call(this);
+    next(error);
+  };
+  for (const [operations, options] of [
+    [QUERIES, { query: true, document: false }],
+    ["aggregate", {}],
+    ["save", {}]
+  ]) {
+    schema.pre(operations, options, start);
+    schema.post(operations, options, stop);
+    schema.post(operations, options, stopOnError);
+  }
+};
+mongoose.plugin(timeOperations);
 
 export const connectMongo = async () => {
   mongoose.set("strictQuery", true);

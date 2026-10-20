@@ -7,6 +7,7 @@ import { platformDb } from "./common/tenancy/context.js";
 import { httpMetrics } from "./common/observability/httpMetrics.middleware.js";
 import { renderMetrics } from "./common/observability/metrics.js";
 import { requestLogger, requestStart } from "./common/logging/requestLogger.middleware.js";
+import { accessLog } from "./common/logging/accessLog.middleware.js";
 import { securityMiddlewares } from "./common/http/security.js";
 import { errorHandler, notFoundHandler } from "./common/http/errorHandler.middleware.js";
 import { buildOpenApi, docsPage, DOCS_CSP } from "./common/openapi/openapi.js";
@@ -24,6 +25,8 @@ app.set("json replacer", (key, value) => (SECRET_FIELDS.has(key) ? undefined : v
 app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS ?? 0));
 
 app.use(requestStart);
+/* Access log (API monitoring) first, so its timing covers everything after it */
+app.use(accessLog);
 app.use(requestLogger);
 app.use(httpMetrics);
 

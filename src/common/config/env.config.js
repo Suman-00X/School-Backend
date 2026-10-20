@@ -49,6 +49,14 @@ export default {
   /* Requests and database queries slower than this are logged as warnings */
   slowRequestMs: num("SLOW_REQUEST_MS", 1000),
   slowQueryMs: num("SLOW_QUERY_MS", 500),
+  /* One line per HTTP request for monitoring the API (see logging/accessLog.js) */
+  accessLog: {
+    mode: str("ACCESS_LOG", { test: "off", production: "stdout" }[nodeEnv] ?? "file"), // file | stdout | off
+    dir: str("ACCESS_LOG_DIR", "./logs"),
+    retentionDays: num("ACCESS_LOG_RETENTION_DAYS", 14),
+    /* Exact paths left out, e.g. load-balancer probes: /health,/ready */
+    ignore: list("ACCESS_LOG_IGNORE")
+  },
 
   /* The PLATFORM database: the registry of schools (see tenancy/context.js) */
   databaseUrl: str("DATABASE_URL"),

@@ -12,6 +12,7 @@ How to run, deploy, observe, back up and restore the backend. Decisions behind t
 - [Onboarding a school](#onboarding-a-school)
 - [Observability](#observability)
 - [Logs and debugging](#logs-and-debugging)
+- [Access log (API monitoring)](#access-log-api-monitoring)
 - [Backups and restore](#backups-and-restore)
 - [Academic-year archiving](#academic-year-archiving)
 - [Security checklist](#security-checklist)
@@ -124,7 +125,7 @@ It emails the admin, and prints, a 7-day set-password link: `WEB_APP_URL/set-pas
 
 ## Observability
 
-- **Logs:** pino JSON on stdout, one line per request, with `requestId` (also in the `X-Request-Id` header and every error response), `tenantId` and `userId`. Ship stdout to your log platform; do not log request bodies.
+- **Logs:** two streams. The **application log** (pino JSON on stdout) records what the code did and why something failed, with `requestId` (also in the `X-Request-Id` header and every error response), `tenantId` and `userId`. The **access log** has one line for every request, with its latency, status, bytes and database time, for monitoring the API (see [Access log](#access-log-api-monitoring)). Ship both to your log platform; neither logs request bodies.
 - **Metrics:** `GET /metrics` in Prometheus format. It is off unless `METRICS_TOKEN` is set, and requires `Authorization: Bearer <METRICS_TOKEN>`. Series:
   - `school_http_requests_total{method,route,status}` and `school_http_request_duration_seconds` (route = template such as `/api/v1/academics/sections/:sectionId`, never raw ids)
   - `school_jobs_total{job,outcome=completed|retried|failed}` and `school_job_duration_seconds`
@@ -137,7 +138,7 @@ Note: metrics are kept per process. Prometheus scrapes each API and worker insta
 
 ## Logs and debugging
 
-Every process (API and worker) writes **one JSON object per line to stdout**: no log files to rotate. The platform collects stdout (Docker, ECS/CloudWatch, Cloud Run, Kubernetes + Loki/ELK/Datadog).
+Every process (API and worker) writes its application log as **one JSON object per line to stdout**: no log files to rotate. The platform collects stdout (Docker, ECS/CloudWatch, Cloud Run, Kubernetes + Loki/ELK/Datadog).
 
 | You want | Do |
 |---|---|
@@ -148,7 +149,7 @@ Every process (API and worker) writes **one JSON object per line to stdout**: no
 
 **Fields on every line:** `level`, `time` (ISO), `service`, `env`, `version` (`APP_VERSION`), `pid`, `msg`.
 
-**Request lines** (one per request; `info` when it worked, `warn` for 4xx and slow requests, `error` for 5xx):
+**Request lines** (requests that need attention: `warn` for 4xx and slow requests, `error` for 5xx; requests that went fine are only in the [access log](#access-log-api-monitoring). With `ACCESS_LOG=off`, every request gets a line here, `info` when it worked):
 - `req.id`, the requestId
 - `method`, `route` (the template), `res.statusCode`, `responseTime` (ms)
 - `tenantId`, `userId`, `role`
@@ -166,6 +167,57 @@ Every process (API and worker) writes **one JSON object per line to stdout**: no
 | `Report snapshot seal mismatch` | error | A published report card was changed outside the application |
 
 **Never logged:** passwords, tokens, cookies, `Authorization` headers, request bodies, query parameter values.
+
+## Access log (API monitoring)
+
+The access log answers "how is the API doing": traffic, latency, error rates, payload sizes and database time per route. It is separate from the application log above, which answers "what happened in the code and why did it fail". Each line is written when the response closes, including when the client gave up (`outcome: "aborted"`).
+
+| `ACCESS_LOG` | Where | Default for |
+|---|---|---|
+| `file` | `ACCESS_LOG_DIR/access-YYYY-MM-DD.log` (default `./logs`, one file per UTC day). Files older than `ACCESS_LOG_RETENTION_DAYS` (default 14; `0` keeps all) are deleted at start-up and at each new day | development |
+| `stdout` | Next to the application log. Every access line has `"log": "access"`, so the log platform can route it to its own index | production |
+| `off` | Not written | tests |
+
+`ACCESS_LOG_IGNORE=/health,/ready` leaves out exact paths (e.g. load-balancer probes). Writes are synchronous, so a crash or restart never drops the last lines.
+
+**Fields** (one JSON object per line):
+
+| Field | Meaning |
+|---|---|
+| `log`, `time`, `service`, `env`, `version`, `pid` | `"access"`; when the response closed (ISO); which process and release |
+| `requestId` | Same id as the application log and the `X-Request-Id` header: jump from a slow or failed line to its application-log lines |
+| `method`, `route`, `path` | `route` is the template (`/api/v1/users/students/:studentId`, null for paths outside the API router); `path` is the real path without the query string. Signed download tokens are replaced by `[redacted]` |
+| `queryKeys` | Names of the query parameters the client sent (never their values) |
+| `status`, `outcome` | HTTP status; `success`, `redirect`, `client_error`, `server_error` or `aborted` |
+| `durationMs`, `ttfbMs`, `slow` | Total time; time until the response headers were sent; `durationMs > SLOW_REQUEST_MS` |
+| `requestBytes`, `responseBytes`, `contentType` | Bytes received (`Content-Length`) and bytes actually sent (including streamed exports) |
+| `db.postgres`, `db.mongo` | `{ queries, ms }` the request spent in each database. `ms` is summed across parallel queries; for PostgreSQL it includes waiting for a free pool connection |
+| `tenantId`, `userId`, `role` | Who made the request (null before sign-in) |
+| `ip`, `userAgent`, `referer`, `origin`, `httpVersion` | The client. `ip` honours `TRUST_PROXY_HOPS`; `referer` is cut at `?` (pages such as `/set-password?token=…`) |
+| `rateLimit` | `{ limit, remaining }` of the rate limit that applied last |
+| `errorCode` | The error code the client saw (`VALIDATION_ERROR`, `NOT_FOUND`, …); the message is in the application log under the same `requestId` |
+
+**Never logged:** request or response bodies, query parameter values, cookies, the `Authorization` header, signed download tokens.
+
+**Reading it.** `node scripts/access-report.js` summarises today's file: request rate, 4xx/5xx rates, latency percentiles per route, average database time and response size, and the most frequent error codes.
+
+```bash
+node scripts/access-report.js                                  # today's file
+node scripts/access-report.js logs --sort p95 --top 15         # every file, slowest routes first
+node scripts/access-report.js logs --sort db                   # where the database time goes
+node scripts/access-report.js logs --tenant <tenantId> --since 60   # one school, last hour
+docker compose logs api | node scripts/access-report.js -      # ACCESS_LOG=stdout
+```
+
+With `jq`, ad hoc questions:
+
+```bash
+jq -c 'select(.status >= 500)' logs/access-2026-10-20.log                               # every 5xx
+jq -c 'select(.slow) | {route, durationMs, db}' logs/access-*.log                       # slow requests and their DB time
+jq -r 'select(.outcome == "aborted") | .route' logs/access-*.log | sort | uniq -c       # clients giving up
+```
+
+In a log platform (Loki, ELK, Datadog, CloudWatch), filter `log = "access"` and build panels on `route`, `status`, `durationMs` and `db.*.ms`. These numbers complement the Prometheus metrics: metrics are cheap aggregates to alert on, and the access log has the individual requests behind them.
 
 ## Backups and restore
 

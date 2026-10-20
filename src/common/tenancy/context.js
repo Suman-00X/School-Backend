@@ -8,6 +8,7 @@ import { cache } from "../cache/cache.js";
 import { decryptField } from "../crypto/fieldEncryption.js";
 import { forbidden, notFound } from "../http/errors.js";
 import { logger } from "../logging/logger.js";
+import { dbTimer } from "../observability/requestStats.js";
 import { platformTenants } from "./registry.schema.js";
 
 /* Database per school (D-45).
@@ -29,36 +30,46 @@ let platform = null;
 const connections = new Map();
 const opening = new Map();
 
-/* Time every query on a connection; slow ones are logged with their SQL (never the
-   parameter values, which can hold personal data) */
-const timeQueries = client => {
-  if (client.__timed) return;
-  client.__timed = true;
-  const query = client.query.bind(client);
-  client.query = (...args) => {
-    const started = process.hrtime.bigint();
+/* Time every query (counted into the request's access-log line); slow ones are logged with
+   their SQL (never the parameter values, which can hold personal data). pool.query is
+   drizzle's usual path, and its time includes waiting for a free connection; promise-style
+   client.query covers transactions. pool.query reaches client.query with a callback, which
+   is not timed a second time. */
+const timed =
+  query =>
+  (...args) => {
+    if (typeof args.at(-1) === "function") return query(...args);
+    const stop = dbTimer("postgres");
     const result = query(...args);
     if (result && typeof result.then === "function") {
       result.then(
         () => {
-          const ms = Number(process.hrtime.bigint() - started) / 1e6;
+          const ms = stop();
           if (ms > env.slowQueryMs) {
             const text = typeof args[0] === "string" ? args[0] : args[0]?.text;
             logger.warn({ durationMs: Math.round(ms), sql: String(text ?? "").slice(0, 1000) }, "Slow database query");
           }
         },
-        () => {}
+        () => stop()
       );
     }
     return result;
   };
+const timeQueries = client => {
+  if (client.__timed) return;
+  client.__timed = true;
+  client.query = timed(client.query.bind(client));
+};
+const timePool = pool => {
+  pool.query = timed(pool.query.bind(pool));
+  pool.on("connect", timeQueries);
+  return pool;
 };
 
 export const initTenancy = schema => {
   tenantSchema = schema;
   if (!platform) {
-    const pool = new pg.Pool({ connectionString: env.databaseUrl, max: env.pgPoolMax });
-    pool.on("connect", timeQueries);
+    const pool = timePool(new pg.Pool({ connectionString: env.databaseUrl, max: env.pgPoolMax }));
     pool.on("error", error => logger.error({ err: error }, "Platform database connection error"));
     platform = { pool, db: drizzle({ client: pool }) };
   }
@@ -136,12 +147,13 @@ const evictIdle = async () => {
 };
 
 const open = async record => {
-  const pool = new pg.Pool({
-    connectionString: databaseUrlFor(record),
-    max: env.tenancy.poolMaxPerTenant,
-    idleTimeoutMillis: 30_000
-  });
-  pool.on("connect", timeQueries);
+  const pool = timePool(
+    new pg.Pool({
+      connectionString: databaseUrlFor(record),
+      max: env.tenancy.poolMaxPerTenant,
+      idleTimeoutMillis: 30_000
+    })
+  );
   pool.on("error", error => logger.error({ err: error, tenantId: record.id }, "School database connection error"));
   /* A school's own MongoDB string gets its own connection; otherwise the shared cluster is reused */
   const ownMongo = Boolean(record.mongoUrl);

@@ -5,10 +5,12 @@ import { logger } from "./logger.js";
 
 const REQUEST_ID = /^[A-Za-z0-9-]{8,64}$/;
 
-/* One log line per request, with a request id that is also returned in the
-   X-Request-Id header (and in error responses) to correlate support tickets.
-   The line carries the route template, who made the request, how long it took and,
-   when it failed, the error code and message the client saw. */
+/* The request id, also returned in the X-Request-Id header (and in error responses) to
+   correlate support tickets, and an application-log line for requests that need attention:
+   failed (4xx/5xx) or slow. The line carries the route template, who made the request, how
+   long it took and, when it failed, the error code and message the client saw.
+   Every request, including the ones that went fine, is in the access log (accessLog.js);
+   with the access log off, this logs every request instead. */
 export const requestLogger = pinoHttp({
   logger,
   genReqId: (req, res) => {
@@ -21,7 +23,8 @@ export const requestLogger = pinoHttp({
     if (error || res.statusCode >= 500) return "error";
     if (res.statusCode >= 400) return "warn";
     /* Slow but successful */
-    return Date.now() - (res.locals.startedAt ?? Date.now()) > env.slowRequestMs ? "warn" : "info";
+    if (Date.now() - (res.locals.startedAt ?? Date.now()) > env.slowRequestMs) return "warn";
+    return env.accessLog.mode === "off" ? "info" : "silent";
   },
   customSuccessMessage: (req, res, responseTime) =>
     `${req.method} ${req.routePattern ?? req.originalUrl?.split("?")[0]} ${res.statusCode} in ${Math.round(responseTime)} ms` +
