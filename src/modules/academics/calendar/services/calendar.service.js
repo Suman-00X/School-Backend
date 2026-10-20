@@ -55,14 +55,16 @@ const assertNoPapers = async (ctx, academicYearId, { startDate, endDate }) => {
    - Event: a kind; hours optional (both or neither); some classes or the whole school
    - Meeting: a kind; one day with its hours; staff meetings have no classes; never closes
    - Other: a title; hours optional
-   A closing event may not cover a day with exam papers. Returns the row to store. */
-const shape = async (ctx, academicYear, event) => {
+   A closing event may not cover a day with exam papers. Returns the row to store.
+   uncategorised: an event stored before kinds existed (0040), edited without picking one */
+const shape = async (ctx, academicYear, event, { uncategorised = false } = {}) => {
   const { eventType } = event;
   const categories = CALENDAR_EVENT_CATEGORIES[eventType];
   const row = { ...event, endDate: event.endDate ?? event.startDate };
 
   if (categories) {
-    if (!row.category) throw unprocessable(`Pick what kind of ${eventType.toLowerCase()} it is`);
+    if (!row.category && !uncategorised) throw unprocessable(`Pick what kind of ${eventType.toLowerCase()} it is`);
+    if (row.category && !categories.includes(row.category)) throw unprocessable(`${row.category} is not a kind of ${eventType.toLowerCase()}`);
     if (!categories.includes(row.category)) throw unprocessable(`${row.category} is not a kind of ${eventType.toLowerCase()}`);
   } else row.category = null;
   if (eventType !== "EXAM" && !row.title) throw unprocessable("Give the event a title");
@@ -189,7 +191,8 @@ export const calendarService = {
     if (existing.eventType !== "EXAM") {
       if (timetable) throw unprocessable("Only an exam event has a timetable");
       if (merged.endDate < merged.startDate) throw unprocessable("endDate must be on or after startDate");
-      return base.update(ctx, eventId, editable(await shape(ctx, year, merged)));
+      const uncategorised = !existing.category && data.category === undefined;
+      return base.update(ctx, eventId, editable(await shape(ctx, year, merged, { uncategorised })));
     }
 
     /* EXAM: its dates and title follow the exam; a new timetable reschedules the papers */
