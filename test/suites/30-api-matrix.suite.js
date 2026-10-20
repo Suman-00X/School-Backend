@@ -245,6 +245,7 @@ const queryDefaults = () => ({
 /* Routes needing one of several optional filters */
 const EXTRA_QUERY = {
   "/api/v1/academics/result-policies/resolution": ["sectionId"],
+  "/api/v1/academics/class-subjects": ["classId"],
   "/api/v1/me/students/:studentId/report-cards/pdf": ["examId"]
 };
 

@@ -192,9 +192,10 @@ describe("UDISE+ and APAAR files", () => {
     assert.match(csv, /4\.5\.2 No\. of Days Child Attended School/);
     assert.match(csv, /09123456789/);
     assert.match(csv, /20240000001/);
-    /* Mother tongue "Hindi" -> language code 04; dates as DD/MM/YYYY */
+    /* Mother tongue "Hindi" -> language code 04; what is missing in the last column */
     assert.match(csv, /,04,/);
-    assert.match(csv, /\d{2}\/\d{2}\/\d{4}/);
+    assert.match(csv, /4\.1\.3 Date of Birth \(DD\/MM\/YYYY\)/);
+    assert.match(csv, /Date of birth missing/);
 
     const xlsx = await request("GET", `${GOV}/udise?sectionId=${world.s1A.id}`, inYear());
     assert.equal(xlsx.status, 200);
