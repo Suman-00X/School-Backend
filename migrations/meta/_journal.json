@@ -253,6 +253,20 @@
       "when": 1792430593196,
       "tag": "0035_off_saturdays",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792443208259,
+      "tag": "0036_class_subjects",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1792443995690,
+      "tag": "0037_class_subject_optional",
+      "breakpoints": true
     }
   ]
 }

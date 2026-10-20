@@ -17,6 +17,7 @@ export * from "./modules/academics/classes/models/class.schema.js";
 export * from "./modules/academics/subjects/models/subject.schema.js";
 export * from "./modules/academics/sections/models/section.schema.js";
 export * from "./modules/academics/section-subjects/models/sectionSubject.schema.js";
+export * from "./modules/academics/class-subjects/models/classSubject.schema.js";
 export * from "./modules/academics/teacher-assignments/models/teacherAssignment.schema.js";
 export * from "./modules/academics/enrollments/models/enrollment.schema.js";
 export * from "./modules/academics/enrollments/models/enrollmentPolicy.schema.js";

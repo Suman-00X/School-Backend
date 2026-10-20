@@ -10,7 +10,7 @@ import {
 } from "../../../../common/validation/schemas.js";
 import { SUBJECT_TYPES } from "../../shared/constants/academic.constants.js";
 
-const fields = z.object({
+export const subjectFields = z.object({
   subjectName: name(100),
   /* Stored upper-case: MA01, EN01, PHY-PR */
   subjectCode: code(/^[A-Z][A-Z0-9-]{1,9}$/, "must be 2-10 letters, digits or -, starting with a letter"),
@@ -22,9 +22,9 @@ const fields = z.object({
 const params = idParams("subjectId");
 
 export const subjectValidators = {
-  create: { body: fields },
+  create: { body: subjectFields },
   createMany: {
-    body: bulkBody("subjects", fields, {
+    body: bulkBody("subjects", subjectFields, {
       unique: [
         { field: "subjectCode", key: s => s.subjectCode },
         { field: "subjectName", key: s => s.subjectName.toLowerCase() }
@@ -33,5 +33,5 @@ export const subjectValidators = {
   },
   list: { query: listQuery() },
   getById: { params },
-  update: { params, body: patchBody(fields) }
+  update: { params, body: patchBody(subjectFields) }
 };

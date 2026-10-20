@@ -59,6 +59,59 @@ export const sectionSubjectService = {
         })
       : [],
 
+  /* For class subjects: adds the subject to each of the sections that lacks it -> the rows created */
+  addToSections: async (
+    ctx,
+    academicYearId,
+    sectionIds,
+    subject,
+    { classSubjectCode, weeklyNoOfClasses, description },
+    { dbc } = {}
+  ) => {
+    if (!sectionIds.length) return [];
+    const taught = await sectionSubjectRepository.findMany(ctx.tenantId, {
+      conditions: [inArray(sectionSubjects.sectionId, sectionIds), eq(sectionSubjects.subjectId, subject.id)],
+      dbc
+    });
+    const missing = sectionIds.filter(sectionId => !taught.some(row => row.sectionId === sectionId));
+    if (!missing.length) return [];
+
+    const placements = await Promise.all(missing.map(sectionId => sectionService.getPlacement(ctx, academicYearId, sectionId)));
+    return sectionSubjectRepository.createMany(
+      ctx.tenantId,
+      placements.map(placement => ({
+        academicYearId,
+        sectionId: placement.section.id,
+        subjectId: subject.id,
+        displayCode: sectionSubjectCode({ classSubjectCode, sectionName: placement.sectionName }),
+        weeklyNoOfClasses,
+        description
+      })),
+      { dbc }
+    );
+  },
+
+  /* For class subjects: the new classes a week and note of the subject in the sections */
+  updateInSections: (ctx, sectionIds, subjectId, values, { dbc } = {}) =>
+    sectionIds.length && Object.keys(values).length
+      ? sectionSubjectRepository.updateWhere(
+          ctx.tenantId,
+          [inArray(sectionSubjects.sectionId, sectionIds), eq(sectionSubjects.subjectId, subjectId)],
+          values,
+          { dbc }
+        )
+      : [],
+
+  /* For class subjects: takes the subject off the sections -> the rows removed */
+  removeFromSections: (ctx, sectionIds, subjectId, { dbc } = {}) =>
+    sectionIds.length
+      ? sectionSubjectRepository.softDeleteWhere(
+          ctx.tenantId,
+          [inArray(sectionSubjects.sectionId, sectionIds), eq(sectionSubjects.subjectId, subjectId)],
+          { dbc }
+        )
+      : [],
+
   isTaught: (ctx, academicYearId, sectionId, subjectId) =>
     sectionSubjectRepository.exists(ctx.tenantId, taughtConditions(academicYearId, sectionId, subjectId)),
 

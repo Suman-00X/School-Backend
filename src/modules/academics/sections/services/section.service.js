@@ -4,6 +4,7 @@ import { forbidden, notFound, unprocessable } from "../../../../common/http/erro
 import { toYearYY } from "../../../../common/utils/date.util.js";
 import { teacherService } from "../../../users/teachers/index.js";
 import { academicYearService } from "../../academic-years/index.js";
+import { classSubjectService } from "../../class-subjects/index.js";
 import { classCodeLabel, classService } from "../../classes/index.js";
 import { OUTSIDE_SCOPE, teachingScope } from "../../teacher-assignments/index.js";
 import { sections } from "../models/section.schema.js";
@@ -66,7 +67,9 @@ export const sectionService = {
 
   create: async (ctx, data) => {
     await assertReferences(ctx, data);
-    return sectionRepository.create(ctx.tenantId, { ...data, academicYearId: ctx.academicYearId });
+    const section = await sectionRepository.create(ctx.tenantId, { ...data, academicYearId: ctx.academicYearId });
+    await classSubjectService.applyToSections(ctx, ctx.academicYearId, [section]);
+    return section;
   },
 
   createMany: async (ctx, items) => {
@@ -78,10 +81,12 @@ export const sectionService = {
     ) {
       throw unprocessable("One or more sections reference a class that does not exist");
     }
-    return sectionRepository.createMany(
+    const created = await sectionRepository.createMany(
       ctx.tenantId,
       items.map(item => ({ ...item, academicYearId: ctx.academicYearId }))
     );
+    await classSubjectService.applyToSections(ctx, ctx.academicYearId, created);
+    return created;
   },
 
   update: async (ctx, sectionId, data) => {
