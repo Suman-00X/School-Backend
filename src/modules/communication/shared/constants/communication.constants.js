@@ -17,7 +17,9 @@ export const NOTIFICATION_TYPES = [
   "REFUND_APPROVED",
   "REFUND_REJECTED",
   "FEE_REMINDER",
-  "IMPORT_COMPLETED"
+  "IMPORT_COMPLETED",
+  /* Teachers: asked to cover an absent teacher's lesson, or no longer */
+  "SUBSTITUTION"
 ];
 
 export const ANNOUNCEMENT_STATUSES = ["DRAFT", "SCHEDULED", "PUBLISHED"];

@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { cache } from "../cache/cache.js";
 import { db } from "../database/postgres.js";
 import { tenants } from "../database/platform.schema.js";
-import { todayIn } from "../utils/date.util.js";
+import { timeIn, todayIn } from "../utils/date.util.js";
 import { platformDb, refreshTenantRecord, tenantRecord, tenantRecordByCode } from "./context.js";
 import { platformTenants } from "./registry.schema.js";
 
@@ -40,6 +40,12 @@ export const updateTenant = async (tenantId, changes) => {
 
 /* Today's date in the school's time zone */
 export const tenantToday = async tenantId => todayIn((await getTenant(tenantId))?.timezone ?? "UTC");
+
+/* Today's date and the time now in the school's time zone -> { date, time: "09:05:00" } */
+export const tenantNow = async tenantId => {
+  const timeZone = (await getTenant(tenantId))?.timezone ?? "UTC";
+  return { date: todayIn(timeZone), time: timeIn(timeZone) };
+};
 
 /* Valid IANA time zone? */
 export const isTimeZone = value => {

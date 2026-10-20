@@ -103,3 +103,21 @@ export const RESULT_STATUSES = ["PASS", "FAIL", "COMPARTMENT", "INCOMPLETE"];
 
 /* What a result publication (and its report snapshots) is for */
 export const PUBLICATION_KINDS = ["EXAM", "SCHEME"];
+
+/* Teachers' own marked work in a scheme bucket (see assessments). Labels only: every kind counts the same. */
+export const ASSESSMENT_TYPES = ["TEST", "ASSIGNMENT", "PROJECT", "HOMEWORK", "OTHER"];
+/* A student's entry for one item: ABSENT counts 0%, EXEMPT and MEDICAL drop the item for the student */
+export const ASSESSMENT_MARK_STATUSES = ["MARKED", "ABSENT", "EXEMPT", "MEDICAL"];
+
+/* How an absent teacher's period is covered on a date (substitution planning):
+   SUBSTITUTE  another teacher takes the class (their own subject or the timetabled one)
+   ACTIVITY    an extra or co-curricular activity, with a teacher in charge or none
+   LEISURE     nobody covers it: a leisure (free) period, no register due
+   NOT_NEEDED  the timetabled teacher takes it after all (a half day that misses it) */
+export const SUBSTITUTION_KINDS = ["SUBSTITUTE", "ACTIVITY", "LEISURE", "NOT_NEEDED"];
+/* Staff attendance marks that keep a teacher from their periods (HALF_DAY: the periods
+   before check-in or after check-out; all of them when neither is recorded) */
+export const AWAY_STATUSES = ["ABSENT", "LEAVE", "HALF_DAY"];
+
+/* An admit card is ISSUED to an eligible student; generating again WITHDRAWS it from one no longer eligible */
+export const ADMIT_CARD_STATUSES = ["ISSUED", "WITHDRAWN"];

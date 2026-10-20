@@ -21,6 +21,7 @@ import { assessmentSchemeRoutes } from "./assessment-schemes/index.js";
 import { homeworkRoutes } from "./homework/index.js";
 import { assessmentRoutes } from "./assessments/index.js";
 import { schedulingRoutes } from "./scheduling/index.js";
+import { substitutionRoutes } from "./substitutions/index.js";
 
 /* Academics module, mounted at /api/v1/academics */
 const router = createRouter();
@@ -53,5 +54,6 @@ router.use("/assessment-schemes", assessmentSchemeRoutes);
 router.use("/homework", homeworkRoutes);
 router.use("/assessments", assessmentRoutes);
 router.use("/scheduling", schedulingRoutes);
+router.use("/substitutions", substitutionRoutes);
 
 export default router;

@@ -10,6 +10,7 @@ import { sectionService } from "../../sections/index.js";
 import { sectionSubjectService } from "../../section-subjects/index.js";
 import { ATTENDANCE_MODE_KINDS, WEEKDAY_NAMES } from "../../shared/constants/academic.constants.js";
 import { subjectService } from "../../subjects/index.js";
+import { substitutionService } from "../../substitutions/index.js";
 import { OUTSIDE_SCOPE, teachingScope } from "../../teacher-assignments/index.js";
 import { periodService, timetableService } from "../../timetable/index.js";
 import {
@@ -145,11 +146,21 @@ const assertSessionRecorder = async (ctx, section, kind) => {
   );
 };
 
-/* Period registers: the slot's timetabled teacher, any subject teacher of the section, its
-   class teacher or deputy; ADMIN and PRINCIPAL. When none of them can, the period is free. */
-const assertPeriodRecorder = async (ctx, section, { period, slot }) => {
+/* Is the teacher (scope) planned to cover the slot on the date: its substitute, or the
+   teacher in charge of an activity in it (substitution planning)? */
+const plannedIn = async (ctx, scope, slot, date) => {
+  if (!scope?.teacherId || !slot) return false;
+  const plan = await substitutionService.planAt(ctx, { timetableSlotId: slot.id, date });
+  return plan?.substituteTeacherId === scope.teacherId;
+};
+
+/* Period registers: the slot's timetabled teacher, the substitute planned for it that day,
+   any subject teacher of the section, its class teacher or deputy; ADMIN and PRINCIPAL.
+   When none of them can, the period is free. */
+const assertPeriodRecorder = async (ctx, section, { period, slot }, date) => {
   const scope = await teachingScope.of(ctx);
   if (!scope || timetabledIn(scope, section, slot) || (await teachingScope.canAccessSection(ctx, section.id))) return;
+  if (await plannedIn(ctx, scope, slot, date)) return;
   throw forbidden(
     `Only a teacher of ${sectionLabel(section)} can take its ${period.name} register; otherwise mark the period free`
   );
@@ -176,14 +187,14 @@ const assertNotFree = async (ctx, section, date, period, { dbc }) => {
   }
 };
 
-/* Outside their sections a teacher reads nothing, except the slot's timetabled teacher:
-   that period's register, which they take */
+/* Outside their sections a teacher reads nothing, except the slot's timetabled teacher
+   and the substitute planned for it that day: that period's register, which they take */
 const assertTimetabledReader = async (ctx, section, { date, kind, periodNumber }) => {
   const scope = await teachingScope.of(ctx);
   if (kind === "PERIOD") {
     const lessons = await timetableService.lessonsOf(ctx, section.id);
     const slot = lessons.find(l => l.weekday === isoWeekday(date) && l.period.periodNumber === periodNumber);
-    if (timetabledIn(scope, section, slot)) return;
+    if (timetabledIn(scope, section, slot) || (await plannedIn(ctx, scope, slot, date))) return;
   }
   throw forbidden(OUTSIDE_SCOPE);
 };
@@ -266,8 +277,10 @@ export const attendanceService = {
 
     /* Period registers: a teacher of the section (substitutes included) or the timetabled one */
     const lesson = kind === "PERIOD" ? await lessonAt(ctx, section, date, periodNumber) : null;
-    if (lesson) await assertPeriodRecorder(ctx, section, lesson);
+    if (lesson) await assertPeriodRecorder(ctx, section, lesson, date);
     else await assertSessionRecorder(ctx, section, kind);
+    /* A planned substitute's subject is the register's unless another one is sent */
+    const plan = lesson?.slot ? await substitutionService.planAt(ctx, { timetableSlotId: lesson.slot.id, date }) : null;
 
     const today = await tenantToday(ctx.tenantId);
     if (date > today) throw unprocessable("Attendance cannot be recorded for a future date");
@@ -291,7 +304,7 @@ export const attendanceService = {
       const policy = await policyForWrite(ctx, policyId, date, today, tx);
       const mode = await attendanceModeService.modeOn(ctx, date, { dbc: tx });
       assertKindFits(mode, kind, date);
-      const subject = lesson ? await subjectOf(ctx, section, date, lesson, subjectId) : null;
+      const subject = lesson ? await subjectOf(ctx, section, date, lesson, subjectId ?? plan?.subjectId ?? undefined) : null;
       /* A trigger holds the same line against a free period marked meanwhile */
       if (lesson) await assertNotFree(ctx, section, date, lesson.period, { dbc: tx });
       const substitute = lesson ? await isSubstitute(ctx, lesson) : false;

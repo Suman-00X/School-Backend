@@ -182,6 +182,10 @@ export const academicYearService = {
       academicYearRepository.findOne(ctx.tenantId, [eq(academicYears.isCurrent, true)])
     ),
 
+  /* The year a date falls in (years never overlap), or null */
+  findContaining: (ctx, date) =>
+    academicYearRepository.findOne(ctx.tenantId, [lte(academicYears.startDate, date), gte(academicYears.endDate, date)]),
+
   /* The year just before a year (the latest one starting earlier), or null */
   findPrevious: async (ctx, academicYear) =>
     (

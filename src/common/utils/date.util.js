@@ -17,6 +17,16 @@ export const todayIn = (timeZone = "UTC") =>
 export const hourIn = (timeZone = "UTC") =>
   Number(new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(new Date()));
 
+/* The time it is now in a time zone, e.g. "09:05:00" (comparable with Postgres time columns) */
+export const timeIn = (timeZone = "UTC") =>
+  new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  }).format(new Date());
+
 /* 0 = Sunday … 6 = Saturday */
 export const dayOfWeek = dateString => parse(dateString).getUTCDay();
 

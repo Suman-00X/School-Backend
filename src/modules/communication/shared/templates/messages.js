@@ -108,6 +108,16 @@ export const messages = {
     body: `Only ${stockOnHand} ${unit} of ${itemName} left (reorder level ${reorderLevel}). Time to restock.`
   }),
 
+  substitutionAssigned: ({ date, periodName, startTime, sectionName, absentTeacher, what }) => ({
+    title: `Substitution: ${periodName} of ${sectionName} on ${date}`,
+    body: `Please take ${periodName} (${startTime.slice(0, 5)}) of ${sectionName} on ${date}: ${what}, in place of ${absentTeacher}.`
+  }),
+
+  substitutionCancelled: ({ date, periodName, sectionName }) => ({
+    title: `Substitution cancelled: ${periodName} of ${sectionName} on ${date}`,
+    body: `You no longer need to take ${periodName} of ${sectionName} on ${date}.`
+  }),
+
   importCompleted: ({ succeeded, failed }) => ({
     title: "Student import finished",
     body: `${succeeded} student(s) admitted, ${failed} row(s) need attention. Open the import to see the report.`

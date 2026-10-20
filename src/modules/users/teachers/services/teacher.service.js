@@ -24,6 +24,14 @@ export const teacherService = {
   /* Teacher profile of a user account (null for non-teachers) */
   findByUserId: (ctx, userId) => teacherRepository.findOne(ctx.tenantId, [eq(teachers.userId, userId)]),
 
+  /* Every teacher whose account is still active, with their name */
+  findAllActive: async ctx =>
+    (
+      await teacherRepository.findMany(ctx.tenantId, {
+        with: { user: { columns: { ...USER_SUMMARY_COLUMNS, isActive: true } } }
+      })
+    ).filter(teacher => teacher.user?.isActive),
+
   /* Teachers whose accounts are still active, with their names (others are left out) */
   findActiveByIds: async (ctx, teacherIds) => {
     if (!teacherIds.length) return [];
