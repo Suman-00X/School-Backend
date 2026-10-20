@@ -36,6 +36,7 @@ await import("./suites/26-canonical-names.suite.js");
 await import("./suites/27-admission-roll-numbers.suite.js");
 await import("./suites/28-scheduling.suite.js");
 await import("./suites/29-subject-codes.suite.js");
+await import("./suites/31-admit-cards.suite.js");
 await import("./suites/32-substitutions.suite.js");
 await import("./suites/33-nep.suite.js");
 await import("./suites/34-behaviour.suite.js");

@@ -192,6 +192,15 @@ describe("year archiving", () => {
       ),
       error => error.code === "ZA409" && error.message === "Academic year 2025-26 is archived and read-only"
     );
+    /* And admit cards, like the exam's papers */
+    await assert.rejects(
+      h.pool.query(
+        `INSERT INTO admit_cards (tenant_id, academic_year_id, exam_id, student_id, section_id, details)
+         VALUES ($1, $2, $3, $4, $5, '{}')`,
+        [h.tenant.id, world.y0.id, world.exam.id, world.s1.id, world.s1APrev.id]
+      ),
+      error => error.code === "ZA409" && error.message === "Academic year 2025-26 is archived and read-only"
+    );
 
     const year = await request("PATCH", `${A}/academic-years/${world.y0.id}`, { body: { description: "x" } });
     assert.equal(year.status, 409);

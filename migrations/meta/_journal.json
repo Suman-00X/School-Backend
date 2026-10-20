@@ -365,6 +365,13 @@
       "when": 1792528519514,
       "tag": "0051_daily_diary",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1792529209983,
+      "tag": "0052_admit_cards_archive_guard",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@ import { toMinor } from "../../../../common/money/money.js";
 import { tenantToday } from "../../../../common/tenancy/tenant.service.js";
 import { addDays } from "../../../../common/utils/date.util.js";
 import { invoiceService } from "../../../finance/invoices/index.js";
+import { academicYearService } from "../../academic-years/index.js";
 import { attendanceService } from "../../attendance/index.js";
 import { enrollmentService } from "../../enrollments/index.js";
 import { examPaperService, examService } from "../../exams/index.js";
@@ -138,6 +139,8 @@ export const examEligibilityService = {
   /* Allow a student to sit the exam whatever the rules say */
   exempt: async (ctx, examId, { studentId, reason }) => {
     const exam = await examService.getById(ctx, examId);
+    /* Exemptions have no year of their own for the archive triggers to see */
+    await academicYearService.assertWritable(ctx, exam.academicYearId);
     const enrollment = await enrollmentService.findForStudent(ctx, studentId, exam.academicYearId);
     if (!enrollment) throw unprocessable("The student is not enrolled in the exam's academic year");
     return examEligibilityExemptionRepository.create(ctx.tenantId, {
@@ -150,6 +153,7 @@ export const examEligibilityService = {
 
   /* The rules apply to the student again (an admit card already issued stays until cards are generated again) */
   removeExemption: async (ctx, examId, studentId) => {
+    await academicYearService.assertWritable(ctx, (await examService.getById(ctx, examId)).academicYearId);
     const exemption = await examEligibilityExemptionRepository.findOne(ctx.tenantId, [
       eq(examEligibilityExemptions.examId, examId),
       eq(examEligibilityExemptions.studentId, studentId)

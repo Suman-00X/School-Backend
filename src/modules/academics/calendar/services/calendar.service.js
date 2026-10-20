@@ -6,7 +6,8 @@ import { eachDay, maxDate, minDate } from "../../../../common/utils/date.util.js
 import { academicYearService } from "../../academic-years/index.js";
 import { isWeeklyOff } from "../../academic-years/utils/weeklyOff.util.js";
 import { classService } from "../../classes/index.js";
-import { examPaperService, examService } from "../../exams/index.js";
+import { publish } from "../../../../common/events/events.js";
+import { EXAM_SCHEDULE_CHANGED, examPaperService, examService } from "../../exams/index.js";
 import {
   CALENDAR_EVENT_CATEGORIES,
   MAX_HOLIDAY_DAYS,
@@ -175,6 +176,7 @@ export const calendarService = {
       return calendarEventRepository.create(ctx.tenantId, { ...row, academicYearId: year.id }, { dbc });
     });
     await syncExamDates(ctx, exam, window);
+    await publish(EXAM_SCHEDULE_CHANGED, { tenantId: ctx.tenantId, examId: exam.id });
     return created;
   },
 
@@ -201,6 +203,8 @@ export const calendarService = {
       return calendarEventRepository.update(ctx.tenantId, eventId, row, { dbc });
     });
     await syncExamDates(ctx, exam, window);
+    /* Others that show the papers (admit cards) follow; this event already spans them */
+    await publish(EXAM_SCHEDULE_CHANGED, { tenantId: ctx.tenantId, examId: exam.id });
     return updated;
   },
 

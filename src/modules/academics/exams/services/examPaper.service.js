@@ -179,7 +179,7 @@ export const examPaperService = {
       ...(data.startTime && { startTime: merged.startTime }),
       ...(data.endTime && { endTime: merged.endTime })
     });
-    if (["examDate", "startTime", "endTime"].some(key => data[key] !== undefined)) await scheduleChanged(ctx, examId);
+    if (["examDate", "startTime", "endTime", "room"].some(key => data[key] !== undefined)) await scheduleChanged(ctx, examId);
     return updated;
   },
 
