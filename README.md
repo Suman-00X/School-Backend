@@ -19,7 +19,16 @@ npm install
 npm run dev:memory
 ```
 
-It seeds a demo school (code `DEMO`) and an admin who can sign in: `POST /api/v1/auth/login {"schoolCode":"DEMO","email":"admin@demo.school","password":"Admin12345"}`. It also prints a 12-hour admin token. Send the access token as `Authorization: Bearer <token>`.
+It seeds a demo school (code `DEMO`) and an admin who can sign in: `POST /api/v1/auth/login {"email":"admin@demo.school","password":"Admin12345"}` (no school code: the school is found from the email; see [API.md](docs/API.md#signing-in-without-a-school-code)). It also prints a 12-hour admin token. Send the access token as `Authorization: Bearer <token>`.
+
+**A full demo school** (same throwaway databases, about 10 seconds to fill): `npm run dev:demo` adds every kind of account, linked the way a real school is, and a term of history. It prints a sign-in sheet and writes every account (role, user ID, profile ID, code, password) to `docs/DEMO_ACCOUNTS.md`, rewritten each run since the IDs change; every account uses the password `Admin12345`.
+
+- **People:** 9 staff (principal, accountant, 2 office staff, and the 5 module managers), 9 teachers, 30 students in Classes 6–8 (sections A and B), and 50 parents. Siblings share parents; one student has a guardian, one a single mother.
+- **Academics:** class and deputy class teachers, subject teachers, a clash-free timetable, daily attendance since the year began, and two exams with marks and published report cards. Homework comes with submissions and grades.
+- **Fees:** quarterly and annual plans, concessions, paid, partial and overdue invoices, late fees with one waiver, a refund, and ledger expenses.
+- **Other modules:** hostel boarders, bus riders, library loans (overdue, returned and renewed) with a hold, inventory with low stock, leave requests, staff attendance and payroll. Also operator roles, announcements and messages.
+
+All dates are relative to today. `npm run school:seed-demo -- [--code DEMO] [--password Demo12345]` builds the same school on the configured databases (`school_<code>`; refused in production). The code is in `scripts/lib/demo-school/`.
 
 **Against real databases:**
 
@@ -54,6 +63,7 @@ docker compose run --rm api node scripts/create-school.js --name "Demo School" -
 | `npm run mongo:sync-indexes` | Builds MongoDB indexes in every school's database (production) |
 | `npm run worker` | Background job worker (with `REDIS_URL`) |
 | `npm run school:create -- …` | Creates a school's databases, migrates them, and invites its first admin |
+| `npm run dev:demo`, `npm run school:seed-demo -- …` | A demo school full of linked data: in memory, or on the configured databases |
 | `npm run backup`, `npm run restore -- <dir>` | Portable backups (see OPERATIONS.md) |
 | `npm run docs:endpoints` | Regenerates docs/ENDPOINTS.md |
 
