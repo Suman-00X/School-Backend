@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { h, world, request, get, post, uuid } from "../helpers/harness.js";
+import { h, world, request, get, post, del, uuid } from "../helpers/harness.js";
 
 const A = "/api/v1/academics";
 
@@ -115,5 +115,23 @@ describe("exams and marks", () => {
     const math = marks.data.find(m => m.examPaperId === world.paper.id);
     assert.equal(math.marksObtained, 90);
     assert.equal(math.examPaper.exam.examName, "Mid Term");
+  });
+
+  it("removes an exam nothing depends on, with its papers", async () => {
+    const spare = (await post(`${A}/exams`, { examName: "Spare Test" })).data;
+    await post(`${A}/exams/${spare.id}/papers`, { sectionId: world.s1A.id, subjectId: world.math.id, maxMarks: 20 });
+    await del(`${A}/exams/${spare.id}`);
+    await get(`${A}/exams/${spare.id}`, {}, 404);
+    await get(`${A}/exams/${spare.id}/papers`, {}, 404);
+    await del(`${A}/exams/${spare.id}`, {}, 404);
+
+    /* The name is free again */
+    const again = (await post(`${A}/exams`, { examName: "Spare Test" })).data;
+    await del(`${A}/exams/${again.id}`);
+
+    /* Mid Term has recorded marks */
+    const refused = await del(`${A}/exams/${world.exam.id}`, {}, 409);
+    assert.match(refused.message, /recorded marks/);
+    await del(`${A}/exams/${world.exam.id}`, { as: h.tokens.teacher }, 403);
   });
 });

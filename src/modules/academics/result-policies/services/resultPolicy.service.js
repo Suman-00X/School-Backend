@@ -195,6 +195,10 @@ export const resultPolicyService = {
 
   exists: (ctx, policyId) => resultPolicyRepository.exists(ctx.tenantId, [eq(resultPolicies.id, policyId)]),
 
+  /* A removed exam takes its policy assignments with it */
+  releaseExam: (ctx, examId, { dbc }) =>
+    resultPolicyAssignmentRepository.softDeleteWhere(ctx.tenantId, [eq(resultPolicyAssignments.examId, examId)], { dbc }),
+
   /* The policy for an exam sat by a class: exam + class, exam, class, school default, built-in.
      For an assessment scheme pass examId null (scheme -> class -> default). -> { policy, source } */
   resolve: async (ctx, { examId = null, classId = null }) => {

@@ -1,8 +1,16 @@
 import { eq } from "drizzle-orm";
 import { createCrudService } from "../../../../common/crud/crudService.js";
-import { unprocessable } from "../../../../common/http/errors.js";
+import { publish } from "../../../../common/events/events.js";
+import { transaction } from "../../../../common/database/postgres.js";
+import { conflict, unprocessable } from "../../../../common/http/errors.js";
+import { admitCardService } from "../../admit-cards/index.js";
+import { examEligibilityService } from "../../exam-eligibility/index.js";
 import { gradingService } from "../../grading/index.js";
+import { marksService } from "../../marks/index.js";
+import { resultPolicyService } from "../../result-policies/index.js";
 import { exams } from "../models/exam.schema.js";
+import { examPapers } from "../models/examPaper.schema.js";
+import { examPaperRepository } from "../repositories/examPaper.repository.js";
 import { examRepository } from "../repositories/exam.repository.js";
 
 export const EXAM_RESULTS_PUBLISHED = "academics.exam.resultsPublished";
@@ -35,6 +43,31 @@ export const examService = {
   update: async (ctx, examId, data) => {
     await assertScale(ctx, data.gradeScaleId);
     return base.update(ctx, examId, data);
+  },
+
+  /* Only an exam nothing depends on yet: no published results, no marks, in no assessment scheme.
+     Its papers, exam-specific result policy assignments, admit cards and eligibility exemptions go with it. */
+  remove: async (ctx, examId) => {
+    const exam = await base.getById(ctx, examId);
+    if (exam.resultsPublishedAt) {
+      throw conflict(`${exam.examName} has published results. Withdraw them before removing the exam.`);
+    }
+    if (await marksService.hasMarksForExam(ctx, examId)) {
+      throw conflict(`${exam.examName} already has recorded marks and cannot be removed`);
+    }
+    const schemes = await examRepository.schemeNames(ctx.tenantId, examId);
+    if (schemes.length) {
+      throw conflict(`${exam.examName} is part of ${schemes.join(", ")}. Take it out of the scheme before removing the exam.`);
+    }
+    await transaction(async tx => {
+      await examPaperRepository.softDeleteWhere(ctx.tenantId, [eq(examPapers.examId, examId)], { dbc: tx });
+      await resultPolicyService.releaseExam(ctx, examId, { dbc: tx });
+      await admitCardService.releaseExam(ctx, examId, { dbc: tx });
+      await examEligibilityService.releaseExam(ctx, examId, { dbc: tx });
+      await examRepository.softDelete(ctx.tenantId, examId, { dbc: tx });
+    });
+    await publish(EXAM_SCHEDULE_CHANGED, { tenantId: ctx.tenantId, examId });
+    return exam;
   },
 
   /* For other submodules: null when missing */

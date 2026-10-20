@@ -267,6 +267,13 @@
       "when": 1792443995690,
       "tag": "0037_class_subject_optional",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792445748059,
+      "tag": "0038_exam_name_active_only",
+      "breakpoints": true
     }
   ]
 }

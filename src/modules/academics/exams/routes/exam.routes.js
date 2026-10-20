@@ -15,6 +15,7 @@ router.post("/bulk", authorize(can.create), validate(rules.createMany), inYear, 
 router.get("/", authorize(can.read), validate(rules.list), inYear, controller.list);
 router.get("/:examId", authorize(can.read), validate(rules.getById), controller.getById);
 router.patch("/:examId", authorize(can.update), validate(rules.update), controller.update);
+router.delete("/:examId", authorize(can.remove), validate(rules.remove), controller.remove);
 
 /* /:examId/result-publication is served by report-cards (it stores report snapshots) */
 

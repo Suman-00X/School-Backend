@@ -77,6 +77,7 @@ export const examValidators = {
   list: { query: listQuery() },
   getById: { params },
   update: { params, body: patchBody(examFields) },
+  remove: { params },
 
   /* /exams/:examId/papers */
   listPapers: { params, query: listQuery({ sectionId: id().optional() }) },

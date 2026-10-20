@@ -194,6 +194,18 @@ export const marksService = {
 
   hasMarksForPaper: (ctx, paperId) => marksRepository.exists(ctx.tenantId, [eq(marks.examPaperId, paperId)]),
 
+  /* Any marks on the exam's current papers */
+  hasMarksForExam: (ctx, examId) =>
+    marksRepository.exists(ctx.tenantId, [
+      inArray(
+        marks.examPaperId,
+        db
+          .select({ id: examPapers.id })
+          .from(examPapers)
+          .where(and(eq(examPapers.tenantId, ctx.tenantId), eq(examPapers.examId, examId), eq(examPapers.isActive, true)))
+      )
+    ]),
+
   highestForPaper: async (ctx, paperId) => {
     const [row] = await db
       .select({ highest: max(marks.marksObtained) })
