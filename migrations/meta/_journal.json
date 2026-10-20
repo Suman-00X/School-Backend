@@ -281,6 +281,13 @@
       "when": 1792492766197,
       "tag": "0039_teacher_assessment_buckets",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792513402042,
+      "tag": "0040_calendar_event_details",
+      "breakpoints": true
     }
   ]
 }

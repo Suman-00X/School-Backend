@@ -10,12 +10,13 @@ describe("calendar", () => {
     const holiday = await post(`${A}/calendar/events`, {
       title: "Founders' Day",
       eventType: "HOLIDAY",
+      category: "SCHOOL",
       startDate: "2026-07-08"
     });
     assert.equal(holiday.data.isHoliday, true);
     assert.equal(holiday.data.endDate, "2026-07-08");
-    await post(`${A}/calendar/events`, { title: "Sports Day", eventType: "EVENT", startDate: "2026-07-10" });
-    await post(`${A}/calendar/events`, { title: "Too late", eventType: "EVENT", startDate: "2027-06-01" }, {}, 422);
+    await post(`${A}/calendar/events`, { title: "Sports Day", eventType: "EVENT", category: "SPORTS_DAY", startDate: "2026-07-10" });
+    await post(`${A}/calendar/events`, { title: "Too late", eventType: "EVENT", category: "CELEBRATION", startDate: "2027-06-01" }, {}, 422);
 
     /* Mon 6 … Sat 11 July 2026, Sunday off, Wed 8 holiday -> 5 working days */
     const days = await get(`${A}/calendar/working-days?from=2026-07-06&to=2026-07-12`);

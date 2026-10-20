@@ -1,5 +1,9 @@
-import { eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
+import { publish } from "../../../../common/events/events.js";
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
+import { academicYearService } from "../../academic-years/index.js";
+/* Cycle with calendar (it schedules exams): only used inside functions */
+import { calendarService } from "../../calendar/index.js";
 import { marksService } from "../../marks/index.js";
 import { sectionService } from "../../sections/index.js";
 import { sectionSubjectService } from "../../section-subjects/index.js";
@@ -8,7 +12,7 @@ import { teachingScope } from "../../teacher-assignments/index.js";
 import { examPaperCode } from "../../shared/utils/codes.util.js";
 import { examPapers } from "../models/examPaper.schema.js";
 import { examPaperRepository } from "../repositories/examPaper.repository.js";
-import { examService } from "./exam.service.js";
+import { EXAM_SCHEDULE_CHANGED, examService } from "./exam.service.js";
 
 const withDetails = {
   section: { columns: { id: true, sectionName: true } },
@@ -36,6 +40,20 @@ const assertNoScheduleClash = async (ctx, { sectionId, examDate, startTime, endT
     );
   }
 };
+
+const scheduleChanged = (ctx, examId) => publish(EXAM_SCHEDULE_CHANGED, { tenantId: ctx.tenantId, examId });
+
+const CLOSED = { WEEKLY_OFF: "a weekly off day", HOLIDAY: "a holiday", VACATION: "in a vacation", OUTSIDE_ACADEMIC_YEAR: "outside the academic year" };
+
+/* A paper is sat on a school day of its exam's year */
+const assertSchoolDay = async (ctx, academicYearId, examDate) => {
+  if (!examDate) return;
+  const year = await academicYearService.findById(ctx, academicYearId);
+  const closure = await calendarService.closureOn(ctx, year, examDate);
+  if (closure) throw unprocessable(`${examDate} is ${CLOSED[closure] ?? "a day the school is closed"}: no exam paper can be sat that day`);
+};
+
+const overlaps = (a, b) => a.startTime < b.endTime && a.endTime > b.startTime;
 
 const loadPaper = async (ctx, examId, paperId) => {
   const paper = await examPaperRepository.findById(ctx.tenantId, paperId);
@@ -80,11 +98,10 @@ export const examPaperService = {
     }
   ) => {
     const exam = await examService.getById(ctx, examId);
-    const placement = await sectionService.getPlacement(ctx, exam.academicYearId, sectionId);
+    await sectionService.getPlacement(ctx, exam.academicYearId, sectionId);
 
-    if (!(await sectionSubjectService.isTaught(ctx, exam.academicYearId, sectionId, subjectId))) {
-      throw unprocessable("This subject is not taught in the section. Add it to the section first.");
-    }
+    const taught = await sectionSubjectService.findTaught(ctx, exam.academicYearId, sectionId, subjectId);
+    if (!taught) throw unprocessable("This subject is not taught in the section. Add it to the section first.");
     const subject = await subjectService.findById(ctx, subjectId);
 
     /* A subject has one whole paper, or one paper per component, all graded the same way */
@@ -109,27 +126,25 @@ export const examPaperService = {
     }
 
     const schedule = { sectionId, examDate, startTime: toTime(startTime), endTime: toTime(endTime) };
+    await assertSchoolDay(ctx, exam.academicYearId, examDate);
     await assertNoScheduleClash(ctx, schedule);
 
-    return examPaperRepository.create(ctx.tenantId, {
+    const paper = await examPaperRepository.create(ctx.tenantId, {
       academicYearId: exam.academicYearId,
       examId,
       sectionId,
       subjectId,
       component,
       gradingType,
-      displayCode: examPaperCode({
-        subjectCode: subject.subjectCode,
-        examType: exam.examType,
-        component,
-        ...placement
-      }),
+      displayCode: examPaperCode({ sectionSubjectCode: taught.displayCode, examType: exam.examType, component }),
       ...schedule,
       room,
       maxMarks,
       passMarks,
       description
     });
+    await scheduleChanged(ctx, examId);
+    return paper;
   },
 
   /* Reschedule or change marks. Max marks cannot drop below marks already recorded. */
@@ -156,13 +171,16 @@ export const examPaperService = {
         throw unprocessable(`maxMarks cannot be below the highest recorded mark (${highest})`);
       }
     }
+    if (data.examDate) await assertSchoolDay(ctx, paper.academicYearId, data.examDate);
     await assertNoScheduleClash(ctx, merged, paperId);
 
-    return examPaperRepository.update(ctx.tenantId, paperId, {
+    const updated = await examPaperRepository.update(ctx.tenantId, paperId, {
       ...data,
       ...(data.startTime && { startTime: merged.startTime }),
       ...(data.endTime && { endTime: merged.endTime })
     });
+    if (["examDate", "startTime", "endTime"].some(key => data[key] !== undefined)) await scheduleChanged(ctx, examId);
+    return updated;
   },
 
   remove: async (ctx, examId, paperId) => {
@@ -170,11 +188,85 @@ export const examPaperService = {
     if (await marksService.hasMarksForPaper(ctx, paperId)) {
       throw conflict("This paper already has recorded marks and cannot be removed");
     }
-    return examPaperRepository.softDelete(ctx.tenantId, paperId);
+    const removed = await examPaperRepository.softDelete(ctx.tenantId, paperId);
+    await scheduleChanged(ctx, examId);
+    return removed;
+  },
+
+  /* The exam's whole timetable at once (the calendar's exam event): every paper of the exam
+     once, [{ paperId, examDate, startTime, endTime, room? }]. A section sits one paper at a
+     time, in this exam and with other exams' papers. Returns the papers as saved. */
+  setSchedule: async (ctx, examId, rows, { dbc } = {}) => {
+    const papers = await examPaperService.findForExam(ctx, examId);
+    if (!papers.length) throw unprocessable("This exam has no papers yet. Add its papers on the exam's page first.");
+    const byId = new Map(papers.map(p => [p.id, p]));
+    const seen = new Set();
+    for (const row of rows) {
+      if (!byId.has(row.paperId)) throw unprocessable("The timetable lists a paper that is not part of this exam");
+      if (seen.has(row.paperId)) throw unprocessable("The timetable lists a paper twice");
+      seen.add(row.paperId);
+    }
+    const missing = papers.filter(p => !seen.has(p.id));
+    if (missing.length) {
+      const names = missing.slice(0, 3).map(p => `${p.subject.subjectName} (${p.section.sectionName})`);
+      throw unprocessable(`Every paper needs a date and time: ${names.join(", ")}${missing.length > 3 ? ` and ${missing.length - 3} more` : ""}`);
+    }
+
+    const slots = rows.map(row => ({ ...row, startTime: toTime(row.startTime), endTime: toTime(row.endTime), paper: byId.get(row.paperId) }));
+    for (const slot of slots) if (slot.endTime <= slot.startTime) throw unprocessable(`${slot.paper.subject.subjectName}: the end time must be after the start`);
+
+    /* Within the exam */
+    for (let i = 0; i < slots.length; i++) {
+      for (let j = i + 1; j < slots.length; j++) {
+        const a = slots[i];
+        const b = slots[j];
+        if (a.paper.sectionId === b.paper.sectionId && a.examDate === b.examDate && overlaps(a, b)) {
+          throw conflict(`Section ${a.paper.section.sectionName} would sit ${a.paper.subject.subjectName} and ${b.paper.subject.subjectName} at the same time on ${a.examDate}`);
+        }
+      }
+    }
+    /* With other exams' papers on those days */
+    const others = await examPaperRepository.findMany(ctx.tenantId, {
+      conditions: [
+        ne(examPapers.examId, examId),
+        inArray(examPapers.sectionId, [...new Set(slots.map(s => s.paper.sectionId))]),
+        inArray(examPapers.examDate, [...new Set(slots.map(s => s.examDate))])
+      ],
+      with: withDetails,
+      dbc
+    });
+    for (const slot of slots) {
+      const clash = others.find(o => o.sectionId === slot.paper.sectionId && o.examDate === slot.examDate && o.startTime && o.endTime && overlaps(slot, o));
+      if (clash) {
+        throw conflict(
+          `Section ${slot.paper.section.sectionName} already sits ${clash.subject.subjectName} (${clash.displayCode}) of another exam on ${slot.examDate} from ${clash.startTime.slice(0, 5)} to ${clash.endTime.slice(0, 5)}`
+        );
+      }
+    }
+
+    const saved = [];
+    for (const slot of slots) {
+      saved.push(
+        await examPaperRepository.update(
+          ctx.tenantId,
+          slot.paperId,
+          { examDate: slot.examDate, startTime: slot.startTime, endTime: slot.endTime, ...(slot.room ? { room: slot.room } : {}) },
+          { dbc, conditions: [eq(examPapers.examId, examId)] }
+        )
+      );
+    }
+    return saved;
   },
 
   /* For other submodules */
   findById: (ctx, paperId) => examPaperRepository.findById(ctx.tenantId, paperId),
+
+  /* Papers of the year sat between from and to (inclusive), e.g. under a new holiday */
+  findScheduledBetween: (ctx, academicYearId, from, to) =>
+    examPaperRepository.findMany(ctx.tenantId, {
+      conditions: [eq(examPapers.academicYearId, academicYearId), and(gte(examPapers.examDate, from), lte(examPapers.examDate, to))],
+      with: withDetails
+    }),
 
   findForExam: (ctx, examId, { sectionId } = {}) =>
     examPaperRepository.findMany(ctx.tenantId, {

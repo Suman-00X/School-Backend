@@ -14,6 +14,9 @@ import { examPaperRepository } from "../repositories/examPaper.repository.js";
 import { examRepository } from "../repositories/exam.repository.js";
 
 export const EXAM_RESULTS_PUBLISHED = "academics.exam.resultsPublished";
+/* A paper was scheduled, rescheduled or removed, or the exam was removed: the calendar's
+   exam event follows ({ tenantId, examId }) */
+export const EXAM_SCHEDULE_CHANGED = "academics.exam.scheduleChanged";
 
 const base = createCrudService(examRepository, { entity: "Exam" });
 

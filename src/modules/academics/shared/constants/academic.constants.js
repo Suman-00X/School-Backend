@@ -25,6 +25,18 @@ export const CLASS_LEVEL_KEYS = CLASS_LEVELS.map(l => l.level);
 export const CALENDAR_EVENT_TYPES = ["HOLIDAY", "VACATION", "EXAM", "EVENT", "MEETING", "OTHER"];
 /* Event types that close the school for the day */
 export const NON_WORKING_EVENT_TYPES = ["HOLIDAY", "VACATION"];
+/* What kind of holiday, vacation, event or meeting it is (calendar_events.category).
+   An exam has none: it names its exam instead. Other has none. */
+export const CALENDAR_EVENT_CATEGORIES = {
+  HOLIDAY: ["NATIONAL", "FESTIVAL", "REGIONAL", "SCHOOL"],
+  VACATION: ["SUMMER", "WINTER", "FESTIVAL_BREAK", "TERM_BREAK"],
+  EVENT: ["SPORTS_DAY", "ANNUAL_DAY", "CULTURAL", "CELEBRATION", "COMPETITION", "FIELD_TRIP", "WORKSHOP"],
+  MEETING: ["PARENT_TEACHER", "PARENT_ORIENTATION", "STAFF", "MANAGEMENT"]
+};
+/* Meetings for staff only: they have no classes */
+export const STAFF_MEETING_CATEGORIES = ["STAFF", "MANAGEMENT"];
+/* A holiday is a few days at most; a longer break is a vacation */
+export const MAX_HOLIDAY_DAYS = 7;
 
 export const ATTENDANCE_STATUSES = ["PRESENT", "ABSENT", "LATE", "HALF_DAY", "EXCUSED"];
 /* How much of a day each status counts as attended */

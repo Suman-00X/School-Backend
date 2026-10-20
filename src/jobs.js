@@ -15,3 +15,4 @@ import "./modules/library/holds/jobs/studentLeft.job.js";
 import "./modules/auth/credentials/jobs/credential.job.js";
 import "./modules/transport/assignments/jobs/studentLeft.job.js";
 import "./modules/hostel/allocations/jobs/studentLeft.job.js";
+import "./modules/academics/calendar/jobs/examSchedule.job.js";
