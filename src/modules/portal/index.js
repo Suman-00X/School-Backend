@@ -4,6 +4,7 @@ import { learningRoutes } from "./learning/index.js";
 import { feesRoutes } from "./fees/index.js";
 import { portalHomeworkRoutes } from "./homework/index.js";
 import { portalBehaviourRoutes } from "./behaviour/index.js";
+import { portalCertificateRoutes } from "./certificates/index.js";
 import { inboxRoutes } from "../communication/notifications/index.js";
 
 /* Portal module (self-service), mounted at /api/v1/me */
@@ -13,6 +14,7 @@ router.use("/", learningRoutes);
 router.use("/", feesRoutes);
 router.use("/", portalHomeworkRoutes);
 router.use("/", portalBehaviourRoutes);
+router.use("/", portalCertificateRoutes);
 router.use("/", inboxRoutes);
 router.use("/", profileRoutes);
 
