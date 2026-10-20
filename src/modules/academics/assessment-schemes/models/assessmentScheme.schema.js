@@ -6,7 +6,8 @@ import { exams } from "../../exams/models/exam.schema.js";
 import { resultPolicies } from "../../result-policies/models/resultPolicy.schema.js";
 
 /* A term or annual result that combines exams with weights
-   (Term 1 40% + Term 2 60%; periodic tests 10% + half-yearly 30% + annual 60%) */
+   (Term 1 40% + Term 2 60%; periodic tests 10% + half-yearly 30% + annual 60%),
+   and optionally buckets of teachers' own assessments (Teacher assessments 20%) */
 export const assessmentSchemes = pgTable(
   "assessment_schemes",
   {
@@ -47,12 +48,37 @@ export const assessmentSchemeExams = pgTable(
   ]
 );
 
+/* A share of the scheme filled by teachers' own tests, assignments, projects and homework.
+   Per subject, a student's items are averaged (each item's percentage counts equally)
+   and the average carries the bucket's weight. Exam and bucket weights sum to 100. */
+export const assessmentSchemeBuckets = pgTable(
+  "assessment_scheme_buckets",
+  {
+    ...baseColumns(),
+    schemeId: uuid("scheme_id")
+      .notNull()
+      .references(() => assessmentSchemes.id),
+    name: text("name").notNull(),
+    weight: numeric("weight", { precision: 5, scale: 2, mode: "number" }).notNull(),
+    sortOrder: integer("sort_order").notNull().default(0)
+  },
+  t => [
+    uniqueIndex("assessment_scheme_buckets_name_uq").on(t.schemeId, sql`lower(${t.name})`).where(activeRows(t)),
+    check("assessment_scheme_buckets_weight_chk", sql`${t.weight} > 0 AND ${t.weight} <= 100`)
+  ]
+);
+
 export const assessmentSchemesRelations = relations(assessmentSchemes, ({ one, many }) => ({
   exams: many(assessmentSchemeExams),
+  buckets: many(assessmentSchemeBuckets),
   policy: one(resultPolicies, { fields: [assessmentSchemes.policyId], references: [resultPolicies.id] })
 }));
 
 export const assessmentSchemeExamsRelations = relations(assessmentSchemeExams, ({ one }) => ({
   scheme: one(assessmentSchemes, { fields: [assessmentSchemeExams.schemeId], references: [assessmentSchemes.id] }),
   exam: one(exams, { fields: [assessmentSchemeExams.examId], references: [exams.id] })
+}));
+
+export const assessmentSchemeBucketsRelations = relations(assessmentSchemeBuckets, ({ one }) => ({
+  scheme: one(assessmentSchemes, { fields: [assessmentSchemeBuckets.schemeId], references: [assessmentSchemes.id] })
 }));

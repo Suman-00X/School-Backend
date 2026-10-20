@@ -1,4 +1,5 @@
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
+import { assessmentService } from "../../assessments/index.js";
 import { enrollmentService } from "../../enrollments/index.js";
 import { marksService } from "../../marks/index.js";
 import { policyView, resultEngine, resultPolicyService } from "../../result-policies/index.js";
@@ -21,7 +22,10 @@ import { assessmentSchemeService } from "./assessmentScheme.service.js";
    Per subject: each exam's percentage, weighted; exams where the paper was excluded
    (exempt, or a medical absence the policy excludes) drop out and the other weights
    are rescaled. An absence counted as zero contributes 0%. Pass marks are weighted
-   the same way. The weighted subjects (out of 100) then go through the same policy
+   the same way. A bucket of teachers' own assessments is one more weighted part of each
+   subject: the student's average over its items (see assessments). A subject with no
+   marked items in a bucket leaves the bucket out (weights rescaled), and so does a student
+   exempt from every item. The weighted subjects (out of 100) then go through the same policy
    engine: pass criteria, grace, best-of-N, compartment, grades, GPA and ranks.
    CGPA is the credit-weighted mean of every exam's subject grade points. */
 
@@ -48,6 +52,7 @@ const weightedSubject = (subject, entries, policy) => {
   const exams = entries.map(({ exam, weight, line }) => ({
     examId: exam.id,
     examName: exam.examName,
+    ...(exam.kind && { kind: exam.kind }),
     weight,
     status: line.status,
     percentage: line.status === "NOT_RECORDED" || isExcluded(line) ? null : line.percentage,
@@ -104,12 +109,38 @@ const cgpaOf = (policy, perExam) => {
     : null;
 };
 
+/* A bucket stands in the breakdown as one more column next to the exams */
+const bucketKey = bucket => `bucket:${bucket.id}`;
+
 const schemeView = scheme => ({
   id: scheme.id,
   name: scheme.name,
   resultsPublishedAt: scheme.resultsPublishedAt,
-  exams: scheme.exams.map(e => ({ examId: e.examId, examName: e.exam.examName, weight: e.weight }))
+  exams: [
+    ...scheme.exams.map(e => ({ examId: e.examId, examName: e.exam.examName, weight: e.weight })),
+    ...(scheme.buckets ?? []).map(b => ({ examId: bucketKey(b), examName: b.name, weight: b.weight, kind: "BUCKET" }))
+  ]
 });
+
+/* A student's bucket average as a subject line (out of 100); undefined when the bucket has no items */
+const bucketEntry = (bucket, score) => {
+  if (score === undefined) return null;
+  const exam = { id: bucketKey(bucket), examName: bucket.name, kind: "BUCKET" };
+  const line =
+    score === null
+      ? { status: "EXEMPT", counted: false, percentage: null, absenceReason: "EXEMPT", category: "SCHOLASTIC" }
+      : {
+          status: "PRESENT",
+          counted: true,
+          percentage: score,
+          marksObtained: score,
+          maxMarks: 100,
+          passMarks: null,
+          grade: null,
+          category: "SCHOLASTIC"
+        };
+  return { exam, weight: bucket.weight, line };
+};
 
 /* One section's weighted sheet */
 const buildSheet = async (ctx, scheme, section, perExamPapers, override) => {
@@ -121,11 +152,17 @@ const buildSheet = async (ctx, scheme, section, perExamPapers, override) => {
   const { policy, scale, coScale } = context;
   const examPolicy = perExamPolicy(policy);
   const exams = perExamPapers.map(entry => ({ ...entry, groups: subjectGroups(entry.papers) }));
-  const [roster, marks] = await Promise.all([
+  const buckets = scheme.buckets ?? [];
+  const [roster, marks, scoreOf] = await Promise.all([
     enrollmentService.findRoster(ctx, section.id, { includeLeft: true }),
     marksService.findForPapers(
       ctx,
       exams.flatMap(e => e.papers.map(p => p.id))
+    ),
+    assessmentService.sectionScores(
+      ctx,
+      section.id,
+      buckets.map(b => b.id)
     )
   ]);
   const markOf = new Map(marks.map(m => [`${m.studentId}:${m.examPaperId}`, m]));
@@ -151,6 +188,14 @@ const buildSheet = async (ctx, scheme, section, perExamPapers, override) => {
       for (const line of [...result.subjects, ...result.coScholastic]) {
         if (!subjects.has(line.subject.id)) subjects.set(line.subject.id, { subject: line.subject, entries: [] });
         subjects.get(line.subject.id).entries.push({ exam, weight, line });
+      }
+    }
+    /* Buckets join the scholastic subjects the exams have */
+    for (const { subject, entries } of subjects.values()) {
+      if (entries.every(e => e.line.category === "CO_SCHOLASTIC")) continue;
+      for (const bucket of buckets) {
+        const entry = bucketEntry(bucket, scoreOf(bucket.id, subject.id, enrollment.studentId));
+        if (entry) entries.push(entry);
       }
     }
 
@@ -309,10 +354,11 @@ export const schemeResultService = {
   },
 
   pdf: async (ctx, schemeId, studentId) => {
-    const { student, report, row } = await schemeResultService.forStudent(ctx, schemeId, studentId);
+    const { student, report, row, academicYearId } = await schemeResultService.forStudent(ctx, schemeId, studentId);
     return reportCardPdfService.renderReport(ctx, {
       report,
       student: { ...student, firstName: row.firstName, lastName: row.lastName, admissionNumber: row.admissionNumber },
+      academicYearId,
       footnote: report.scheme.resultsPublishedAt ? "Live results" : "Provisional: these results are not published yet"
     });
   },

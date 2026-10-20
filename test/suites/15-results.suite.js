@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { addDays, todayIn } from "../../src/common/utils/date.util.js";
 import { roundTo } from "../../src/modules/academics/shared/utils/rounding.util.js";
 import { h, world, request, get, post, patch, del, person, tokenFor, uuid } from "../helpers/harness.js";
 
@@ -39,11 +40,11 @@ describe("results: setup for Class 10", () => {
     const subjects = (
       await post(`${A}/subjects/bulk`, {
         subjects: [
-          { subjectName: "Physics", subjectCode: "PH10" },
-          { subjectName: "Chemistry", subjectCode: "CH10" },
-          { subjectName: "Biology", subjectCode: "BI10" },
-          { subjectName: "Computer Science", subjectCode: "CS10" },
-          { subjectName: "Art", subjectCode: "AR10" }
+          { subjectName: "Physics", subjectCode: "PH" },
+          { subjectName: "Chemistry", subjectCode: "CH" },
+          { subjectName: "Biology", subjectCode: "BI" },
+          { subjectName: "Computer Science", subjectCode: "CS" },
+          { subjectName: "Art", subjectCode: "AR" }
         ]
       })
     ).data;
@@ -59,7 +60,7 @@ describe("results: setup for Class 10", () => {
     await post(`${A}/teacher-assignments`, {
       teacherId: world.teacher2.id,
       sectionId: t.s10A.id,
-      subjectId: t.CH10.id
+      subjectId: t.CH.id
     });
     t.ct10 = (await post("/api/v1/users/teachers", { user: person("ct10") })).data;
     h.tokens.ct10 = tokenFor(t.ct10.userId, "TEACHER");
@@ -124,14 +125,14 @@ describe("results: setup for Class 10", () => {
     const paper = (exam, body, status = 201) => post(`${A}/exams/${exam.id}/papers`, body, {}, status);
 
     const graded = await request("POST", `${A}/exams/${t.term1.id}/papers`, {
-      body: { sectionId: t.s10A.id, subjectId: t.AR10.id, gradingType: "GRADE", maxMarks: 50 }
+      body: { sectionId: t.s10A.id, subjectId: t.AR.id, gradingType: "GRADE", maxMarks: 50 }
     });
     assert.equal(graded.status, 400);
     assert.equal(
       graded.body.message,
       "Invalid request: maxMarks must not be sent for a GRADE paper (it is graded without marks)"
     );
-    await paper(t.term1, { sectionId: t.s10A.id, subjectId: t.CH10.id }, 400);
+    await paper(t.term1, { sectionId: t.s10A.id, subjectId: t.CH.id }, 400);
 
     t.p1 = {};
     for (const section of [t.s10A, t.s10B]) {
@@ -139,7 +140,7 @@ describe("results: setup for Class 10", () => {
       p.PHT = (
         await paper(t.term1, {
           sectionId: section.id,
-          subjectId: t.PH10.id,
+          subjectId: t.PH.id,
           component: "THEORY",
           maxMarks: 70,
           passMarks: 23
@@ -148,40 +149,40 @@ describe("results: setup for Class 10", () => {
       p.PHP = (
         await paper(t.term1, {
           sectionId: section.id,
-          subjectId: t.PH10.id,
+          subjectId: t.PH.id,
           component: "PRACTICAL",
           maxMarks: 30,
           passMarks: 10
         })
       ).data;
-      for (const code of ["CH10", "BI10", "CS10"]) {
+      for (const code of ["CH", "BI", "CS"]) {
         p[code] = (
           await paper(t.term1, { sectionId: section.id, subjectId: t[code].id, maxMarks: 100, passMarks: 33 })
         ).data;
       }
-      p.AR10 = (await paper(t.term1, { sectionId: section.id, subjectId: t.AR10.id, gradingType: "GRADE" })).data;
+      p.AR = (await paper(t.term1, { sectionId: section.id, subjectId: t.AR.id, gradingType: "GRADE" })).data;
     }
-    assert.equal(t.p1.A.PHT.displayCode, "PH10-10A-INTERNAL-TH");
-    assert.equal(t.p1.A.AR10.maxMarks, null);
+    assert.equal(t.p1.A.PHT.displayCode, "PH430-A-INTERNAL-TH");
+    assert.equal(t.p1.A.AR.maxMarks, null);
 
     const again = await request("POST", `${A}/exams/${t.term1.id}/papers`, {
-      body: { sectionId: t.s10A.id, subjectId: t.PH10.id, component: "THEORY", maxMarks: 70 }
+      body: { sectionId: t.s10A.id, subjectId: t.PH.id, component: "THEORY", maxMarks: 70 }
     });
     assert.equal(again.status, 409);
     assert.equal(again.body.message, "This exam already has a theory paper for Physics in the section");
     const whole = await request("POST", `${A}/exams/${t.term1.id}/papers`, {
-      body: { sectionId: t.s10A.id, subjectId: t.PH10.id, maxMarks: 100 }
+      body: { sectionId: t.s10A.id, subjectId: t.PH.id, maxMarks: 100 }
     });
     assert.equal(whole.status, 409);
     const mixed = await request("POST", `${A}/exams/${t.term1.id}/papers`, {
-      body: { sectionId: t.s10A.id, subjectId: t.PH10.id, component: "ORAL", gradingType: "GRADE" }
+      body: { sectionId: t.s10A.id, subjectId: t.PH.id, component: "ORAL", gradingType: "GRADE" }
     });
     assert.equal(mixed.status, 422);
     assert.equal(
       mixed.body.message,
       "Physics's other components are marked out of marks; every component must be graded the same way"
     );
-    const noMarks = await request("PATCH", `${A}/exams/${t.term1.id}/papers/${t.p1.A.AR10.id}`, {
+    const noMarks = await request("PATCH", `${A}/exams/${t.term1.id}/papers/${t.p1.A.AR.id}`, {
       body: { maxMarks: 20 }
     });
     assert.equal(noMarks.status, 422);
@@ -189,12 +190,12 @@ describe("results: setup for Class 10", () => {
     t.p2 = {};
     for (const section of [t.s10A, t.s10B]) {
       const p = (t.p2[section.sectionName] = {});
-      for (const code of ["PH10", "CH10", "BI10", "CS10"]) {
+      for (const code of ["PH", "CH", "BI", "CS"]) {
         p[code] = (
           await paper(t.term2, { sectionId: section.id, subjectId: t[code].id, maxMarks: 100, passMarks: 33 })
         ).data;
       }
-      p.AR10 = (await paper(t.term2, { sectionId: section.id, subjectId: t.AR10.id, gradingType: "GRADE" })).data;
+      p.AR = (await paper(t.term2, { sectionId: section.id, subjectId: t.AR.id, gradingType: "GRADE" })).data;
     }
   });
 });
@@ -220,7 +221,7 @@ describe("results: policies", () => {
       ],
       [{ name: "x", percentageDecimals: 6 }, 400, "Invalid request: percentageDecimals must be at most 4"],
       [
-        { name: "x", subjects: [{ subjectId: t.AR10.id, category: "CO_SCHOLASTIC", isMandatory: true }] },
+        { name: "x", subjects: [{ subjectId: t.AR.id, category: "CO_SCHOLASTIC", isMandatory: true }] },
         400,
         "Invalid request: subjects.0.isMandatory cannot be true for a co-scholastic subject (it never counts toward the result)"
       ],
@@ -239,8 +240,8 @@ describe("results: policies", () => {
           name: "x",
           bestOfSubjects: 1,
           subjects: [
-            { subjectId: t.PH10.id, isMandatory: true },
-            { subjectId: t.CH10.id, isMandatory: true }
+            { subjectId: t.PH.id, isMandatory: true },
+            { subjectId: t.CH.id, isMandatory: true }
           ]
         },
         422,
@@ -281,11 +282,11 @@ describe("results: policies", () => {
       showRankToStudents: false,
       percentageDecimals: 1,
       subjects: [
-        { subjectId: t.PH10.id, credits: 4, isMandatory: true },
-        { subjectId: t.CH10.id, credits: 4 },
-        { subjectId: t.BI10.id, credits: 3 },
-        { subjectId: t.CS10.id, credits: 2 },
-        { subjectId: t.AR10.id, category: "CO_SCHOLASTIC" }
+        { subjectId: t.PH.id, credits: 4, isMandatory: true },
+        { subjectId: t.CH.id, credits: 4 },
+        { subjectId: t.BI.id, credits: 3 },
+        { subjectId: t.CS.id, credits: 2 },
+        { subjectId: t.AR.id, category: "CO_SCHOLASTIC" }
       ]
     });
     assert.equal(board.message, "Result policy Board Secondary created (GPA (10-point))");
@@ -371,19 +372,19 @@ describe("results: policies", () => {
 describe("results: marks under a policy", () => {
   it("takes grades alone for Art and absence reasons", async () => {
     const mark = body => request("POST", `${A}/marks`, { body });
-    const withMarks = await mark({ studentId: t.ana.id, examPaperId: t.p1.A.AR10.id, marksObtained: 40 });
+    const withMarks = await mark({ studentId: t.ana.id, examPaperId: t.p1.A.AR.id, marksObtained: 40 });
     assert.equal(withMarks.status, 422);
     assert.equal(
       withMarks.body.message,
-      "AR10-10A-INTERNAL is graded without marks: send a grade instead of marksObtained"
+      "AR430-A-INTERNAL is graded without marks: send a grade instead of marksObtained"
     );
-    const offScale = await mark({ studentId: t.ana.id, examPaperId: t.p1.A.AR10.id, grade: "Z" });
+    const offScale = await mark({ studentId: t.ana.id, examPaperId: t.p1.A.AR.id, grade: "Z" });
     assert.equal(offScale.status, 422);
     assert.equal(offScale.body.message, "Grade Z is not on the Co-scholastic scale (A, B, C)");
-    const gradeOnly = await mark({ studentId: t.ana.id, examPaperId: t.p1.A.CH10.id, grade: "A1" });
+    const gradeOnly = await mark({ studentId: t.ana.id, examPaperId: t.p1.A.CH.id, grade: "A1" });
     assert.equal(gradeOnly.status, 422);
-    assert.match(gradeOnly.body.message, /^CH10-10A-INTERNAL is marked out of 100: send marksObtained/);
-    const reasonOnly = await mark({ studentId: t.ana.id, examPaperId: t.p1.A.CH10.id, absenceReason: "MEDICAL" });
+    assert.match(gradeOnly.body.message, /^CH430-A-INTERNAL is marked out of 100: send marksObtained/);
+    const reasonOnly = await mark({ studentId: t.ana.id, examPaperId: t.p1.A.CH.id, absenceReason: "MEDICAL" });
     assert.equal(reasonOnly.status, 400);
   });
 
@@ -406,7 +407,7 @@ describe("results: marks under a policy", () => {
           : { studentId: student.id, examPaperId: paper.id, marksObtained: value };
     const marks1 = Object.entries(term1).flatMap(([key, values]) => {
       const p = t.p1[["ed", "fi"].includes(key) ? "B" : "A"];
-      return [p.PHT, p.PHP, p.CH10, p.BI10, p.CS10, p.AR10].map((paper, i) => entry(t[key], paper, values[i]));
+      return [p.PHT, p.PHP, p.CH, p.BI, p.CS, p.AR].map((paper, i) => entry(t[key], paper, values[i]));
     });
     assert.equal((await post(`${A}/marks/bulk`, { marks: marks1 }, {}, 200)).data.created, 42);
 
@@ -422,13 +423,13 @@ describe("results: marks under a policy", () => {
     };
     const marks2 = Object.entries(term2).flatMap(([key, values]) => {
       const p = t.p2[["ed", "fi"].includes(key) ? "B" : "A"];
-      return [p.PH10, p.CH10, p.BI10, p.CS10, p.AR10].map((paper, i) => entry(t[key], paper, values[i]));
+      return [p.PH, p.CH, p.BI, p.CS, p.AR].map((paper, i) => entry(t[key], paper, values[i]));
     });
     assert.equal((await post(`${A}/marks/bulk`, { marks: marks2 }, {}, 200)).data.created, 35);
 
     /* An exemption is always left out: Gu's three other subjects fill the best 3 */
     const gu = rowOf(await sheetOf(t.term2.id, t.s10A.id), "gu");
-    const computer = lineOf(gu, "CS10");
+    const computer = lineOf(gu, "CS");
     assert.deepEqual(
       [computer.status, computer.grade, computer.counted, computer.passed],
       ["EXEMPT", "EX", false, null]
@@ -450,46 +451,46 @@ describe("results: report cards under the board policy", () => {
       [ana.totalObtained, ana.totalMax, ana.percentage, ana.grade, ana.gpa, ana.result],
       [274, 300, 91.3, "A1", 9.6, "PASS"]
     );
-    assert.equal(lineOf(ana, "BI10").counted, false);
+    assert.equal(lineOf(ana, "BI").counted, false);
     assert.deepEqual(
-      lineOf(ana, "PH10").components.map(c => [c.component, c.marksObtained]),
+      lineOf(ana, "PH").components.map(c => [c.component, c.marksObtained]),
       [
         ["THEORY", 60],
         ["PRACTICAL", 28]
       ]
     );
-    const art = lineOf(ana, "AR10");
+    const art = lineOf(ana, "AR");
     assert.deepEqual(
       [art.category, art.grade, art.remark, art.teacherRemarks],
       ["CO_SCHOLASTIC", "A", "Outstanding", "Creative work"]
     );
     assert.equal(
-      ana.subjects.some(l => l.subject.subjectCode === "AR10"),
+      ana.subjects.some(l => l.subject.subjectCode === "AR"),
       false,
       "Art never counts toward the percentage"
     );
 
     /* Bo: theory 21 of 23 needed -> 2 grace marks turn the compartment into a pass */
     const bo = rowOf(sheet, "bo");
-    const physics = lineOf(bo, "PH10");
+    const physics = lineOf(bo, "PH");
     assert.deepEqual(
       [physics.marksObtained, physics.graceMarks, physics.marksAwarded, physics.grade, physics.passed],
       [46, 2, 48, "C2", true]
     );
     assert.equal(physics.components.find(c => c.component === "THEORY").graceMarks, 2);
     assert.deepEqual([bo.result, bo.graceTotal, bo.percentage, bo.gpa], ["PASS", 2, 60.7, 6.27]);
-    assert.equal(lineOf(bo, "CS10").counted, false, "the failed computer paper is outside the best 3");
+    assert.equal(lineOf(bo, "CS").counted, false, "the failed computer paper is outside the best 3");
 
     /* Cy fails chemistry, but it is not among the best 3 */
     const cy = rowOf(sheet, "cy");
     assert.deepEqual(
-      [cy.result, cy.gpa, lineOf(cy, "CH10").passed, lineOf(cy, "CH10").counted],
+      [cy.result, cy.gpa, lineOf(cy, "CH").passed, lineOf(cy, "CH").counted],
       ["PASS", 7.78, false, false]
     );
 
     /* Di's medical absence is left out of the result */
     const di = rowOf(sheet, "di");
-    const biology = lineOf(di, "BI10");
+    const biology = lineOf(di, "BI");
     assert.deepEqual(
       [biology.status, biology.absenceReason, biology.counted, biology.grade],
       ["ABSENT", "MEDICAL", false, "AB"]
@@ -537,7 +538,7 @@ describe("results: report cards under the board policy", () => {
     const paper = (
       await post(`${A}/exams/${t.weekly.id}/papers`, {
         sectionId: t.s10A.id,
-        subjectId: t.CH10.id,
+        subjectId: t.CH.id,
         maxMarks: 100,
         passMarks: 33
       })
@@ -652,18 +653,18 @@ describe("results: publication and report snapshots", () => {
     );
     assert.deepEqual([report.rank, report.classRank], [null, null], "the policy hides ranks from families");
     assert.equal(report.policy.gradingMode, "GPA");
-    assert.equal(report.subjects.find(s => s.subject.subjectCode === "CS10").marksObtained, 30);
+    assert.equal(report.subjects.find(s => s.subject.subjectCode === "CS").marksObtained, 30);
     await pdfOk(`${ME}/students/${t.bo.id}/report-cards/pdf?examId=${t.term1.id}`, h.tokens.rbo);
     await get(`${ME}/students/${t.bo.id}/report-cards?examId=${t.term2.id}`, { as: h.tokens.rbo }, 404);
     await get(`${ME}/students/${t.ana.id}/report-cards`, { as: h.tokens.rbo }, 404);
   });
 
   it("compares live results with the published version after a mark changes", async () => {
-    await post(`${A}/marks`, { studentId: t.bo.id, examPaperId: t.p1.A.CS10.id, marksObtained: 34 }, {}, 200);
+    await post(`${A}/marks`, { studentId: t.bo.id, examPaperId: t.p1.A.CS.id, marksObtained: 34 }, {}, 200);
 
     const portal = await get(`${ME}/students/${t.bo.id}/report-cards?examId=${t.term1.id}`, { as: h.tokens.rbo });
     assert.equal(
-      portal.data.reports[0].subjects.find(s => s.subject.subjectCode === "CS10").marksObtained,
+      portal.data.reports[0].subjects.find(s => s.subject.subjectCode === "CS").marksObtained,
       30,
       "frozen"
     );
@@ -673,8 +674,8 @@ describe("results: publication and report snapshots", () => {
     const bo = comparison.data.students.find(s => s.studentId === t.bo.id);
     assert.equal(bo.status, "CHANGED");
     assert.deepEqual(
-      bo.changes.find(c => c.field === "CS10.marksObtained"),
-      { field: "CS10.marksObtained", published: 30, live: 34 }
+      bo.changes.find(c => c.field === "CS.marksObtained"),
+      { field: "CS.marksObtained", published: 30, live: 34 }
     );
     const scoped = await get(`${A}/exams/${t.term1.id}/result-publication/comparison`, { as: h.tokens.ct10 });
     assert.equal(scoped.data.summary.students, 5, "class teachers compare their own sections only");
@@ -706,7 +707,7 @@ describe("results: publication and report snapshots", () => {
     assert.deepEqual(
       [
         portal.data.reports[0].version,
-        portal.data.reports[0].subjects.find(s => s.subject.subjectCode === "CS10").marksObtained
+        portal.data.reports[0].subjects.find(s => s.subject.subjectCode === "CS").marksObtained
       ],
       [2, 34]
     );
@@ -867,7 +868,7 @@ describe("results: publication and report snapshots", () => {
     const [header, ...rows] = csv.trim().split("\r\n");
     assert.equal(
       header,
-      "Roll no.,Student,AR10,BI10 (/100),CH10 (/100),CS10 (/100),PH10 (/100),Total,%,Grade,Result,Rank,GPA,Grace,Class rank"
+      "Roll no.,Student,AR,BI (/100),CH (/100),CS (/100),PH (/100),Total,%,Grade,Result,Rank,GPA,Grace,Class rank"
     );
     assert.ok(rows.some(r => r.endsWith("Frbo Lrbo,B,64,70,34,46+2,182,60.7,C1,PASS,4,6.27,2,5")));
   });
@@ -937,14 +938,14 @@ describe("results: weighted assessment schemes", () => {
     assert.deepEqual(
       ana.subjects.map(l => [l.subject.subjectCode, l.percentage, l.counted]),
       [
-        ["BI10", 82, false],
-        ["CH10", 93.4, true],
-        ["CS10", 89, true],
-        ["PH10", 89.2, true]
+        ["BI", 82, false],
+        ["CH", 93.4, true],
+        ["CS", 89, true],
+        ["PH", 89.2, true]
       ]
     );
     assert.deepEqual(
-      ana.subjects.find(l => l.subject.subjectCode === "PH10").exams.map(e => [e.examName, e.weight, e.percentage]),
+      ana.subjects.find(l => l.subject.subjectCode === "PH").exams.map(e => [e.examName, e.weight, e.percentage]),
       [
         ["Term 1", 40, 88],
         ["Term 2", 60, 90]
@@ -955,7 +956,7 @@ describe("results: weighted assessment schemes", () => {
     assert.equal(ana.coScholastic[0].grade, "A");
 
     const di = sheet.data.students.find(s => s.studentId === t.di.id);
-    const biology = di.subjects.find(l => l.subject.subjectCode === "BI10");
+    const biology = di.subjects.find(l => l.subject.subjectCode === "BI");
     assert.deepEqual(
       [biology.percentage, biology.exams.map(e => [e.status, e.percentage])],
       [
@@ -1110,3 +1111,185 @@ describe("results: tamper-proof report snapshots", () => {
     );
   });
 });
+
+describe("results: teacher assessment buckets", () => {
+  const AS = `${A}/assessments`;
+  const scheme = () => `${A}/assessment-schemes/${t.withTeachers.id}`;
+  const by = () => ({ as: h.tokens.teacher2 });
+  const sheet = async () => (await get(`${scheme()}/results?sectionId=${t.s10A.id}`)).data;
+  const rowIn = (data, key) => data.students.find(s => s.studentId === t[key].id);
+  const subjectIn = (row, code) => row.subjects.find(l => l.subject.subjectCode === code);
+  const bucketOf = line => line.exams.find(e => e.kind === "BUCKET");
+  const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 0.06, `${actual} is not ${expected}`);
+  const record = (itemId, marks, status = 200) => post(`${AS}/${itemId}/marks`, { marks }, by(), status);
+
+  it("weighs exams and a teacher bucket that add up to 100", async () => {
+    const body = weight => ({
+      name: "With teachers",
+      exams: [
+        { examId: t.term1.id, weight: 40 },
+        { examId: t.term2.id, weight: 40 }
+      ],
+      buckets: [{ name: "Teacher assessments", weight }]
+    });
+    const over = await request("POST", `${A}/assessment-schemes`, { body: body(30) });
+    assert.equal(over.status, 400);
+    assert.equal(over.body.message, "Invalid request: exams weights must add up to 100");
+
+    const created = await post(`${A}/assessment-schemes`, body(20));
+    assert.equal(
+      created.message,
+      "Assessment scheme With teachers created: Term 1 40% + Term 2 40% + Teacher assessments 20%"
+    );
+    t.withTeachers = created.data;
+    t.bucket = created.data.buckets[0];
+    const buckets = await get(`${AS}/buckets`, by());
+    assert.ok(buckets.data.some(b => b.id === t.bucket.id && b.weight === 20 && !b.locked));
+  });
+
+  it("lets a teacher add items only for what they teach", async () => {
+    const body = {
+      bucketId: t.bucket.id,
+      sectionId: t.s10A.id,
+      subjectId: t.CH.id,
+      assessmentType: "TEST",
+      title: "Class test 1",
+      maxMarks: 20
+    };
+    await post(AS, { ...body, subjectId: t.PH.id }, by(), 403);
+    await post(AS, body, { as: h.tokens.teacher }, 403);
+    await post(AS, { ...body, assessmentType: "HOMEWORK" }, by(), 422);
+    const test = await post(AS, body, by());
+    assert.equal(test.message, "Class test 1 added to Teacher assessments");
+    t.test1 = test.data;
+    t.assignment = (await post(AS, { ...body, assessmentType: "ASSIGNMENT", title: "Assignment 1", maxMarks: 10 }, by())).data;
+
+    await record(t.test1.id, [{ studentId: t.ana.id, marksObtained: 21 }], 422);
+    await record(t.test1.id, [{ studentId: t.ed.id, marksObtained: 5 }], 422);
+    await record(t.test1.id, [{ studentId: t.bo.id, status: "ABSENT", marksObtained: 5 }], 400);
+    const saved = await record(t.test1.id, [
+      { studentId: t.ana.id, marksObtained: 15 },
+      { studentId: t.bo.id, status: "ABSENT" },
+      { studentId: t.cy.id, status: "EXEMPT" },
+      { studentId: t.di.id, marksObtained: 10 }
+    ]);
+    assert.equal(saved.message, "Marks saved: 4 recorded, 0 updated");
+    await record(t.assignment.id, [{ studentId: t.ana.id, marksObtained: 10 }]);
+
+    const sheetOfMarks = await get(`${AS}/${t.test1.id}/marks`, by());
+    assert.deepEqual(
+      sheetOfMarks.data.students.filter(s => s.status).map(s => [s.status, s.marksObtained, s.percentage]),
+      [
+        ["MARKED", 15, 75],
+        ["ABSENT", null, 0],
+        ["EXEMPT", null, null],
+        ["MARKED", 10, 50]
+      ]
+    );
+  });
+
+  it("averages a student's items into the bucket's weight", async () => {
+    const data = await sheet();
+    assert.deepEqual(
+      data.scheme.exams.map(e => [e.examName, e.weight, e.kind ?? "EXAM"]),
+      [
+        ["Term 1", 40, "EXAM"],
+        ["Term 2", 40, "EXAM"],
+        ["Teacher assessments", 20, "BUCKET"]
+      ]
+    );
+    /* Ana: (75 + 100) / 2; Bo absent and no assignment: 0; Cy exempt from the test, nothing on the assignment: 0; Di: (50 + 0) / 2 */
+    assert.deepEqual(
+      ["ana", "bo", "cy", "di"].map(key => bucketOf(subjectIn(rowIn(data, key), "CH")).percentage),
+      [87.5, 0, 0, 25]
+    );
+    const chemistry = subjectIn(rowIn(data, "ana"), "CH");
+    const [t1, t2] = chemistry.exams.filter(e => !e.kind).map(e => e.percentage);
+    close(chemistry.percentage, (40 * t1 + 40 * t2 + 20 * 87.5) / 100);
+
+    /* Physics has no items: the bucket drops out and the exams share its weight */
+    const physics = subjectIn(rowIn(data, "ana"), "PH");
+    assert.equal(bucketOf(physics), undefined);
+    const [p1, p2] = physics.exams.map(e => e.percentage);
+    close(physics.percentage, (p1 + p2) / 2);
+  });
+
+  it("leaves out items that don't count, and counts graded homework", async () => {
+    await patch(`${AS}/${t.assignment.id}`, { counts: false }, by());
+    const homework = {
+      sectionId: t.s10A.id,
+      subjectId: t.CH.id,
+      title: "Lab report",
+      dueDate: addDays(todayIn("Asia/Kolkata"), 3),
+      bucketId: t.bucket.id
+    };
+    await post(`${A}/homework`, homework, by(), 422);
+    const given = (await post(`${A}/homework`, { ...homework, maxMarks: 10 }, by())).data;
+    assert.equal(given.assessment.bucket.id, t.bucket.id);
+    assert.equal(given.assessment.assessmentType, "HOMEWORK");
+    t.labItem = given.assessment;
+
+    const form = new FormData();
+    form.append("content", "My lab report");
+    const submitted = await request("POST", `${ME}/homework/${given.id}/submission`, { as: h.tokens.rana, form });
+    assert.equal(submitted.status, 201, JSON.stringify(submitted.body));
+    await post(`${A}/homework/${given.id}/submissions/${submitted.body.data.id}/grading`, { marksAwarded: 5 }, by(), 200);
+
+    await record(t.labItem.id, [{ studentId: t.bo.id, marksObtained: 5 }], 422);
+    await record(t.labItem.id, [{ studentId: t.bo.id, status: "EXEMPT" }]);
+    await del(`${AS}/${t.labItem.id}`, by(), 409);
+    assert.equal((await get(`${A}/homework/${given.id}`, by())).data.assessment.id, t.labItem.id);
+
+    /* Ana: test 75, lab 50; Bo: test absent, exempt from the lab; Di: test 50, lab not submitted */
+    const data = await sheet();
+    assert.deepEqual(
+      ["ana", "bo", "di"].map(key => bucketOf(subjectIn(rowIn(data, key), "CH")).percentage),
+      [62.5, 0, 25]
+    );
+  });
+
+  it("keeps buckets that have items, and locks them once results are published", async () => {
+    const busy = await request("PATCH", scheme(), {
+      body: {
+        exams: [
+          { examId: t.term1.id, weight: 50 },
+          { examId: t.term2.id, weight: 50 }
+        ],
+        buckets: []
+      }
+    });
+    assert.equal(busy.status, 409);
+    assert.match(busy.body.message, /^Teacher assessments has 3 teacher assessment\(s\)/);
+    const unbalanced = await request("PATCH", scheme(), {
+      body: { buckets: [{ id: t.bucket.id, name: "Teacher assessments", weight: 30 }] }
+    });
+    assert.equal(unbalanced.status, 422);
+    assert.equal(unbalanced.body.message, "Exam and bucket weights must add up to 100 (they add up to 110)");
+
+    const renamed = await patch(scheme(), {
+      exams: [
+        { examId: t.term1.id, weight: 30 },
+        { examId: t.term2.id, weight: 40 }
+      ],
+      buckets: [{ id: t.bucket.id, name: "Internal assessment", weight: 30 }]
+    });
+    assert.equal(renamed.message, "Assessment scheme With teachers updated: Term 1 30% + Term 2 40% + Internal assessment 30%");
+    assert.equal(renamed.data.buckets[0].id, t.bucket.id);
+    assert.equal((await get(`${AS}?bucketId=${t.bucket.id}`, by())).meta.total, 3);
+    assert.equal((await get(AS, { as: h.tokens.teacher })).meta.total, 0);
+
+    await post(`${scheme()}/result-publication`, {}, {}, 200);
+    const locked = await request("POST", `${AS}/${t.test1.id}/marks`, {
+      as: h.tokens.teacher2,
+      body: { marks: [{ studentId: t.ana.id, marksObtained: 20 }] }
+    });
+    assert.equal(locked.status, 409);
+    assert.equal(locked.body.message, "With teachers results are published. Withdraw them to change its teacher assessments.");
+    assert.ok((await get(`${AS}/buckets`, by())).data.find(b => b.id === t.bucket.id).locked);
+
+    await del(`${scheme()}/result-publication`);
+    const removed = await del(`${AS}/${t.assignment.id}`, by());
+    assert.equal(removed.message, "Assignment 1 removed");
+  });
+});
+

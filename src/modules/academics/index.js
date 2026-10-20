@@ -18,6 +18,7 @@ import { resultPolicyAssignmentRoutes, resultPolicyRoutes } from "./result-polic
 import { examPublicationRoutes, reportCardRoutes } from "./report-cards/index.js";
 import { assessmentSchemeRoutes } from "./assessment-schemes/index.js";
 import { homeworkRoutes } from "./homework/index.js";
+import { assessmentRoutes } from "./assessments/index.js";
 
 /* Academics module, mounted at /api/v1/academics */
 const router = createRouter();
@@ -47,5 +48,6 @@ router.use("/result-policy-assignments", resultPolicyAssignmentRoutes);
 router.use("/report-cards", reportCardRoutes);
 router.use("/assessment-schemes", assessmentSchemeRoutes);
 router.use("/homework", homeworkRoutes);
+router.use("/assessments", assessmentRoutes);
 
 export default router;

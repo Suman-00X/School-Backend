@@ -10,7 +10,9 @@ const fields = z.object({
   description: optionalText(5000),
   dueDate: date(),
   maxMarks: z.number().positive().max(1000).optional(),
-  allowLateSubmission: z.boolean().default(false)
+  allowLateSubmission: z.boolean().default(false),
+  /* Counts toward a scheme bucket (teacher assessments); needs maxMarks */
+  bucketId: id().optional()
 });
 
 const params = idParams("homeworkId");
@@ -34,7 +36,9 @@ export const homeworkValidators = {
         description: optionalText(5000),
         dueDate: date(),
         maxMarks: z.number().positive().max(1000),
-        allowLateSubmission: z.boolean()
+        allowLateSubmission: z.boolean(),
+        /* null takes the homework out of its bucket */
+        bucketId: id().nullable()
       })
     )
   },

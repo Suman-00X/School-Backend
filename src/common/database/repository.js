@@ -119,6 +119,14 @@ export const createRepository = ({ table, queryKey, hiddenColumns = [], orderBy 
         .where(scoped(table, tenantId, eq(table.id, id)))
         .returning(visibleColumns);
       return row ?? null;
-    }
+    },
+
+    /* Sets is_active = false on every matching row -> removed rows */
+    softDeleteWhere: (tenantId, conditions, { dbc = db } = {}) =>
+      dbc
+        .update(table)
+        .set({ isActive: false })
+        .where(scoped(table, tenantId, ...conditions))
+        .returning(visibleColumns)
   };
 };

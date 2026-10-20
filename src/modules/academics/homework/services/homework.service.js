@@ -7,6 +7,7 @@ import { tenantToday } from "../../../../common/tenancy/tenant.service.js";
 import { fileService } from "../../../files/documents/index.js";
 import { teacherService } from "../../../users/teachers/index.js";
 import { academicYearService } from "../../academic-years/index.js";
+import { assessmentService } from "../../assessments/index.js";
 import { enrollmentService } from "../../enrollments/index.js";
 import { sectionService } from "../../sections/index.js";
 import { sectionSubjectService } from "../../section-subjects/index.js";
@@ -55,7 +56,7 @@ const statusOf = submission =>
           : "SUBMITTED";
 
 export const homeworkService = {
-  create: async (ctx, { sectionId, subjectId, title, description, dueDate, maxMarks, allowLateSubmission }) => {
+  create: async (ctx, { sectionId, subjectId, title, description, dueDate, maxMarks, allowLateSubmission, bucketId }) => {
     const section = await sectionService.findById(ctx, sectionId);
     if (!section) throw unprocessable("sectionId does not refer to an existing section");
     await teachingScope.assertSection(ctx, sectionId, { subjectId });
@@ -64,6 +65,7 @@ export const homeworkService = {
     }
     const assignedOn = await tenantToday(ctx.tenantId);
     if (dueDate < assignedOn) throw unprocessable("dueDate cannot be in the past");
+    if (bucketId) await assessmentService.assertHomeworkBucket(ctx, bucketId, { academicYearId: section.academicYearId, maxMarks });
 
     const homework = await homeworkRepository.create(ctx.tenantId, {
       academicYearId: section.academicYearId,
@@ -78,8 +80,9 @@ export const homeworkService = {
       maxMarks,
       allowLateSubmission
     });
+    const assessment = bucketId ? await assessmentService.linkHomework(ctx, homework, bucketId) : null;
     await publish(HOMEWORK_ASSIGNED, { tenantId: ctx.tenantId, homeworkId: homework.id });
-    return homework;
+    return { ...homework, assessment };
   },
 
   /* Year-scoped. Teachers without a section filter see their own sections. */
@@ -111,14 +114,28 @@ export const homeworkService = {
 
   getById: async (ctx, homeworkId) => {
     const homework = await loadForStaff(ctx, homeworkId);
-    return { ...homework, attachments: await fileService.forOwner(ctx, "HOMEWORK", homeworkId) };
+    return {
+      ...homework,
+      attachments: await fileService.forOwner(ctx, "HOMEWORK", homeworkId),
+      /* The bucket it counts toward, if any */
+      assessment: await assessmentService.forHomework(ctx, homeworkId)
+    };
   },
 
-  update: async (ctx, homeworkId, data) => {
+  /* bucketId moves the homework into a bucket (null: out of it); other changes refresh its item */
+  update: async (ctx, homeworkId, { bucketId, ...data }) => {
     const homework = await loadForStaff(ctx, homeworkId);
     if (data.dueDate && data.dueDate < homework.assignedOn)
       throw unprocessable("dueDate cannot be before the day it was set");
-    return homeworkRepository.update(ctx.tenantId, homeworkId, data);
+    if (bucketId) {
+      await assessmentService.assertHomeworkBucket(ctx, bucketId, {
+        academicYearId: homework.academicYearId,
+        maxMarks: data.maxMarks ?? homework.maxMarks
+      });
+    }
+    const updated = Object.keys(data).length ? await homeworkRepository.update(ctx.tenantId, homeworkId, data) : homework;
+    const assessment = await assessmentService.linkHomework(ctx, { ...homework, ...updated }, bucketId);
+    return { ...updated, assessment };
   },
 
   remove: async (ctx, homeworkId) => {
@@ -126,6 +143,7 @@ export const homeworkService = {
     if (await submissionRepository.exists(ctx.tenantId, [eq(homeworkSubmissions.homeworkId, homeworkId)])) {
       throw conflict("Students have already submitted this homework; it cannot be deleted");
     }
+    await assessmentService.linkHomework(ctx, await loadHomework(ctx, homeworkId), null);
     return homeworkRepository.softDelete(ctx.tenantId, homeworkId);
   },
 
