@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { h, world, request, get, post, person } from "../helpers/harness.js";
+import { h, world, request, get, post, person, settleJobs } from "../helpers/harness.js";
 
 /* Certificates (academics/certificates): the school's HTML formats, versioned, and
    bonafide, character and transfer certificates issued from them. A leaver admitted
@@ -272,6 +272,125 @@ describe("issuing certificates", () => {
     /* Already left: nothing more to mark */
     assert.equal(reissued.data.markedLeft, false);
     await pdfOf(`${C}/${reissued.data.id}/pdf`);
+  });
+});
+
+describe("transfer certificates and promotion", () => {
+  /* Sections of their own (Class 2 – T, this year and next), so the other suites' rosters
+     and the year-end promotion are untouched; no student here stays in this year's T */
+  const T = "/api/v1/transport";
+  const next = () => ({ headers: { "x-academic-year-id": world.y2.id } });
+  const inputs = { leavingDate: "2026-12-15", reason: "Parent's transfer" };
+  const admit = async key =>
+    (
+      await post("/api/v1/users/students", {
+        user: person(key),
+        parents: [],
+        enrollment: { academicYearId: world.y1.id, sectionId: t.sectionT.id }
+      })
+    ).data;
+  const promote = studentId =>
+    post(`${A}/enrollments/promotions`, {
+      studentId,
+      fromAcademicYearId: world.y1.id,
+      toAcademicYearId: world.y2.id,
+      toSectionId: t.sectionTNext.id
+    });
+  const statusIn = async (section, studentId, options) => {
+    const roster = (await get(`${A}/enrollments?sectionId=${section.id}&limit=100`, options)).data;
+    return roster.find(e => e.studentId === studentId)?.status;
+  };
+
+  it("marks a student promoted into next year left there, and releases this year's seat", async () => {
+    t.sectionT = (await post(`${A}/sections`, { classId: world.c2.id, sectionName: "T" })).data;
+    t.sectionTNext = (await post(`${A}/sections`, { classId: world.c2.id, sectionName: "T" }, next())).data;
+    const student = await admit("tcpromoted");
+    const vehicle = (await post(`${T}/vehicles`, { registrationNumber: "KA09ZZ3535", capacity: 5 })).data;
+    const stops = [{ name: "Gate" }];
+    const route = (await post(`${T}/routes`, { name: "TC Loop", vehicleId: vehicle.id, stops })).data;
+    const seat = (
+      await post(
+        `${T}/assignments`,
+        { studentId: student.id, routeId: route.id, stopId: route.stops[0].id },
+        { as: h.tokens.transportManager }
+      )
+    ).data;
+    await promote(student.id);
+
+    /* The old year is still current: its enrollment was closed by the promotion */
+    const draft = (await get(`${C}/draft?type=TRANSFER&studentId=${student.id}`)).data;
+    assert.equal(draft.enrollmentStatus, "ACTIVE", "still enrolled, in next year");
+    const tc = await post(C, { type: "TRANSFER", studentId: student.id, inputs, markLeft: true });
+    assert.equal(tc.data.markedLeft, true);
+    assert.equal(tc.data.academicYearId, world.y1.id, "the certificate speaks of the current year");
+    assert.equal(await statusIn(t.sectionTNext, student.id, next()), "LEFT");
+
+    await settleJobs();
+    const after = await get(`${T}/assignments/${seat.id}`, { as: h.tokens.transportManager });
+    assert.equal(after.data.status, "ENDED");
+  });
+
+  it("doesn't promote a student with a TC in force, and says why", async () => {
+    const leaving = await admit("tcstays");
+    const moving = await admit("tcmoves");
+    const tc = await post(C, { type: "TRANSFER", studentId: leaving.id, inputs, markLeft: false });
+    assert.equal(tc.data.markedLeft, false);
+
+    const single = await request("POST", `${A}/enrollments/promotions`, {
+      body: {
+        studentId: leaving.id,
+        fromAcademicYearId: world.y1.id,
+        toAcademicYearId: world.y2.id,
+        toSectionId: t.sectionTNext.id
+      }
+    });
+    assert.equal(single.status, 409);
+    assert.match(single.body.message, /^A transfer certificate is in force \(TC\/.+\): mark the student as left/);
+
+    const bulk = { fromSectionId: t.sectionT.id, toAcademicYearId: world.y2.id, toSectionId: t.sectionTNext.id };
+    const result = await post(`${A}/enrollments/promotions/bulk`, bulk);
+    assert.equal(result.data.promoted, 1);
+    assert.deepEqual(
+      result.data.skipped.map(s => s.studentId),
+      [leaving.id]
+    );
+    assert.match(result.data.skipped[0].reason, new RegExp(`in force \\(${tc.data.serialNumber}\\)`));
+    assert.equal(await statusIn(t.sectionTNext, moving.id, next()), "ACTIVE");
+    assert.equal(await statusIn(t.sectionTNext, leaving.id, next()), undefined);
+    assert.equal(await statusIn(t.sectionT, leaving.id), "ACTIVE");
+
+    /* Leaving still closes them */
+    const left = await post(`${A}/enrollments/promotions/bulk`, {
+      ...bulk,
+      overrides: [{ studentId: leaving.id, action: "LEAVE" }]
+    });
+    assert.equal(left.data.left, 1);
+    assert.equal(await statusIn(t.sectionT, leaving.id), "LEFT");
+  });
+
+  it("issues no TC when the student can't be marked left, so a retry works", async () => {
+    const student = await admit("tcretry");
+    await promote(student.id);
+    const before = (await get(`${C}?type=TRANSFER&limit=1`)).data[0].serialNumber;
+    const n = Number(before.split("/").at(-1));
+
+    /* Next year archived under it: closing its enrollment is refused, and nothing is kept */
+    await h.pool.query("UPDATE academic_years SET archived_at = now() WHERE id = $1", [world.y2.id]);
+    try {
+      const refused = await request("POST", C, {
+        body: { type: "TRANSFER", studentId: student.id, inputs, markLeft: true }
+      });
+      assert.equal(refused.status, 409);
+      assert.match(refused.body.message, /archived and read-only/);
+    } finally {
+      await h.pool.query("UPDATE academic_years SET archived_at = NULL WHERE id = $1", [world.y2.id]);
+    }
+    assert.equal((await get(`${C}?studentId=${student.id}`)).meta.total, 0);
+
+    const tc = await post(C, { type: "TRANSFER", studentId: student.id, inputs, markLeft: true });
+    assert.equal(tc.data.markedLeft, true);
+    assert.equal(tc.data.serialNumber, before.replace(/\d+$/, String(n + 1).padStart(4, "0")), "no number lost");
+    assert.equal(await statusIn(t.sectionTNext, student.id, next()), "LEFT");
   });
 });
 

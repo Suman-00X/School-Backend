@@ -226,7 +226,8 @@ export const enrollmentService = {
 
     await transaction(async tx => {
       /* A student with a TC in force is leaving, so is not moved on (LEAVE still closes them) */
-      const transfers = await transfersInForce(ctx, inRuleOrder.map(enrollment => enrollment.studentId), { dbc: tx });
+      const studentIds = inRuleOrder.map(enrollment => enrollment.studentId);
+      const transfers = await transfersInForce(ctx, studentIds, { dbc: tx });
       for (const enrollment of inRuleOrder) {
         const override = actionOf.get(enrollment.studentId);
         const action = override?.action ?? "PROMOTE";
