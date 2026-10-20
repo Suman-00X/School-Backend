@@ -16,7 +16,11 @@ export const attendancePolicies = pgTable(
       .notNull()
       .default(sql`'{ADMIN}'::text[]`),
     /* Period-wise attendance: a day counts as present when at least this % of its periods was attended */
-    periodPresenceThreshold: integer("period_presence_threshold").notNull().default(50)
+    periodPresenceThreshold: integer("period_presence_threshold").notNull().default(50),
+    /* Low attendance: a student under this % of the year so far is flagged to their teachers
+       and parents, once they have at least `low_attendance_min_days` countable days */
+    lowAttendanceThreshold: integer("low_attendance_threshold").notNull().default(75),
+    lowAttendanceMinDays: integer("low_attendance_min_days").notNull().default(10)
   },
   t => [
     uniqueIndex("attendance_policies_tenant_uq").on(t.tenantId),
@@ -25,6 +29,8 @@ export const attendancePolicies = pgTable(
       "attendance_policies_roles_chk",
       sql`${t.overrideRoles} <@ ARRAY['ADMIN','PRINCIPAL']::text[] AND cardinality(${t.overrideRoles}) > 0`
     ),
-    check("attendance_policies_threshold_chk", sql`${t.periodPresenceThreshold} BETWEEN 1 AND 100`)
+    check("attendance_policies_threshold_chk", sql`${t.periodPresenceThreshold} BETWEEN 1 AND 100`),
+    check("attendance_policies_low_threshold_chk", sql`${t.lowAttendanceThreshold} BETWEEN 1 AND 100`),
+    check("attendance_policies_low_min_days_chk", sql`${t.lowAttendanceMinDays} BETWEEN 1 AND 365`)
   ]
 );

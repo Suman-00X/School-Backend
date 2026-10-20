@@ -31,6 +31,9 @@ export const attendanceValidators = {
           .transform(roles => [...new Set(roles)]),
         /* Period-wise days: % of periods to attend for the day to count as present */
         periodPresenceThreshold: z.number().int().min(1).max(100),
+        /* Teachers and parents are alerted under this % (after the minimum countable days) */
+        lowAttendanceThreshold: z.number().int().min(1).max(100),
+        lowAttendanceMinDays: z.number().int().min(1).max(365),
         /* The school's mode: the same for every class */
         mode: z.enum(ATTENDANCE_MODES),
         /* Default: tomorrow, also the earliest (D-66) */
@@ -92,6 +95,7 @@ export const attendanceValidators = {
   },
   summary: { query: range.and(z.object({ sectionId: id() })) },
   cover: { params: idParams("sectionId") },
+  lowAttendance: { query: z.object({ sectionId: id().optional() }) },
   markFree: {
     body: z.object({
       sectionId: id(),

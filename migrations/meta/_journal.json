@@ -344,6 +344,13 @@
       "when": 1792528357524,
       "tag": "0048_student_leave_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1792528402330,
+      "tag": "0049_low_attendance_alerts",
+      "breakpoints": true
     }
   ]
 }

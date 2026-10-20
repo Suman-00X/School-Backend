@@ -8,7 +8,11 @@ export const NOTIFICATION_TYPES = [
   "ATTENDANCE_ABSENT",
   /* Teachers: registers they answer for were not taken that day */
   "ATTENDANCE_MISSED",
+  /* Parents and class teachers: a student's attendance for the year fell below the threshold */
+  "ATTENDANCE_LOW",
   "RESULTS_PUBLISHED",
+  /* Students and parents: an exam's admit card is ready */
+  "ADMIT_CARD_ISSUED",
   "INVOICE_ISSUED",
   "PAYMENT_RECEIVED",
   "REFUND_PROCESSED",

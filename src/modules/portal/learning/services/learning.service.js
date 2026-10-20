@@ -2,7 +2,8 @@ import { notFound, unprocessable } from "../../../../common/http/errors.js";
 import { teacherService } from "../../../users/teachers/index.js";
 import { studentService } from "../../../users/students/index.js";
 import { academicYearService } from "../../../academics/academic-years/index.js";
-import { attendanceService } from "../../../academics/attendance/index.js";
+import { admitCardPdfService, admitCardService } from "../../../academics/admit-cards/index.js";
+import { attendanceService, lowAttendanceService } from "../../../academics/attendance/index.js";
 import { calendarService } from "../../../academics/calendar/index.js";
 import { enrollmentService } from "../../../academics/enrollments/index.js";
 import { reportCardPdfService, reportSnapshotService } from "../../../academics/report-cards/index.js";
@@ -51,6 +52,9 @@ export const learningService = {
       })
     );
   },
+
+  /* The caller's children (or themselves) whose attendance this year is under the threshold */
+  attendanceAlerts: async ctx => lowAttendanceService.forStudents(ctx, await learningService.students(ctx)),
 
   timetable: async (ctx, studentId) => {
     await studentAccess.assert(ctx, studentId);

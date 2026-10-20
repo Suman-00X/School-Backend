@@ -5,6 +5,14 @@ import { learningService } from "../services/learning.service.js";
 export const learningController = {
   students: async (req, res) => ok(res, await learningService.students(req.context), "Students retrieved successfully"),
 
+  attendanceAlerts: async (req, res) => {
+    const result = await learningService.attendanceAlerts(req.context);
+    const message = result.students.length
+      ? `${result.students.length} student(s) below ${result.threshold}% attendance this year`
+      : `Attendance is at or above ${result.threshold}% this year`;
+    return ok(res, result, message);
+  },
+
   timetable: async (req, res) =>
     ok(res, await learningService.timetable(req.context, req.params.studentId), "Timetable retrieved successfully"),
 

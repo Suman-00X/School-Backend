@@ -4,6 +4,7 @@ import { validate } from "../../../../common/validation/validate.middleware.js";
 import { resolveAcademicYear as inYear } from "../../shared/middlewares/academicYear.middleware.js";
 import { attendanceController as controller } from "../controllers/attendance.controller.js";
 import { freePeriodController as freePeriods } from "../controllers/freePeriod.controller.js";
+import { lowAttendanceController as lowAttendance } from "../controllers/lowAttendance.controller.js";
 import { ATTENDANCE_PERMISSIONS as can } from "../permissions/attendance.permissions.js";
 import { attendanceValidators as rules } from "../validators/attendance.validator.js";
 
@@ -38,6 +39,8 @@ router.delete(
   validate(rules.removeFree),
   freePeriods.remove
 );
+/* Students under the school's low-attendance threshold this year, by section */
+router.get("/low-attendance", authorize(can.readLowAttendance), validate(rules.lowAttendance), lowAttendance.list);
 router.get("/students/:studentId", authorize(can.read), validate(rules.student), controller.student);
 
 export default router;

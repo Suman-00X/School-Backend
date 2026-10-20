@@ -10,6 +10,8 @@ import { learningValidators as rules } from "../validators/learning.validator.js
 const router = createRouter();
 
 router.get("/students", authorize(can.students), controller.students);
+/* Children (or the student) under the school's low-attendance threshold, for the home warning */
+router.get("/attendance-alerts", authorize(can.students), controller.attendanceAlerts);
 router.get("/students/:studentId/timetable", authorize(can.students), validate(rules.student), controller.timetable);
 router.get(
   "/students/:studentId/attendance",

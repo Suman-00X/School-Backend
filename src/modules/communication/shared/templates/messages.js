@@ -31,6 +31,21 @@ export const messages = {
     body: `Nobody took ${registers.length === 1 ? "this register" : "these registers"} you are responsible for on ${date}: ${registers.join(", ")}. Please take ${registers.length === 1 ? "it" : "them"} while the register is still open.`
   }),
 
+  /* To parents, once when their child's attendance for the year falls under the school's threshold */
+  attendanceLow: ({ studentName, percentage, threshold, recover, schoolName }) => ({
+    title: `${studentName}'s attendance is below ${threshold}%`,
+    body: `${studentName}'s attendance this year is ${percentage}%, below the ${threshold}% the school expects.${
+      recover ? ` Attending the next ${recover} without a break brings it back to ${threshold}%.` : ""
+    } Please talk to the class teacher if there is a reason for the absences.`,
+    sms: `${schoolName}: ${studentName}'s attendance is ${percentage}%, below the required ${threshold}%. Please contact the school.`
+  }),
+
+  /* To a class teacher (or deputy), once a day at most: their students who fell under the threshold */
+  attendanceLowDigest: ({ threshold, students }) => ({
+    title: `${students.length === 1 ? "1 student" : `${students.length} students`} fell below ${threshold}% attendance`,
+    body: `Attendance for the year is now below ${threshold}% for: ${students.join(", ")}. Their parents have been told. Please follow up with them.`
+  }),
+
   resultsPublished: ({ examName }) => ({
     title: `${examName} results are out`,
     body: `Results for ${examName} have been published. Open the report card to see the marks.`,
