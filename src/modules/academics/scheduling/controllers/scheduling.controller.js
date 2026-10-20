@@ -48,7 +48,7 @@ export const schedulingController = {
     const outcome = await schedulingRunService.apply(req.context, req.params.runId, req.body);
     const message =
       outcome.run.kind === "CLASS_TIMETABLE"
-        ? `Timetable applied: ${outcome.added} lessons added${outcome.removed ? `, ${outcome.removed} removed` : ""}${outcome.kept ? `, ${outcome.kept} kept` : ""}`
+        ? `Timetable applied: ${outcome.added} lessons added${outcome.removed ? `, ${outcome.removed} removed` : ""}${outcome.kept ? `, ${outcome.kept} kept` : ""}${outcome.substitutionsCancelled ? `, ${outcome.substitutionsCancelled} substitution plans cancelled` : ""}`
         : `Exam timetable applied: ${outcome.scheduled} papers scheduled`;
     return ok(res, outcome, message);
   },

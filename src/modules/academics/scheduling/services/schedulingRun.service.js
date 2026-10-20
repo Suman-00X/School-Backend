@@ -6,6 +6,7 @@ import { academicYearService } from "../../academic-years/index.js";
 import { calendarService } from "../../calendar/index.js";
 import { sectionService } from "../../sections/index.js";
 import { subjectService } from "../../subjects/index.js";
+import { substitutionService } from "../../substitutions/index.js";
 import { periodService, timetableService } from "../../timetable/index.js";
 import { schedulingRuns } from "../models/schedulingRun.schema.js";
 import { schedulingRunRepository, schedulingRunSummaryRepository } from "../repositories/schedulingRun.repository.js";
@@ -247,7 +248,7 @@ export const schedulingRunService = {
           `This draft leaves ${missing} period${missing === 1 ? "" : "s"} unplaced. Apply it with allowIncomplete to add them by hand, or change the rules and generate again.`
         );
       }
-      const { applied, added } = await transaction(async dbc => {
+      const { applied, added, cancelled } = await transaction(async dbc => {
         const applied = await claim(
           ctx,
           runId,
@@ -262,19 +263,22 @@ export const schedulingRunService = {
           periodId,
           room
         }));
-        const added = await timetableService.replaceSlots(
+        /* REPLACE: the removed lessons' substitution plans for today and later go with them */
+        const { added, cancelled } = await timetableService.replaceSlots(
           ctx,
           run.academicYearId,
           { removeSlotIds: run.result.removeSlotIds, slots },
           { dbc }
         );
-        return { applied, added };
+        return { applied, added, cancelled };
       });
+      await substitutionService.notifyCancelled(ctx, cancelled);
       return {
         run: present(applied),
         added: added.length,
         removed: run.result.removeSlotIds.length,
-        kept: run.result.keepSlotIds.length
+        kept: run.result.keepSlotIds.length,
+        substitutionsCancelled: cancelled.length
       };
     }
 
@@ -291,17 +295,23 @@ export const schedulingRunService = {
       startTime,
       endTime
     }));
-    const applied = await claim(ctx, runId, { status: "APPLIED", appliedAt: new Date(), appliedBy: ctx.userId });
-    try {
+    /* The calendar writes in its own transaction, so the claim's transaction stays open around
+       it: the run's row stays locked (a second apply waits, then finds it applied), and the run
+       is APPLIED only when the write succeeded. A failure or a crash rolls the claim back and
+       the draft stays a draft. */
+    const applied = await transaction(async dbc => {
+      const claimed = await claim(
+        ctx,
+        runId,
+        { status: "APPLIED", appliedAt: new Date(), appliedBy: ctx.userId },
+        { dbc }
+      );
       const yearCtx = { ...ctx, academicYearId: academicYear.id, academicYear };
       const event = await calendarService.findForExam(ctx, run.examId);
       if (event) await calendarService.update(yearCtx, event.id, { timetable });
       else await calendarService.create(yearCtx, { eventType: "EXAM", examId: run.examId, timetable });
-    } catch (error) {
-      /* the exam is unchanged: the draft stays a draft */
-      await schedulingRunRepository.update(ctx.tenantId, runId, { status: "DRAFT", appliedAt: null, appliedBy: null });
-      throw error;
-    }
+      return claimed;
+    });
     return { run: present(applied), scheduled: timetable.length };
   },
 

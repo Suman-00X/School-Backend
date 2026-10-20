@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, gte, inArray } from "drizzle-orm";
 import { transaction } from "../../../../common/database/postgres.js";
 import { publish } from "../../../../common/events/events.js";
 import { conflict, forbidden, notFound, unprocessable } from "../../../../common/http/errors.js";
@@ -113,6 +113,30 @@ const countBy = (rows, key) => {
   return counts;
 };
 
+/* The mark that keeps the lesson's timetabled teacher from it on the date (it needs cover),
+   or null. A plan for a lesson nobody is away from is "no longer needed": the absence was
+   withdrawn, or the timetable changed. */
+const awayMark = (absence, lesson, date) => {
+  const mark = absence.markOf(lesson.teacherId, date);
+  return mark && awayIn(mark, lesson.period) ? mark : null;
+};
+
+/* The plans still needed: their lesson is on the timetable that weekday and its teacher is
+   away then. Attendance honours only these. */
+const stillNeeded = async (ctx, plans) => {
+  if (!plans.length) return plans;
+  const dates = plans.map(plan => plan.date).sort();
+  const [lessons, absence] = await Promise.all([
+    timetableService.lessonsByIds(ctx, [...new Set(plans.map(plan => plan.timetableSlotId))]),
+    absenceService.inRange(ctx, dates[0], dates.at(-1))
+  ]);
+  const lessonOf = new Map(lessons.map(lesson => [lesson.id, lesson]));
+  return plans.filter(plan => {
+    const lesson = lessonOf.get(plan.timetableSlotId);
+    return Boolean(lesson && lesson.weekday === isoWeekday(plan.date) && awayMark(absence, lesson, plan.date));
+  });
+};
+
 /* Everything about one date: its academic year, the lessons of its weekday, who is away,
    the plans, and the lessons that need cover
    -> { date, today, academicYear, closure, lessons, absence, plans, items: [{ lesson, mark, plan, ended }] } */
@@ -137,8 +161,8 @@ const loadDay = async (ctx, date) => {
   const planOf = new Map(plans.map(plan => [plan.timetableSlotId, plan]));
   const ended = period => date < now.date || (date === now.date && period.endTime <= now.time);
   for (const lesson of day.lessons) {
-    const mark = absence.markOf(lesson.teacherId, date);
-    if (!mark || !awayIn(mark, lesson.period)) continue;
+    const mark = awayMark(absence, lesson, date);
+    if (!mark) continue;
     day.items.push({ lesson, mark, plan: planOf.get(lesson.id) ?? null, ended: ended(lesson.period) });
   }
   return day;
@@ -398,6 +422,26 @@ export const substitutionService = {
     return dutyView(row);
   },
 
+  /* For the timetable: these lessons are being removed (by hand, or a generated week replacing
+     them), so their plans for today and later go too, in the caller's transaction. A past
+     day's plan stays as history. -> the cancelled plans: pass them to notifyCancelled once
+     the transaction commits */
+  cancelForLessons: async (ctx, timetableSlotIds, { dbc }) => {
+    if (!timetableSlotIds.length) return [];
+    const conditions = [
+      inArray(substitutions.timetableSlotId, timetableSlotIds),
+      gte(substitutions.date, await tenantToday(ctx.tenantId))
+    ];
+    const rows = await substitutionRepository.findMany(ctx.tenantId, { conditions, with: planDetails, dbc });
+    if (rows.length) await substitutionRepository.softDeleteWhere(ctx.tenantId, conditions, { dbc });
+    return rows;
+  },
+
+  /* Tell each substitute they are off the lesson, as a cancelled plan does */
+  notifyCancelled: async (ctx, plans) => {
+    for (const plan of plans) await notify(ctx, plan, null, plan);
+  },
+
   /* The signed-in teacher's substitution duties in [from, to] (default: the next 7 days) */
   mine: async (ctx, { from, to }) => {
     const teacher = await teacherService.findByUserId(ctx, ctx.userId);
@@ -422,26 +466,38 @@ export const substitutionService = {
   findById: (ctx, substitutionId) =>
     substitutionRepository.findById(ctx.tenantId, substitutionId, { with: planDetails }),
 
-  /* For attendance: the plan in force for a lesson on a date, or null */
-  planAt: (ctx, { timetableSlotId, date }) => substitutionRepository.findAt(ctx.tenantId, { timetableSlotId, date }),
+  /* For attendance: the plan in force for a lesson on a date, or null (also when it is no
+     longer needed: the timetabled teacher takes the lesson) */
+  planAt: async (ctx, { timetableSlotId, date }) => {
+    const plan = await substitutionRepository.findAt(ctx.tenantId, { timetableSlotId, date });
+    return plan ? ((await stillNeeded(ctx, [plan]))[0] ?? null) : null;
+  },
 
-  /* For attendance: a section's plans on a date, with the substitute's name -> [plan view + slot id] */
+  /* For attendance: a section's plans still needed on a date, with the substitute's name
+     -> [plan view + slot id] */
   forSectionOn: async (ctx, sectionId, date) =>
     (
-      await substitutionRepository.findInRange(
-        ctx.tenantId,
-        { from: date, to: date, conditions: [eq(substitutions.sectionId, sectionId)] },
-        { with: planDetails }
+      await stillNeeded(
+        ctx,
+        await substitutionRepository.findInRange(
+          ctx.tenantId,
+          { from: date, to: date, conditions: [eq(substitutions.sectionId, sectionId)] },
+          { with: planDetails }
+        )
       )
     ).map(dutyView),
 
-  /* For attendance: the lessons a teacher covers on a date (substitute or activity in charge) */
-  dutiesOn: (ctx, teacherId, date) =>
-    substitutionRepository.findInRange(ctx.tenantId, {
-      from: date,
-      to: date,
-      conditions: [eq(substitutions.substituteTeacherId, teacherId)]
-    }),
+  /* For attendance: the lessons a teacher covers on a date (substitute or activity in charge),
+     while still needed */
+  dutiesOn: async (ctx, teacherId, date) =>
+    stillNeeded(
+      ctx,
+      await substitutionRepository.findInRange(ctx.tenantId, {
+        from: date,
+        to: date,
+        conditions: [eq(substitutions.substituteTeacherId, teacherId)]
+      })
+    ),
 
   /* For attendance: how the year's lessons in [from, to] are covered
      -> Map("slotId|date" -> { away: the timetabled teacher is away then, plan | null }) */
@@ -455,8 +511,7 @@ export const substitutionService = {
     const byWeekday = Map.groupBy(lessons, lesson => lesson.weekday);
     for (const date of eachDay(from, to)) {
       for (const lesson of byWeekday.get(isoWeekday(date)) ?? []) {
-        const mark = absence.markOf(lesson.teacherId, date);
-        if (mark && awayIn(mark, lesson.period)) coverage.set(`${lesson.id}|${date}`, { away: true, plan: null });
+        if (awayMark(absence, lesson, date)) coverage.set(`${lesson.id}|${date}`, { away: true, plan: null });
       }
     }
     for (const plan of plans) {

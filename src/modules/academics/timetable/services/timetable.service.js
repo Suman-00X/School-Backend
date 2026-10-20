@@ -1,10 +1,12 @@
 import { and, eq, inArray, ne } from "drizzle-orm";
+import { transaction } from "../../../../common/database/postgres.js";
 import { conflict, forbidden, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { teacherService } from "../../../users/teachers/index.js";
 import { academicYearService } from "../../academic-years/index.js";
 import { sectionService } from "../../sections/index.js";
 import { sectionSubjectService } from "../../section-subjects/index.js";
 import { WEEKDAY_NAMES as DAY_NAMES } from "../../shared/constants/academic.constants.js";
+import { substitutionService } from "../../substitutions/index.js";
 import { teacherAssignmentService, teachingScope } from "../../teacher-assignments/index.js";
 import { timetableSlots } from "../models/timetableSlot.schema.js";
 import { timetableSlotRepository } from "../repositories/timetableSlot.repository.js";
@@ -144,10 +146,16 @@ export const timetableService = {
     return timetableSlotRepository.update(ctx.tenantId, slotId, slot);
   },
 
+  /* The lesson's substitution plans for today and later go with it, and their substitutes
+     are told. -> { substitutionsCancelled } */
   remove: async (ctx, slotId) => {
-    const row = await timetableSlotRepository.softDelete(ctx.tenantId, slotId);
-    if (!row) throw notFound("Timetable slot");
-    return row;
+    const cancelled = await transaction(async dbc => {
+      const row = await timetableSlotRepository.softDelete(ctx.tenantId, slotId, { dbc });
+      if (!row) throw notFound("Timetable slot");
+      return substitutionService.cancelForLessons(ctx, [row.id], { dbc });
+    });
+    await substitutionService.notifyCancelled(ctx, cancelled);
+    return { substitutionsCancelled: cancelled.length };
   },
 
   /* Weekly grid of a section. Teachers: only as its class teacher or deputy (D-11). */
@@ -211,24 +219,35 @@ export const timetableService = {
   /* Every weekly class of an academic year, by weekday and bell order */
   lessonsInYear: (ctx, academicYearId) => lessonsWhere(ctx, eq(timetableSlots.academicYearId, academicYearId)),
 
+  /* For substitutions: the lessons still on the timetable among these ids */
+  lessonsByIds: (ctx, slotIds) => lessonsWhere(ctx, inArray(timetableSlots.id, slotIds)),
+
   /* For scheduling: a generated week written at once (its solver already checked every rule).
-     Removes the given slots, then adds the new ones; the unique indexes still refuse a clash.
-     -> the slots added */
+     Removes the given slots (and their substitution plans for today and later), then adds the
+     new ones; the unique indexes still refuse a clash.
+     -> { added: the slots added, cancelled: the plans cancelled, for notifyCancelled after commit } */
   replaceSlots: async (ctx, academicYearId, { removeSlotIds, slots }, { dbc }) => {
+    let cancelled = [];
     if (removeSlotIds.length) {
-      await timetableSlotRepository.softDeleteWhere(
+      const removed = await timetableSlotRepository.softDeleteWhere(
         ctx.tenantId,
         [eq(timetableSlots.academicYearId, academicYearId), inArray(timetableSlots.id, removeSlotIds)],
         { dbc }
       );
+      cancelled = await substitutionService.cancelForLessons(
+        ctx,
+        removed.map(slot => slot.id),
+        { dbc }
+      );
     }
-    return slots.length
-      ? timetableSlotRepository.createMany(
+    const added = slots.length
+      ? await timetableSlotRepository.createMany(
           ctx.tenantId,
           slots.map(slot => ({ ...slot, academicYearId, room: slot.room ?? null })),
           { dbc }
         )
       : [];
+    return { added, cancelled };
   },
 
   /* The weekly grid shape of forSection/forTeacher, for slots that are not stored (previews):

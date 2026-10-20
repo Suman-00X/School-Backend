@@ -11,7 +11,12 @@ const crud = createCrudController(timetableService, {
 export const timetableController = {
   create: crud.create,
   update: crud.update,
-  remove: crud.remove,
+  remove: async (req, res) => {
+    const outcome = await timetableService.remove(req.context, req.params.slotId);
+    const { substitutionsCancelled: cancelled } = outcome;
+    const plans = cancelled ? ` (${cancelled} substitution plan${cancelled === 1 ? "" : "s"} cancelled)` : "";
+    return ok(res, outcome, `Timetable slot removed successfully${plans}`);
+  },
 
   forSection: async (req, res) =>
     ok(
