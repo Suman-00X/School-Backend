@@ -26,6 +26,7 @@ import { admitCardExamRoutes } from "./admit-cards/index.js";
 import { substitutionRoutes } from "./substitutions/index.js";
 import { nepPolicyRoutes } from "./nep-policy/index.js";
 import { holisticProgressRoutes } from "./holistic-progress/index.js";
+import { behaviourRemarkRoutes } from "./behaviour-remarks/index.js";
 
 /* Academics module, mounted at /api/v1/academics */
 const router = createRouter();
@@ -65,5 +66,6 @@ router.use("/scheduling", schedulingRoutes);
 router.use("/substitutions", substitutionRoutes);
 router.use("/nep-policy", nepPolicyRoutes);
 router.use("/holistic-progress", holisticProgressRoutes);
+router.use("/behaviour-remarks", behaviourRemarkRoutes);
 
 export default router;
