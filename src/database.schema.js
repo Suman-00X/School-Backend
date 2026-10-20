@@ -25,6 +25,8 @@ export * from "./modules/academics/enrollments/models/enrollmentPolicy.schema.js
 export * from "./modules/academics/grading/models/gradeScale.schema.js";
 export * from "./modules/academics/exams/models/exam.schema.js";
 export * from "./modules/academics/exams/models/examPaper.schema.js";
+export * from "./modules/academics/exam-eligibility/models/examEligibility.schema.js";
+export * from "./modules/academics/admit-cards/models/admitCard.schema.js";
 export * from "./modules/academics/marks/models/marks.schema.js";
 export * from "./modules/academics/result-policies/models/resultPolicy.schema.js";
 export * from "./modules/academics/report-cards/models/resultPublication.schema.js";

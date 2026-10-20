@@ -205,6 +205,18 @@ export const invoiceService = {
       ? invoiceRepository.findMany(ctx.tenantId, { conditions: [inArray(invoices.id, invoiceIds)] })
       : [],
 
+  /* Fees past their due date and still unpaid on `asOf` (any year), per student:
+     Map(studentId -> amount); students who owe nothing are left out (exam eligibility) */
+  overdueByStudent: async (ctx, studentIds, { asOf }) =>
+    studentIds.length
+      ? new Map(
+          (await invoiceRepository.overdueByStudent(ctx.tenantId, studentIds, asOf)).map(row => [
+            row.studentId,
+            fromMinor(toMinor(row.overdue))
+          ])
+        )
+      : new Map(),
+
   /* All tenants: open invoices due within `days` days or overdue (reminders) */
   findOpenDueWithin: days => invoiceRepository.findOpenDueWithin(days),
 

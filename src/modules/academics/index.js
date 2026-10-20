@@ -21,6 +21,8 @@ import { assessmentSchemeRoutes } from "./assessment-schemes/index.js";
 import { homeworkRoutes } from "./homework/index.js";
 import { assessmentRoutes } from "./assessments/index.js";
 import { schedulingRoutes } from "./scheduling/index.js";
+import { examEligibilityExamRoutes, examEligibilityRoutes } from "./exam-eligibility/index.js";
+import { admitCardExamRoutes } from "./admit-cards/index.js";
 import { substitutionRoutes } from "./substitutions/index.js";
 
 /* Academics module, mounted at /api/v1/academics */
@@ -41,6 +43,10 @@ router.use("/enrollments", enrollmentRoutes);
 router.use("/exams", examRoutes);
 /* /exams/:examId/result-publication… (report-cards owns publication and its snapshots) */
 router.use("/exams", examPublicationRoutes);
+/* /exams/:examId/eligibility… and /exams/:examId/admit-cards… */
+router.use("/exams", examEligibilityExamRoutes);
+router.use("/exams", admitCardExamRoutes);
+router.use("/exam-eligibility", examEligibilityRoutes);
 router.use("/marks", marksRoutes);
 router.use("/calendar", calendarRoutes);
 router.use("/attendance", attendanceRoutes);

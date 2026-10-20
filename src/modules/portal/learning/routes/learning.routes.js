@@ -31,6 +31,15 @@ router.get(
   controller.reportCardPdf
 );
 
+/* Admit cards the school has issued (exam eligibility met) */
+router.get("/students/:studentId/admit-cards", authorize(can.students), validate(rules.student), controller.admitCards);
+router.get(
+  "/students/:studentId/admit-cards/:admitCardId/pdf",
+  authorize(can.students),
+  validate(rules.admitCard),
+  controller.admitCardPdf
+);
+
 router.get("/calendar", authorize(can.calendar), validate(rules.calendar), inYear, controller.calendar);
 
 router.get("/teaching/timetable", authorize(can.teaching), controller.teacherTimetable);

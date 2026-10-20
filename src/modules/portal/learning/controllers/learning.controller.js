@@ -27,6 +27,18 @@ export const learningController = {
     return sendFile(res, { buffer, fileName, format: "pdf" });
   },
 
+  admitCards: async (req, res) =>
+    ok(res, await learningService.admitCards(req.context, req.params.studentId), "Admit cards retrieved successfully"),
+
+  admitCardPdf: async (req, res) => {
+    const { buffer, fileName } = await learningService.admitCardPdf(
+      req.context,
+      req.params.studentId,
+      req.params.admitCardId
+    );
+    return sendFile(res, { buffer, fileName, format: "pdf" });
+  },
+
   calendar: async (req, res) =>
     paginated(res, await learningService.calendar(req.context, req.query), "Calendar retrieved successfully"),
 

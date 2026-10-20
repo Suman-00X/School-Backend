@@ -77,6 +77,17 @@ export const learningService = {
     return reportCardPdfService.renderSnapshot(ctx, await reportSnapshotService.familySnapshot(ctx, studentId, query));
   },
 
+  /* This year's issued admit cards (none for a student who is not eligible) */
+  admitCards: async (ctx, studentId) => {
+    await studentAccess.assert(ctx, studentId);
+    return admitCardService.forStudent(ctx, studentId);
+  },
+
+  admitCardPdf: async (ctx, studentId, admitCardId) => {
+    await studentAccess.assert(ctx, studentId);
+    return admitCardPdfService.renderOne(ctx, await admitCardService.issuedToStudent(ctx, studentId, admitCardId));
+  },
+
   calendar: (ctx, query) => calendarService.list(ctx, query),
 
   /* Teachers: weekly timetable and the sections they teach this year */

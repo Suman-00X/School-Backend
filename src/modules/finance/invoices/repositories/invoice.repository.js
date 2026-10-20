@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray, isNull, lte, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import { createRepository, scoped } from "../../../../common/database/repository.js";
 import { db } from "../../../../common/database/postgres.js";
 import { feeStructures } from "../../fee-structures/models/feeStructure.schema.js";
@@ -85,6 +85,22 @@ export const invoiceRepository = {
       .delete(invoiceLines)
       .where(and(eq(invoiceLines.tenantId, tenantId), eq(invoiceLines.invoiceId, invoiceId)));
   },
+
+  /* Unpaid balance of open invoices due before `before`, per student: [{ studentId, overdue }] */
+  overdueByStudent: (tenantId, studentIds, before, { dbc = db } = {}) =>
+    dbc
+      .select({ studentId: invoices.studentId, overdue: sql`sum(${invoices.balance})`.mapWith(Number) })
+      .from(invoices)
+      .where(
+        scoped(
+          invoices,
+          tenantId,
+          inArray(invoices.studentId, studentIds),
+          inArray(invoices.status, OPEN_INVOICE_STATUSES),
+          lt(invoices.dueDate, before)
+        )
+      )
+      .groupBy(invoices.studentId),
 
   /* All tenants: open invoices due within the next `days` days or already overdue */
   findOpenDueWithin: days =>

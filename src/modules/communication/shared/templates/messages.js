@@ -37,6 +37,12 @@ export const messages = {
     sms: `${examName} results are published. Check the school app for the report card.`
   }),
 
+  admitCardIssued: ({ studentName, examName }) => ({
+    title: `${studentName}'s admit card for ${examName} is ready`,
+    body: `The admit card for ${examName} has been issued. Open it in the school app to see the date sheet and print it.`,
+    sms: `Admit card for ${examName} is issued for ${studentName}. Download it from the school app.`
+  }),
+
   invoiceIssued: ({ studentName, invoiceNumber, total, dueDate, currency }) => ({
     title: `New fee invoice ${invoiceNumber}`,
     body: `An invoice of ${money(total, currency)} for ${studentName} is due on ${dueDate}.`,

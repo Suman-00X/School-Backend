@@ -20,6 +20,7 @@ export const learningValidators = {
         message: "send either examId or schemeId"
       })
   },
+  admitCard: { params: idParams("studentId", "admitCardId") },
   calendar: {
     query: listQuery({
       from: date().optional(),
