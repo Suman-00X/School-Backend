@@ -130,6 +130,15 @@ export default {
     provider: str("PAYMENT_PROVIDER", nodeEnv === "production" ? "razorpay" : "mock") // razorpay | mock
   },
 
+  /* HTML documents (certificates) are printed to PDF by a headless Chrome/Chromium */
+  pdf: {
+    browserPath: str("PDF_BROWSER_PATH"),
+    /* Containers without user namespaces can't run Chrome's sandbox */
+    noSandbox: str("PDF_BROWSER_NO_SANDBOX") === "true",
+    maxPages: num("PDF_MAX_PAGES", 3),
+    timeoutMs: num("PDF_TIMEOUT_MS", 20_000)
+  },
+
   sentryDsn: str("SENTRY_DSN"),
   /* GET /metrics needs "Authorization: Bearer <token>"; unset: the endpoint is off */
   metricsToken: str("METRICS_TOKEN")

@@ -1,11 +1,12 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { createCrudService } from "../../../../common/crud/crudService.js";
-import { transaction } from "../../../../common/database/postgres.js";
+import { db, transaction } from "../../../../common/database/postgres.js";
 import { publish } from "../../../../common/events/events.js";
 import { conflict, notFound, unprocessable } from "../../../../common/http/errors.js";
 import { studentService } from "../../../users/students/index.js";
 import { sectionService } from "../../sections/index.js";
 import { teachingScope } from "../../teacher-assignments/index.js";
+import { certificates } from "../../certificates/models/certificate.schema.js";
 import { nextRollNumber } from "../../shared/utils/codes.util.js";
 import { studentEnrollments as enrollments } from "../models/enrollment.schema.js";
 import { enrollmentRepository } from "../repositories/enrollment.repository.js";
@@ -40,6 +41,28 @@ const isEnrolledInYear = (ctx, academicYearId, studentId, options) =>
     [eq(enrollments.academicYearId, academicYearId), eq(enrollments.studentId, studentId)],
     options
   );
+
+/* Transfer certificates in force (issued, not cancelled) of some students: Map studentId ->
+   serial number. Read from the table itself, as certificates build on enrollments. */
+const transfersInForce = async (ctx, studentIds, { dbc = db } = {}) => {
+  if (!studentIds.length) return new Map();
+  const rows = await dbc
+    .select({ studentId: certificates.studentId, serialNumber: certificates.serialNumber })
+    .from(certificates)
+    .where(
+      and(
+        eq(certificates.tenantId, ctx.tenantId),
+        eq(certificates.isActive, true),
+        eq(certificates.type, "TRANSFER"),
+        eq(certificates.status, "ISSUED"),
+        inArray(certificates.studentId, studentIds)
+      )
+    );
+  return new Map(rows.map(row => [row.studentId, row.serialNumber]));
+};
+
+const transferReason = serialNumber =>
+  `A transfer certificate is in force (${serialNumber}): mark the student as left, or cancel the TC first`;
 
 export const enrollmentService = {
   /* Year-scoped: students of one section */
@@ -109,6 +132,32 @@ export const enrollmentService = {
     return updated;
   },
 
+  /* The student leaves the school (a transfer certificate): every live (ACTIVE) enrollment is
+     closed, whichever year it is in (after a promotion it is the next year's). Joins the
+     caller's transaction; pass the result to announceLeft once it has committed. */
+  closeForLeaving: async (ctx, studentId, { dbc }) => {
+    const live = await enrollmentRepository.findMany(ctx.tenantId, {
+      conditions: [eq(enrollments.studentId, studentId), eq(enrollments.status, "ACTIVE")],
+      dbc
+    });
+    const closed = [];
+    for (const enrollment of live) {
+      const row = await enrollmentRepository.update(
+        ctx.tenantId,
+        enrollment.id,
+        { status: "LEFT" },
+        { dbc, conditions: [eq(enrollments.status, "ACTIVE")] }
+      );
+      if (row) closed.push(row);
+    }
+    return closed;
+  },
+
+  /* After commit: STUDENT_LEFT for each enrollment closeForLeaving closed */
+  announceLeft: async (ctx, closed) => {
+    for (const enrollment of closed) await announceLeaving(ctx, enrollment);
+  },
+
   /* Move a student from their section in one year to a section in the next */
   promote: async (ctx, { studentId, fromAcademicYearId, toAcademicYearId, toSectionId, admissionType }) => {
     const placement = await sectionService.getPlacement(ctx, toAcademicYearId, toSectionId);
@@ -123,6 +172,9 @@ export const enrollmentService = {
       eq(enrollments.status, "ACTIVE")
     ]);
     if (!previous) throw unprocessable("The student has no active enrollment in the source academic year");
+
+    const transfer = (await transfersInForce(ctx, [studentId])).get(studentId);
+    if (transfer) throw conflict(transferReason(transfer));
 
     return transaction(async tx => {
       const enrollment = await enrollmentService.enroll(
@@ -173,9 +225,19 @@ export const enrollmentService = {
     const leavers = [];
 
     await transaction(async tx => {
+      /* A student with a TC in force is leaving, so is not moved on (LEAVE still closes them) */
+      const transfers = await transfersInForce(ctx, inRuleOrder.map(enrollment => enrollment.studentId), { dbc: tx });
       for (const enrollment of inRuleOrder) {
         const override = actionOf.get(enrollment.studentId);
         const action = override?.action ?? "PROMOTE";
+
+        if (action !== "LEAVE" && transfers.has(enrollment.studentId)) {
+          summary.skipped.push({
+            studentId: enrollment.studentId,
+            reason: transferReason(transfers.get(enrollment.studentId))
+          });
+          continue;
+        }
 
         if (action !== "LEAVE" && (await isEnrolledInYear(ctx, toAcademicYearId, enrollment.studentId, { dbc: tx }))) {
           summary.skipped.push({

@@ -516,6 +516,17 @@ Only school days are used (holidays, vacations, weekly off days and off Saturday
 3. The student submits with `POST /me/homework/:id/submission` (multipart: text and/or file). The student can resubmit until the work is graded.
 4. The teacher reviews `GET /academics/homework/:id/submissions` and grades or returns each one with `POST …/submissions/:sid/grading`.
 
+### Certificates
+
+Bonafide, character and transfer certificates (`/academics/certificates`), printed from the school's own formats (`/academics/certificate-formats`).
+
+1. **Formats:** each type has one format, HTML + CSS stored in the database. Every save is a new version (`POST /academics/certificate-formats/:type/versions`, with `baseVersion` to refuse overwriting someone else's save: 409). The highest version is used for new certificates; `…/versions/:version/restore` saves an old one again as the next version. A school starts on version 1 of the standard formats.
+2. **Placeholders:** `{{student.name}}`, `{{class.classSection}}`, `{{certificate.serialNumber}}` and so on (the list per type: `GET /academics/certificates/types`), HTML-escaped; `{{#if path}}…{{else}}…{{/if}}` shows a part only when the value is present (not empty, false or an empty list). A format using an unknown placeholder is refused (422).
+3. **Issuing:** `GET …/draft?type=&studentId=` gives the inputs' starting values (a TC's working days and days present from attendance); `POST …/preview` renders it; `POST /academics/certificates` issues it with a serial number per type and year (`BC/2026-27/0001`, `CC/…`, `TC/…`). The student's details and the inputs are frozen with the format version, so `GET …/:id/pdf` always reprints the same certificate. A TC with `markLeft: true` marks the student's enrollment LEFT (transport and hostel release their seat and bed). One TC can be in force per student.
+4. **PDF:** printed by a headless Chrome/Chromium (`PDF_BROWSER_PATH`, else a usual install path; 503 when none). Pages render with JavaScript off and no network: images and fonts must be data: URLs, or `{{school.logo}}`.
+5. **Families:** the student and their parents see the student's certificates in force at `GET /me/students/:id/certificates` (`?type=`; every year's, newest first; cancelled ones are left out), with `…/:certificateId/document` (HTML for the screen) and `…/:certificateId/pdf` (the same PDF the office prints). The list leaves out who issued it and what was entered. Another student's certificate, or a cancelled one, is 404.
+6. **Report card format:** the report card's PDF is printed the same way, from the school's `REPORT_CARD` format in the same store (`/academics/certificate-formats/report-card`, Formats tab › Report card). Its placeholders come with `GET …/report-card` (`placeholders`). Subjects, their parts, a weighted card's exams and co-scholastic areas are lists, repeated with `{{#each report.subjects}}…{{else}}…{{/each}}` (inside, `{{name}}` is the item's field and `{{school.name}}` still works). The `report.show*` flags follow the result policy, so the columns match what families may see. A live card prints with the version in use; a published card prints with the version that was in use when it was published. Preview with `studentId` uses the student's latest exam this year (422 when there are no results).
+
 ### Library
 
 1. **Set up:** `PATCH /library/policy`:

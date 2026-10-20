@@ -1,6 +1,7 @@
 import { closeMongo, connectMongo } from "./common/database/mongo.js";
 import { closePostgres, connectPostgres, initPostgres } from "./common/database/postgres.js";
 import { closeCache, initCache } from "./common/cache/cache.js";
+import { closeHtmlPdf } from "./common/export/htmlPdf.js";
 import { startJobs, stopJobs } from "./common/jobs/queue.js";
 import { flushErrorReporting, initErrorReporting } from "./common/observability/errorReporter.js";
 import * as schema from "./database.schema.js";
@@ -20,7 +21,7 @@ export const startInfrastructure = async ({ runJobs = !process.env.REDIS_URL } =
 
 export const stopInfrastructure = async () => {
   await stopJobs();
-  await Promise.allSettled([closePostgres(), closeMongo(), closeCache(), flushErrorReporting()]);
+  await Promise.allSettled([closePostgres(), closeMongo(), closeCache(), closeHtmlPdf(), flushErrorReporting()]);
 };
 
 /* Backwards-compatible names used by scripts */

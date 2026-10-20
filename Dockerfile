@@ -15,10 +15,13 @@ RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --ignore-scripts
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 ENV NODE_ENV=production \
     PORT=3000 \
-    STORAGE_LOCAL_DIR=/app/storage
+    STORAGE_LOCAL_DIR=/app/storage \
+    PDF_BROWSER_PATH=/usr/bin/chromium \
+    PDF_BROWSER_NO_SANDBOX=true
 WORKDIR /app
+# Chromium prints certificates to PDF; the Noto fonts cover Indian scripts
 RUN apt-get update \
- && apt-get install -y --no-install-recommends tini \
+ && apt-get install -y --no-install-recommends tini chromium fonts-noto-core \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=deps --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node package.json ./

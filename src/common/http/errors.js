@@ -19,6 +19,7 @@ export const ERROR_CODES = Object.freeze({
   CONFLICT: "CONFLICT",
   UNPROCESSABLE_ENTITY: "UNPROCESSABLE_ENTITY",
   TOO_MANY_REQUESTS: "TOO_MANY_REQUESTS",
+  SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
   INTERNAL_ERROR: "INTERNAL_ERROR"
 });
 
@@ -43,3 +44,6 @@ export const tooManyRequests = message => new AppError(429, ERROR_CODES.TOO_MANY
 
 /* Well-formed input that breaks a business rule */
 export const unprocessable = message => new AppError(422, ERROR_CODES.UNPROCESSABLE_ENTITY, message);
+
+/* Something the server depends on is not set up or not reachable */
+export const serviceUnavailable = message => new AppError(503, ERROR_CODES.SERVICE_UNAVAILABLE, message);
