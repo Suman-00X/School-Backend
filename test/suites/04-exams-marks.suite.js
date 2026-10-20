@@ -39,7 +39,7 @@ describe("exams and marks", () => {
         examDate: "2026-09-02"
       })
     ).data;
-    assert.equal(world.paper.displayCode, "MA01-1A-INTERNAL");
+    assert.equal(world.paper.displayCode, "MA210-A-INTERNAL");
     assert.equal(world.paper.maxMarks, 100);
     world.englishPaper = (
       await post(`${A}/exams/${world.exam.id}/papers`, {

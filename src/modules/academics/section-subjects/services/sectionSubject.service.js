@@ -1,6 +1,7 @@
 import { eq, inArray } from "drizzle-orm";
 import { createCrudService } from "../../../../common/crud/crudService.js";
 import { conflict, unprocessable } from "../../../../common/http/errors.js";
+import { classSubjectService } from "../../class-subjects/index.js";
 import { sectionService } from "../../sections/index.js";
 import { teachingScope } from "../../teacher-assignments/index.js";
 import { subjectService } from "../../subjects/index.js";
@@ -41,15 +42,22 @@ export const sectionSubjectService = {
       throw conflict("This subject is already assigned to the section");
     }
 
+    /* Subjects belong to the class first: one the class lacks becomes an optional subject of it */
+    const classSubject = await classSubjectService.ensureForClass(ctx, ctx.academicYearId, placement.section.classId, subject);
+
     return sectionSubjectRepository.create(ctx.tenantId, {
       academicYearId: ctx.academicYearId,
       sectionId,
       subjectId,
-      displayCode: sectionSubjectCode({ subjectCode: subject.subjectCode, ...placement }),
+      displayCode: sectionSubjectCode({ classSubjectCode: classSubject.code, sectionName: placement.sectionName }),
       weeklyNoOfClasses,
       description
     });
   },
+
+  /* For exam papers: the subject's row in the section (its displayCode), or null */
+  findTaught: (ctx, academicYearId, sectionId, subjectId) =>
+    sectionSubjectRepository.findOne(ctx.tenantId, taughtConditions(academicYearId, sectionId, subjectId)),
 
   /* For other submodules */
   findForSections: (ctx, sectionIds) =>

@@ -60,7 +60,7 @@ describe("reports: dashboards", () => {
     assert.equal(data.overall.passPercentage, 50);
     assert.equal(data.toppers[0].studentId, world.s1.id);
     assert.equal(data.toppers[0].percentage, 90);
-    assert.ok(data.bySubject.some(s => s.subject.subjectCode === "MA01" && s.averageMarks === 90));
+    assert.ok(data.bySubject.some(s => s.subject.subjectCode === "MA" && s.averageMarks === 90));
   });
 });
 
@@ -105,8 +105,8 @@ describe("reports: exports", () => {
     const results = (
       await download(`${R}/exports/results?format=csv&examId=${world.exam.id}&sectionId=${world.s1A.id}`)
     ).buffer.toString();
-    assert.match(results, /MA01 \(\/100\)/);
-    /* Papers in display-code order: EN01 then MA01 */
+    assert.match(results, /MA \(\/100\)/);
+    /* Papers in display-code order: EN then MA */
     assert.match(results, /Fstudent2 Lstudent2,12,AB,12,8,E,FAIL,2/);
   });
 

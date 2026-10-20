@@ -22,6 +22,28 @@ export const CLASS_LEVELS = [
 ];
 export const CLASS_LEVEL_KEYS = CLASS_LEVELS.map(l => l.level);
 
+/* Class subject codes (MA221): the subject's code, then the class's stage and its position
+   in the stage (each 1-9, set per school under Policy › Subject codes), then 1 for a required
+   subject or 0 for an optional one. A new class takes its level's default place when free. */
+export const CODE_SLOT_MAX = 9;
+export const DEFAULT_CODE_SLOTS = {
+  NURSERY: [1, 1],
+  LKG: [1, 2],
+  UKG: [1, 3],
+  GRADE_1: [2, 1],
+  GRADE_2: [2, 2],
+  GRADE_3: [2, 3],
+  GRADE_4: [3, 1],
+  GRADE_5: [3, 2],
+  GRADE_6: [3, 3],
+  GRADE_7: [3, 4],
+  GRADE_8: [4, 1],
+  GRADE_9: [4, 2],
+  GRADE_10: [4, 3],
+  GRADE_11: [5, 1],
+  GRADE_12: [5, 2]
+};
+
 export const CALENDAR_EVENT_TYPES = ["HOLIDAY", "VACATION", "EXAM", "EVENT", "MEETING", "OTHER"];
 /* Event types that close the school for the day */
 export const NON_WORKING_EVENT_TYPES = ["HOLIDAY", "VACATION"];

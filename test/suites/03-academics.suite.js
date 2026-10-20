@@ -72,10 +72,10 @@ describe("academics: structure", () => {
       assert.equal(r.status, 404)
     );
 
-    world.math = (await post(`${A}/subjects`, { subjectName: "Mathematics", subjectCode: "ma01" })).data;
-    assert.equal(world.math.subjectCode, "MA01");
+    world.math = (await post(`${A}/subjects`, { subjectName: "Mathematics", subjectCode: "ma" })).data;
+    assert.equal(world.math.subjectCode, "MA");
     world.english = (
-      await post(`${A}/subjects`, { subjectName: "English", subjectCode: "EN01" }, { as: h.tokens.principal })
+      await post(`${A}/subjects`, { subjectName: "English", subjectCode: "EN" }, { as: h.tokens.principal })
     ).data;
 
     const accountant = await request("POST", `${A}/classes`, {
@@ -117,7 +117,7 @@ describe("academics: structure", () => {
   it("assigns subjects and teachers to sections", async () => {
     await get(`${A}/section-subjects`, {}, 400);
     const mapped = await post(`${A}/section-subjects`, { sectionId: world.s1A.id, subjectId: world.math.id });
-    assert.equal(mapped.data.displayCode, "MA01-1A");
+    assert.equal(mapped.data.displayCode, "MA210-A");
     await post(`${A}/section-subjects`, { sectionId: world.s1A.id, subjectId: world.math.id }, {}, 409);
     await post(`${A}/section-subjects`, { sectionId: world.s1A.id, subjectId: world.english.id });
     assert.equal((await get(`${A}/section-subjects?sectionId=${world.s1A.id}`)).meta.total, 2);

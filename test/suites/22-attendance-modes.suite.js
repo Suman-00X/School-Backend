@@ -72,7 +72,7 @@ describe("attendance modes and teacher scope: setup", () => {
     t.class6 = (await post(`${A}/classes`, { className: "Class 6", classOrder: 6 })).data;
     t.s5A = (await post(`${A}/sections`, { classId: t.class5.id, sectionName: "A", classTeacherId: t.ct5.id })).data;
     t.s6A = (await post(`${A}/sections`, { classId: t.class6.id, sectionName: "A", classTeacherId: t.ct6.id })).data;
-    t.science = (await post(`${A}/subjects`, { subjectName: "Science", subjectCode: "SC56" })).data;
+    t.science = (await post(`${A}/subjects`, { subjectName: "Science", subjectCode: "SC" })).data;
     await seedModeRules([
       { mode: "TWO_SESSIONS", effectiveFrom: "2026-08-01" },
       { mode: "PERIOD_WISE", effectiveFrom: "2026-08-06" }
@@ -148,7 +148,7 @@ describe("D-11: teachers read only their sections", () => {
 
   it("shows teacher assignments and rosters of their sections only", async () => {
     const assignments = await get(`${A}/teacher-assignments`, { as: h.tokens.eng6 });
-    assert.deepEqual(assignments.data.map(a => a.subject.subjectCode).sort(), ["EN01", "SC56"]);
+    assert.deepEqual(assignments.data.map(a => a.subject.subjectCode).sort(), ["EN", "SC"]);
     const sci6 = await get(`${A}/teacher-assignments?teacherId=${t.sci6.id}`, { as: h.tokens.eng6 });
     assert.deepEqual(
       sci6.data.map(a => a.section.id),

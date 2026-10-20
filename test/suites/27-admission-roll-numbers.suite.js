@@ -257,7 +257,7 @@ describe("roll numbers", () => {
     assert.equal(changed.message, "Roll numbers will be assigned by last year's result");
 
     /* 2026-27: a FINAL exam for 11-A, published. Émile has no mark (incomplete), Zara left. */
-    const subject = (await post(`${A}/subjects`, { subjectName: "Economics", subjectCode: "EC11" })).data;
+    const subject = (await post(`${A}/subjects`, { subjectName: "Economics", subjectCode: "EC" })).data;
     await post(`${A}/section-subjects`, { sectionId: t.s11A.id, subjectId: subject.id });
     const exam = (await post(`${A}/exams`, { examName: "Class 11 Annual", examType: "FINAL" })).data;
     const paper = (

@@ -225,25 +225,25 @@ describe("canonical names", () => {
     assert.equal(badCode.status, 400);
     assert.equal(
       badCode.body.message,
-      "Invalid request: subjectCode must be 2-10 letters, digits or -, starting with a letter"
+      "Invalid request: subjectCode must be 2-6 letters"
     );
 
-    const moral = (await post(`${A}/subjects`, { subjectName: "  Moral   Science ", subjectCode: "ms-01" })).data;
-    assert.deepEqual([moral.subjectName, moral.subjectCode], ["Moral Science", "MS-01"]);
+    const moral = (await post(`${A}/subjects`, { subjectName: "  Moral   Science ", subjectCode: " ms " })).data;
+    assert.deepEqual([moral.subjectName, moral.subjectCode], ["Moral Science", "MS"]);
 
     const sameName = await request("POST", `${A}/subjects`, {
-      body: { subjectName: "MORAL science", subjectCode: "MS02" }
+      body: { subjectName: "MORAL science", subjectCode: "MSC" }
     });
     assert.equal(sameName.status, 409);
     assert.equal(sameName.body.message, "A subject named MORAL science already exists");
-    const sameCode = await request("POST", `${A}/subjects`, { body: { subjectName: "Ethics", subjectCode: "Ms-01" } });
-    assert.equal(sameCode.body.message, "A subject with code MS-01 already exists");
+    const sameCode = await request("POST", `${A}/subjects`, { body: { subjectName: "Ethics", subjectCode: "Ms" } });
+    assert.equal(sameCode.body.message, "A subject with code MS already exists");
 
     const bulk = await request("POST", `${A}/subjects/bulk`, {
       body: {
         subjects: [
-          { subjectName: "Drama", subjectCode: "DR01" },
-          { subjectName: "drama", subjectCode: "DR02" }
+          { subjectName: "Drama", subjectCode: "DRA" },
+          { subjectName: "drama", subjectCode: "DRB" }
         ]
       }
     });

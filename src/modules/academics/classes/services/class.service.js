@@ -4,6 +4,7 @@ import { db } from "../../../../common/database/postgres.js";
 import { conflict, forbidden, notFound } from "../../../../common/http/errors.js";
 import { CLASS_LEVELS } from "../../shared/constants/academic.constants.js";
 import { sections } from "../../sections/models/section.schema.js";
+import { subjectCodeService } from "../../subject-codes/index.js";
 import { OUTSIDE_SCOPE, teachingScope } from "../../teacher-assignments/index.js";
 import { classes } from "../models/class.schema.js";
 import { classRepository } from "../repositories/class.repository.js";
@@ -28,13 +29,21 @@ const sectionCount = async (ctx, classId) => {
 export const classService = {
   ...base,
 
-  create: (ctx, { level, description }) => classRepository.create(ctx.tenantId, { ...fromLevel(level), description }),
+  /* A new class takes its level's default place in the subject codes (subject-codes) */
+  create: async (ctx, { level, description }) => {
+    const row = await classRepository.create(ctx.tenantId, { ...fromLevel(level), description });
+    await subjectCodeService.assignDefaults(ctx, [row]);
+    return row;
+  },
 
-  createMany: (ctx, items) =>
-    classRepository.createMany(
+  createMany: async (ctx, items) => {
+    const rows = await classRepository.createMany(
       ctx.tenantId,
       items.map(({ level, description }) => ({ ...fromLevel(level), description }))
-    ),
+    );
+    await subjectCodeService.assignDefaults(ctx, rows);
+    return rows;
+  },
 
   /* A class's level changes only while it has no sections (in any year): its students,
      marks and fees belong to that level. A class created before levels existed (no
@@ -53,7 +62,9 @@ export const classService = {
       }
       Object.assign(changes, fromLevel(level));
     }
-    return base.update(ctx, classId, changes);
+    const row = await base.update(ctx, classId, changes);
+    if (changes.level) await subjectCodeService.levelChanged(ctx, row, existing.level);
+    return row;
   },
 
   /* Every level, in order, with the class created for it (null when not created yet).

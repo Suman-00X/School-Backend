@@ -292,7 +292,7 @@ describe("timetable", () => {
     const monday = grid.data.days.find(d => d.weekday === 1);
     assert.deepEqual(
       monday.slots.map(s => s.subject.subjectCode),
-      ["MA01", "EN01"]
+      ["MA", "EN"]
     );
     assert.equal(monday.slots[0].teacher.name, "Fteacher Lteacher");
 
@@ -358,9 +358,9 @@ describe("grading, report cards and results", () => {
     assert.equal(top.result, "PASS");
     assert.equal(top.rank, 1);
     assert.equal(second.result, "FAIL");
-    assert.equal(second.subjects.find(s => s.subject.subjectCode === "MA01").grade, "AB");
+    assert.equal(second.subjects.find(s => s.subject.subjectCode === "MA").grade, "AB");
     assert.equal(sheet.data.statistics.passPercentage, 50);
-    assert.equal(sheet.data.statistics.subjects.find(s => s.subject.subjectCode === "MA01").average, 90);
+    assert.equal(sheet.data.statistics.subjects.find(s => s.subject.subjectCode === "MA").average, 90);
 
     const otherSection = await request("GET", `${A}/report-cards/sections/${world.s2A.id}?examId=${world.exam.id}`, {
       as: h.tokens.teacher
