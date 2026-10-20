@@ -35,6 +35,7 @@ export * from "./modules/academics/assessment-schemes/models/assessmentScheme.sc
 export * from "./modules/academics/nep-policy/models/nepPolicy.schema.js";
 export * from "./modules/academics/holistic-progress/models/holisticProgress.schema.js";
 export * from "./modules/academics/behaviour-remarks/models/behaviourRemark.schema.js";
+export * from "./modules/academics/student-leaves/models/studentLeave.schema.js";
 export * from "./modules/academics/calendar/models/calendarEvent.schema.js";
 export * from "./modules/academics/attendance/models/attendance.schema.js";
 export * from "./modules/academics/attendance/models/attendancePolicy.schema.js";

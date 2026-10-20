@@ -109,6 +109,54 @@ export const messages = {
         : `"${title}" has been graded${marksAwarded !== null && marksAwarded !== undefined ? `: ${marksAwarded}/${maxMarks}` : ""}.`
   }),
 
+  /* Student leave: the class teacher hears of a request; the family of the decision */
+  studentLeaveRequested: ({ studentName, sectionName, dates, reasonLabel }) => ({
+    title: `Leave request: ${studentName} (${sectionName})`,
+    body: `${studentName}'s parent asked for leave on ${dates} (${reasonLabel}). Open Attendance › Leave requests to approve or reject it.`
+  }),
+
+  studentLeaveDecided: ({ studentName, dates, approved, note }) => ({
+    title: approved ? `Leave approved for ${studentName}` : `Leave not approved for ${studentName}`,
+    body: approved
+      ? `The school approved ${studentName}'s leave on ${dates}.${note ? ` Note: ${note}` : ""}`
+      : `The school did not approve ${studentName}'s leave on ${dates}. Reason: ${note}`
+  }),
+
+  studentLeaveCancelled: ({ studentName, sectionName, dates }) => ({
+    title: `Leave withdrawn: ${studentName} (${sectionName})`,
+    body: `${studentName}'s parent cancelled the approved leave on ${dates}; the student is expected in school.`
+  }),
+
+  /* Appreciation reads as praise; other kinds ask the family to read and acknowledge it */
+  behaviourRemark: ({ studentName, kind, kindLabel, categoryLabel, occurredOn }) =>
+    kind === "APPRECIATION"
+      ? {
+          title: `Appreciation for ${studentName}`,
+          body: `A teacher appreciated ${studentName} (${categoryLabel}) on ${occurredOn}. Open the behaviour log to read it.`
+        }
+      : {
+          title: `${kindLabel} recorded for ${studentName}`,
+          body: `A teacher wrote a remark about ${studentName} (${categoryLabel}) on ${occurredOn}. Please read it in the behaviour log${kind === "NOTE" ? "" : " and acknowledge it"}.`
+        },
+
+  /* A reminder or note in the daily diary: to the whole section, or to one family */
+  diaryEntry: ({ kindLabel, sectionName, studentName, date, preview }) =>
+    studentName
+      ? {
+          title: `Diary note about ${studentName}`,
+          body: `${preview} (${date}). Open the diary to read it and sign.`
+        }
+      : {
+          title: `${kindLabel} in ${sectionName}'s diary`,
+          body: `${preview} (${date}). Open the diary to read it and sign.`
+        },
+
+  /* A parent signed the diary with a note to the teacher */
+  diaryParentNote: ({ studentName, date, preview }) => ({
+    title: `Diary note from ${studentName}'s parent`,
+    body: `"${preview}" (diary of ${date}).`
+  }),
+
   lowStock: ({ itemName, stockOnHand, reorderLevel, unit }) => ({
     title: `Low stock: ${itemName}`,
     body: `Only ${stockOnHand} ${unit} of ${itemName} left (reorder level ${reorderLevel}). Time to restock.`

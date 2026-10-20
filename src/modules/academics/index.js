@@ -28,6 +28,7 @@ import { nepPolicyRoutes } from "./nep-policy/index.js";
 import { holisticProgressRoutes } from "./holistic-progress/index.js";
 import { certificateFormatRoutes, certificateRoutes } from "./certificates/index.js";
 import { behaviourRemarkRoutes } from "./behaviour-remarks/index.js";
+import { studentLeaveRoutes } from "./student-leaves/index.js";
 
 /* Academics module, mounted at /api/v1/academics */
 const router = createRouter();
@@ -70,5 +71,6 @@ router.use("/holistic-progress", holisticProgressRoutes);
 router.use("/certificates", certificateRoutes);
 router.use("/certificate-formats", certificateFormatRoutes);
 router.use("/behaviour-remarks", behaviourRemarkRoutes);
+router.use("/student-leaves", studentLeaveRoutes);
 
 export default router;

@@ -127,7 +127,25 @@ export const attendanceRecordRepository = {
           between(attendanceRecords.date, from, to)
         )
       )
-      .orderBy(asc(attendanceRecords.date), asc(attendanceRecords.periodNumber))
+      .orderBy(asc(attendanceRecords.date), asc(attendanceRecords.periodNumber)),
+
+  /* A student's ABSENT marks on these dates, in registers of these kinds, become EXCUSED
+     (an empty remark says why) -> the marks changed */
+  excuseAbsences: (tenantId, { studentId, dates, kinds, remarks }, { dbc = db } = {}) =>
+    dbc
+      .update(attendanceRecords)
+      .set({ status: "EXCUSED", remarks: sql`coalesce(${attendanceRecords.remarks}, ${remarks})`, updatedAt: new Date() })
+      .where(
+        scoped(
+          attendanceRecords,
+          tenantId,
+          eq(attendanceRecords.studentId, studentId),
+          inArray(attendanceRecords.date, dates),
+          inArray(attendanceRecords.kind, kinds),
+          eq(attendanceRecords.status, "ABSENT")
+        )
+      )
+      .returning({ date: attendanceRecords.date, kind: attendanceRecords.kind, periodNumber: attendanceRecords.periodNumber })
 };
 
 export const attendancePolicyRepository = {

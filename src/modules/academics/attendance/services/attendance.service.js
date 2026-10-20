@@ -648,5 +648,20 @@ export const attendanceService = {
       periodNumber: mark.periodNumber,
       subjectName: subjectOf.get(`${mark.sectionId}|${registerKey(mark)}`) ?? null
     }));
-  }
+  },
+
+  /* For approved student leave: the student's ABSENT marks on those dates, in registers of
+     these kinds, become EXCUSED, locked registers included (the leave is the record of why)
+     -> the marks changed */
+  excuseForLeave: (ctx, { studentId, dates, kinds }, { dbc } = {}) =>
+    dates.length
+      ? attendanceRecordRepository.excuseAbsences(
+          ctx.tenantId,
+          { studentId, dates, kinds, remarks: "On approved leave" },
+          { dbc }
+        )
+      : [],
+
+  /* The school's edit window: how far back a day's attendance can still be changed */
+  editWindowDays: async ctx => (await attendancePolicyRepository.ensure(ctx.tenantId)).editWindowDays
 };

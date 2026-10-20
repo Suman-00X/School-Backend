@@ -5,6 +5,7 @@ import { getTenant } from "../../../common/tenancy/tenant.service.js";
 import { addDays, hourIn, todayIn } from "../../../common/utils/date.util.js";
 import { studentService } from "../../users/students/index.js";
 import { ATTENDANCE_RECORDED, attendanceService, missingRegisterService } from "../../academics/attendance/index.js";
+import { studentLeaveService } from "../../academics/student-leaves/index.js";
 import { notificationService } from "../notifications/index.js";
 import { recipients } from "../shared/services/recipients.service.js";
 import { messages } from "../shared/templates/messages.js";
@@ -49,8 +50,11 @@ subscribe(ATTENDANCE_RECORDED, "communication.absenceAlerts", async payload => {
   if (!payload.absentStudentIds?.length) return;
   const ctx = { tenantId: payload.tenantId, role: "SYSTEM" };
   const tenant = await getTenant(payload.tenantId);
+  /* The parents asked for the leave: no need to tell them the child is away */
+  const onLeave = await studentLeaveService.excusedOn(ctx, payload.absentStudentIds, payload.date, payload.kind ?? "DAY");
+  const absentIds = payload.absentStudentIds.filter(id => !onLeave.has(id));
 
-  for (const student of await studentService.findManyByIds(ctx, payload.absentStudentIds)) {
+  for (const student of await studentService.findManyByIds(ctx, absentIds)) {
     const studentName = `${student.user?.firstName ?? ""} ${student.user?.lastName ?? ""}`.trim();
     const alert = await alertFor(ctx, payload, student, studentName, tenant?.name ?? "School");
     if (!alert || !(await claimOnce(alert.key))) continue;

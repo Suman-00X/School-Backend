@@ -94,6 +94,7 @@ In every school's database.
 | attendance | `attendance_mode_rules` | How the school takes attendance (DAILY, TWO_SESSIONS, PERIOD_WISE) from a date on: one mode for every class, the latest rule starting on or before a day (none: DAILY) | Partial unique (school, date) on active rules. **A trigger refuses a rule starting before tomorrow** in the school's time zone (ZA422) |
 | attendance | `attendance_free_periods` | A free (leisure) period: section × date × period with nobody of the section to take it, with `reason`, `marked_by`/`marked_at` and any lock override. No register is due: never a missing register, in nobody's attendance. Removing one sets `is_active` false; marking it again revives the row | Unique (section, date, period); CHECK period 1–20. **Triggers:** a period is free or has a register, never both (ZA409, serialised by an advisory lock on the period); archived years read-only |
 | attendance | `attendance_records` | One student's mark in a register: PRESENT, ABSENT, LATE, HALF_DAY, EXCUSED | Unique (session, student). Indexed by student/date and section/date |
+| student-leaves | `student_leave_requests` | A parent's request for a child's leave: from/to date, `session` (FULL_DAY, FORENOON, AFTERNOON), `days` (school days, fixed when applying), reason category and text, status (PENDING, APPROVED, REJECTED, CANCELLED) with the decision and cancellation trail. `section_id` is the student's section when applying and decides who approves | CHECK dates in order, days > 0, a half day is one date and 0.5. Indexed by student/from date and section/status/from date. Archived years read-only (trigger) |
 | timetable | `periods` | The bell schedule for a year | Partial unique (year, period number). CHECK end > start |
 | timetable | `timetable_slots` | Section × weekday × period → subject, teacher, room | Partial uniques stop clashes: one slot per section, one per teacher, one per room, per weekday and period |
 | grading | `grade_scales`, `grade_bands` | Percentage bands → grade, grade point and descriptor. Templates: CBSE 9-point, CBSE co-scholastic, IB 1–7, US 4.0, UGC 10-point | One default scale per school. Unique grade per scale. CHECK band ranges; bands tile 0–100 without gaps or overlaps (API) |
@@ -230,6 +231,7 @@ erDiagram
   sections ||--o{ attendance_sessions : ""
   attendance_sessions ||--o{ attendance_records : ""
   students ||--o{ attendance_records : ""
+  students ||--o{ student_leave_requests : ""
   sections ||--o{ attendance_free_periods : ""
   periods ||--o{ timetable_slots : ""
   sections ||--o{ timetable_slots : ""
